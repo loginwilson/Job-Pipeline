@@ -1,17 +1,19 @@
-# Companies polled every run. Slugs are verified against the live board API
-# before being added (never guessed).
-#   category: watchlist_seed_mix bucket from criteria.yaml discovery
-#   sectors:  tags read by rules (e.g. "consulting", "accounting", "hotel company",
-#             "proptech", "real estate data") — see README
+# Companies polled every run — chosen by the owner. The pipeline does not pick
+# companies; it judges every posting from these boards against criteria.yaml.
+#
+# To add one:  name, platform (greenhouse / lever / ashby), slug (from the board URL,
+# e.g. jobs.lever.co/<slug>, boards.greenhouse.io/<slug>, jobs.ashbyhq.com/<slug>).
+# Optional fields, only if you want the matching criteria rules to apply:
+#   anchor: true          always surface if gates pass (criteria company.anchors)
+#   sectors: [...]        e.g. consulting / accounting / big 4 (Manager-title rule),
+#                         hotel company / lodging (TN Hotel Manager employer test)
+#   defense_primary: true drop all postings (criteria exclusions.government_defense)
+#   headcount / stage     criteria company.drop_if
 - name: Palantir
   platform: lever
-  slug: palantir            # verified 2026-11-05 (309 postings)
+  slug: palantir
   anchor: true
-  category: ai_data_automation
-  sectors: [ai, data, software]
 - name: WithCoverage
   platform: greenhouse
-  slug: withcoverage        # verified 2026-11-05 (19 postings)
+  slug: withcoverage
   anchor: true
-  category: ai_data_automation
-  sectors: [ai, insurance, software]

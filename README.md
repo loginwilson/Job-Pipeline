@@ -22,7 +22,7 @@ python -m pytest
 | File | What it is |
 |---|---|
 | `config/criteria.yaml` | The rules. Every threshold, weight and term list is read from here. |
-| `config/watchlist.yaml` | Companies polled. Slugs are verified against the live API before adding. `sectors` tags feed rules (e.g. `consulting`, `accounting` for the Manager rule; `hotel company` for TN Hotel Manager). |
+| `config/watchlist.yaml` | Companies polled — **you choose them**; the pipeline never picks companies, it judges each posting against the criteria. Optional `sectors` tags only matter for the rules that need them (see the file header). |
 | `config/reference.yaml` | Not rules: place-name reference data (NYC = "New York", state codes so "Richmond, VA" isn't Richmond BC) and the fuzzy-match score. |
 
 ## Matching conventions
