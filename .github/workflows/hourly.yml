@@ -1,0 +1,51 @@
+name: hourly pipeline
+
+on:
+  schedule:
+    - cron: "17 * * * *"      # every hour, off the top of the hour
+  workflow_dispatch: {}        # "Run workflow" button for manual runs
+
+concurrency:
+  group: pipeline              # never two runs at once (they share the database)
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # data/pipeline.db carries first-seen dates, closed postings and the run
+      # history between runs. Each run restores the newest copy and saves a new one.
+      - name: Restore database
+        uses: actions/cache/restore@v4
+        with:
+          path: data/pipeline.db
+          key: pipeline-db-${{ github.run_id }}
+          restore-keys: pipeline-db-
+
+      - name: Run pipeline
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          SHEET_ID: ${{ secrets.SHEET_ID }}
+          ALERTS_IMAP_USER: ${{ secrets.ALERTS_IMAP_USER }}
+          ALERTS_IMAP_APP_PASSWORD: ${{ secrets.ALERTS_IMAP_APP_PASSWORD }}
+        run: python -m src.run
+
+      - name: Save database
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: data/pipeline.db
+          key: pipeline-db-${{ github.run_id }}

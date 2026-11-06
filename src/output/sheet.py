@@ -1,14 +1,18 @@
 """Google Sheet sync — the Sheet is a view of SQLite.
 
+No scoring: the pipeline applies the drop rules and records facts; the owner
+decides each posting with the Decision column (Apply / Wait / Veto).
+
 Per run: ONE read (values of the tabs) + ONE spreadsheets.batchUpdate (all
 writes and formatting). Tabs are only created on the first run.
 
-Pipeline tab rules (BUILD_BRIEF Step 6):
-  * upsert by Posting ID (hidden col R); A–N are rewritten from the DB,
-    O–Q (Status / Effort / Notes) are owner-edited and always carried over;
+Pipeline tab rules:
+  * upsert by Posting ID (hidden last column); pipeline columns are rewritten
+    from the DB; owner columns (Decision, Status, Effort, Notes) are found by
+    header name and always carried over;
   * a row the owner touched is never deleted, even if it left the DB view;
-  * closed postings stay (Flags has "Closed") and sort to the bottom;
-  * sort: open first, Tier (Strong first), Score desc, First seen desc.
+  * sort: undecided first, then Apply, Wait, Veto; closed postings at the
+    bottom; newest first within each group.
 """
 from __future__ import annotations
 
@@ -22,16 +26,22 @@ from ..config import Criteria
 from ..store.db import Store
 
 PIPELINE = "Pipeline"
-HEADERS = ["Tier", "Score", "Company", "Role", "Role type", "Requirements", "Location", "Salary",
-           "Extra comp", "Experience ask", "Flags", "Why", "First seen", "Posted",
+HEADERS = ["Decision", "Company", "Role", "Role type", "Requirements", "Location", "Salary",
+           "Extra comp", "Experience ask", "Flags", "First seen", "Posted",
            "Status", "Effort", "Notes", "Posting ID"]
-OWNER_COLS = (14, 15, 16)          # O, P, Q
-ID_COL = 17                        # R
-STATUS_OPTIONS = ["Shortlisted", "Drafting", "Applied", "Interviewing", "Offer", "Rejected", "Pass"]
+OWNER_HEADERS = ("Decision", "Status", "Effort", "Notes")
+OWNER_COLS = tuple(HEADERS.index(h) for h in OWNER_HEADERS)
+ID_COL = HEADERS.index("Posting ID")
+DECISION_OPTIONS = ["Apply", "Wait", "Veto"]
+STATUS_OPTIONS = ["Drafting", "Applied", "Interviewing", "Offer", "Rejected", "Withdrawn"]
 EFFORT_OPTIONS = ["Deep", "Standard", "Quick"]
-TIER_ORDER = {"Strong": 0, "Worth a look": 1, "Stored": 2}
+DECISION_ORDER = {"": 0, "Apply": 1, "Wait": 2, "Veto": 3}
 GREEN = {"red": 0.85, "green": 0.94, "blue": 0.83}
 GRAY = {"red": 0.6, "green": 0.6, "blue": 0.6}
+
+
+def _col_letter(i: int) -> str:
+    return chr(ord("A") + i)
 
 
 class SheetBackend(Protocol):
@@ -70,6 +80,7 @@ def _pad(row: list, n: int) -> list:
 
 # --- row building ---------------------------------------------------------
 def build_pipeline_rows(store: Store, criteria: Criteria, ts: str) -> list[dict]:
+    """Pipeline-owned cells for every posting that passed the drop rules."""
     fresh = criteria.get("freshness", default={}) or {}
     apply_days = int(fresh.get("apply_soon_days", 7))
     now = datetime.fromisoformat(ts)
@@ -92,30 +103,18 @@ def build_pipeline_rows(store: Store, criteria: Criteria, ts: str) -> list[dict]
             flags.append("Evergreen")
         if r["closed_at"]:
             flags.append("Closed")
-        rows.append({
-            "posting_id": r["posting_id"], "closed": bool(r["closed_at"]),
-            "tier": r["tier"] or "", "score": r["final_score"] if r["final_score"] is not None else
-            (r["requirements_score"] if r["requirements_score"] is not None else ""),
-            "first_seen": r["first_seen"],
-            "sort": r["sort_score"] if r["sort_score"] is not None else None,
-            "values": [
-                r["tier"] or "",
-                None,  # score filled below
-                ("★ " if d.get("anchor") else "") + r["company"],
-                hyperlink(r["url"], r["title"]),
-                r["role_type"] or "",
-                " · ".join(x for x in (r["requirements_summary"], r["tn_label"]) if x),
-                d.get("location", ""), d.get("salary", ""), d.get("extra_comp", ""),
-                d.get("experience", ""), ", ".join(dict.fromkeys(flags)), r["why"] or "",
-                _date(r["first_seen"]), _date(r["posted_at"]),
-            ],
-        })
-        rows[-1]["values"][1] = rows[-1]["score"]
-    def _key(x):
-        s = x["sort"] if x["sort"] is not None else x["score"]
-        return (x["closed"], TIER_ORDER.get(x["tier"], 3),
-                -(s if isinstance(s, (int, float)) else -1), _neg_date(x["first_seen"]))
-    rows.sort(key=_key)   # tier by fit; within a tier, preferences decide the order
+        cells = {
+            "Company": ("★ " if d.get("anchor") else "") + r["company"],
+            "Role": hyperlink(r["url"], r["title"]),
+            "Role type": r["role_type"] or "",
+            "Requirements": " · ".join(x for x in (r["requirements_summary"], r["tn_label"]) if x),
+            "Location": d.get("location", ""), "Salary": d.get("salary", ""),
+            "Extra comp": d.get("extra_comp", ""), "Experience ask": d.get("experience", ""),
+            "Flags": ", ".join(dict.fromkeys(flags)),
+            "First seen": _date(r["first_seen"]), "Posted": _date(r["posted_at"]),
+        }
+        rows.append({"posting_id": r["posting_id"], "closed": bool(r["closed_at"]),
+                     "first_seen": r["first_seen"], "cells": cells})
     return rows
 
 
@@ -137,32 +136,51 @@ def sync_pipeline(backend: SheetBackend, store: Store, criteria: Criteria, ts: s
     return info
 
 
-def pipeline_requests(meta: dict, existing: list[list[str]], store: Store, criteria: Criteria,
-                      ts: str) -> tuple[list[dict], dict]:
-    owner: dict[str, list[str]] = {}
-    orphan_rows: list[list[str]] = []
-    db_rows = build_pipeline_rows(store, criteria, ts)
-    db_ids = {r["posting_id"] for r in db_rows}
-    for row in existing[1:]:
-        row = _pad(row, len(HEADERS))
-        pid = row[ID_COL]
+def _owner_values(existing: list[list[str]]) -> tuple[dict[str, dict], list[dict]]:
+    """Owner cells per Posting ID, located by header name so column moves are safe."""
+    if not existing:
+        return {}, []
+    header = existing[0]
+    idx = {h: i for i, h in enumerate(header)}
+    if "Posting ID" not in idx:
+        return {}, []
+    out, rows = {}, []
+    for raw in existing[1:]:
+        raw = _pad(raw, len(header))
+        pid = raw[idx["Posting ID"]]
         if not pid:
             continue
-        owner[pid] = [row[i] for i in OWNER_COLS]
-        if pid not in db_ids and any(row[i] for i in OWNER_COLS):
-            orphan_rows.append(row)     # owner touched it: never delete
+        vals = {h: raw[idx[h]] for h in OWNER_HEADERS if h in idx}
+        full = {h: raw[i] for h, i in idx.items()}
+        out[pid] = vals
+        rows.append({"posting_id": pid, "owner": vals, "full": full})
+    return out, rows
 
-    grid = [HEADERS]
+
+def pipeline_requests(meta: dict, existing: list[list[str]], store: Store, criteria: Criteria,
+                      ts: str) -> tuple[list[dict], dict]:
+    owner, old_rows = _owner_values(existing)
+    db_rows = build_pipeline_rows(store, criteria, ts)
+    db_ids = {r["posting_id"] for r in db_rows}
+
+    entries = []
     for r in db_rows:
-        vals = r["values"] + owner.get(r["posting_id"], ["", "", ""]) + [r["posting_id"]]
-        grid.append(vals)
-    grid += orphan_rows
+        vals = owner.get(r["posting_id"], {})
+        cells = dict(r["cells"], **vals, **{"Posting ID": r["posting_id"]})
+        entries.append((r["closed"], vals.get("Decision", ""), r["first_seen"], cells))
+    kept = 0
+    for o in old_rows:   # owner touched it but it left the DB view: never delete
+        if o["posting_id"] not in db_ids and any(o["owner"].values()):
+            entries.append((True, o["owner"].get("Decision", ""), "", o["full"]))
+            kept += 1
+    entries.sort(key=lambda e: (e[0], DECISION_ORDER.get(e[1], 4), _neg_date(e[2])))
+    grid = [HEADERS] + [[e[3].get(h, "") for h in HEADERS] for e in entries]
     total_rows = max(len(grid), len(existing))
-    blank = [""] * len(HEADERS)
-    padded = grid + [blank] * (total_rows - len(grid))
+    padded = grid + [[""] * len(HEADERS)] * (total_rows - len(grid))
 
     sid = meta[PIPELINE]["id"]
     need_rows = max(meta[PIPELINE].get("rows", 1000), total_rows + 1)
+    col = {h: i for i, h in enumerate(HEADERS)}
     requests: list[dict] = [
         {"updateSheetProperties": {
             "properties": {"sheetId": sid, "gridProperties": {
@@ -177,8 +195,9 @@ def pipeline_requests(meta: dict, existing: list[list[str]], store: Store, crite
             "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
             "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
             "fields": "userEnteredFormat.textFormat.bold"}},
-        _validation(sid, 14, STATUS_OPTIONS, need_rows),
-        _validation(sid, 15, EFFORT_OPTIONS, need_rows),
+        _validation(sid, col["Decision"], DECISION_OPTIONS, need_rows),
+        _validation(sid, col["Status"], STATUS_OPTIONS, need_rows),
+        _validation(sid, col["Effort"], EFFORT_OPTIONS, need_rows),
         {"setBasicFilter": {"filter": {"range": {
             "sheetId": sid, "startRowIndex": 0, "endRowIndex": len(grid),
             "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}}}},
@@ -188,15 +207,25 @@ def pipeline_requests(meta: dict, existing: list[list[str]], store: Store, crite
     ]
     if not meta[PIPELINE].get("has_cf"):
         full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}
-        requests += [
-            {"addConditionalFormatRule": {"index": 0, "rule": {"ranges": [full], "booleanRule": {
-                "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": '=REGEXMATCH($K2,"Closed")'}]},
-                "format": {"textFormat": {"foregroundColor": GRAY}}}}}},
-            {"addConditionalFormatRule": {"index": 1, "rule": {"ranges": [full], "booleanRule": {
-                "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": '=$A2="Strong"'}]},
-                "format": {"backgroundColor": GREEN}}}}},
+        flags, dec = _col_letter(col["Flags"]), _col_letter(col["Decision"])
+        rules = [
+            (f'=OR(REGEXMATCH(${flags}2,"Closed"),${dec}2="Veto")', {"textFormat": {"foregroundColor": GRAY}}),
+            (f'=${dec}2="Apply"', {"backgroundColor": GREEN}),
         ]
-    return requests, {"rows": len(grid) - 1, "kept_owner_rows": len(orphan_rows), "requests": len(requests)}
+        for i, (formula, fmt) in enumerate(rules):
+            requests.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [full], "booleanRule": {
+                "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": formula}]},
+                "format": fmt}}}})
+    return requests, {"rows": len(grid) - 1, "kept_owner_rows": kept, "requests": len(requests)}
+
+
+def _validation(sid: int, col: int, options: list[str], rows: int) -> dict:
+    return {"setDataValidation": {
+        "range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": rows,
+                  "startColumnIndex": col, "endColumnIndex": col + 1},
+        "rule": {"condition": {"type": "ONE_OF_LIST",
+                               "values": [{"userEnteredValue": o} for o in options]},
+                 "showCustomUi": True, "strict": False}}}
 
 
 # --- the other tabs (rewritten in full each run) ---------------------------
@@ -228,7 +257,7 @@ def other_tab_rows(store: Store, criteria: Criteria, ts: str, unparsed: list[lis
     dropped = [[r["company"], hyperlink(r["url"], r["title"]), r["gate"], r["matched"], _date(r["dropped_at"])]
                for r in store.dropped_rows(days, ts)]
     funnel = [[r["started_at"], r["boards_polled"], r["postings_seen"], r["new"], r["passed"],
-               r["strong"], r["worth_a_look"], r["errors"]] for r in reversed(store.runs())]
+               r["postings_seen"] - r["passed"], r["errors"]] for r in reversed(store.runs())]
     health = []
     for r in store.board_health():
         counts = "" if r["count_last"] is None else (
@@ -239,8 +268,8 @@ def other_tab_rows(store: Store, criteria: Criteria, ts: str, unparsed: list[lis
     return {
         DROPPED: (["Company", "Role", "Gate", "Matched text", "Date"], dropped),
         UNPARSED: (["Sender", "Subject", "Date"], unparsed or []),
-        FUNNEL: (["Timestamp", "Boards polled", "Postings seen", "New", "Passed gates", "Strong",
-                  "Worth a look", "Errors"], funnel),
+        FUNNEL: (["Timestamp", "Boards polled", "Postings seen", "New", "Passed rules", "Dropped",
+                  "Errors"], funnel),
         HEALTH: (["Company", "Platform", "Last success", "Last error", "Postings (last vs previous)",
                   "Status"], health),
     }
@@ -258,15 +287,6 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     backend.batch_update(requests)
     info["requests"] = len(requests)
     return info
-
-
-def _validation(sid: int, col: int, options: list[str], rows: int) -> dict:
-    return {"setDataValidation": {
-        "range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": rows,
-                  "startColumnIndex": col, "endColumnIndex": col + 1},
-        "rule": {"condition": {"type": "ONE_OF_LIST",
-                               "values": [{"userEnteredValue": o} for o in options]},
-                 "showCustomUi": True, "strict": False}}}
 
 
 # --- backends ---------------------------------------------------------------

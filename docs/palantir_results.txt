@@ -6,35 +6,21 @@ Gate failures (any):     engineering_title 189, location 168, hard_gap 101, expe
 KEPT
 ====================================================================================================
 
-▶ [Strong · fit 95.5 · Product Design] Product Designer, New Grad  —  NYC (tier 1) · hybrid
-  Why: meets 2/2; NYC tier 1 +20; anchor company +20
-  https://jobs.lever.co/palantir/4c0fb3a1-8256-4d14-9a27-23727235752e
-  Salary: $125K–$130K (mid $128K) · Extra comp: Bonus · Experience: New grad · Type: full_time
-  Requirements: Met 2/2 · Stretch: none · Gap: none · TN: unlikely
-  Match score: 100.0 · Flags: Sponsorship unknown, TN unlikely — needs sponsorship or OPT
-     [MET    ] (requ) Must be planning on graduating in 2027.
-               · met: graduation date ← graduating 2027-05
-     [MET    ] (requ) A portfolio demonstrating at least one software interface design project. If parts of your portfolio are passw
-               · met: interface design ← profile.have: interface design for internal / data-heavy tools
+▶ [Analyst] Compliance Analyst  —  NYC (tier 1) · hybrid
+  https://jobs.lever.co/palantir/c6f9eaaf-b397-476f-8b7d-c511cfb7e5c6
+  Salary: $90K–$150K (mid $120K) · Extra comp: Bonus · Experience: 2+ yrs required · Type: full_time
+  Requirements: Met 0/3 · Stretch: none · Gap: 2+ yrs · Unclear: 2 · TN: unlikely
+  Flags: Sponsorship unknown, TN unlikely — needs sponsorship or OPT
+     [GAP    ] (requ) 2+ years of experience protecting or auditing modern and technologically complex SaaS environments.
+               · gap: 2+ yrs ← profile.gap: multiple years of full-time experience
+     [UNCLEAR] (requ) Experience facilitating or being the subject a major compliance framework (SOC 2, ISO 27001, etc.)
+     [UNCLEAR] (requ) Experience with parsing key controls in structurally complex technical and business processes.
 
-▶ [Worth a look · fit 51.8 · Deployment] Deployment Strategist  —  NYC (tier 1) · hybrid
-  Why: meets 0/2; NYC tier 1 +20; anchor company +20
-  https://jobs.lever.co/palantir/e0ab8226-b928-4e3a-bf87-08fe7b1ea595
-  Salary: $110K–$170K (mid $140K) · Extra comp: Bonus · Experience: No years listed · Type: full_time
-  Requirements: Met 0/2 · Stretch: SQL · Gap: none · Unclear: 1 · TN: unlikely
-  Match score: 37.5 · Flags: Sponsorship unknown, TN unlikely — needs sponsorship or OPT
-     [UNCLEAR] (requ) Ability to travel 25 – 75% required. Varies by location and team
-     [STRETCH] (requ) Experience with programming, scripting or statistical packages (e.g. Python, R, Matlab, SQL)
-               · stretch: SQL ← synonym: SQL → in progress
-               · stretch: SQL ← profile.stretch: SQL / writing queries by hand (in progress)
-               · gap: Python ← profile.gap: Python or other programming as a required skill
-
-▶ [Worth a look · fit 46.6 · Deployment] Deployment Strategist  —  Chicago (tier 2) · hybrid
-  Why: meets 0/3; anchor company +20; Chicago tier 2 +10
+▶ [Deployment] Deployment Strategist  —  Chicago (tier 2) · hybrid
   https://jobs.lever.co/palantir/bc087dba-1e41-49e0-83bd-36832122363d
   Salary: Unknown · Extra comp: — · Experience: No years listed · Type: full_time
   Requirements: Met 0/3 · Stretch: SQL · Gap: none · Unclear: 2 · TN: unlikely
-  Match score: 33.3 · Flags: Salary unknown, Sponsorship unknown, TN unlikely — needs sponsorship or OPT
+  Flags: Salary unknown, Sponsorship unknown, TN unlikely — needs sponsorship or OPT, No gaps
      [UNCLEAR] (requ) You must be willing and able to work from the Chicago Metropolitan Area due to the nature and business needs o
      [UNCLEAR] (requ) Ability to travel 25 – 75% required. Varies by location and team.
      [STRETCH] (requ) Experience with programming, scripting or statistical packages (e.g. Python, R, Matlab, SQL)
@@ -42,34 +28,42 @@ KEPT
                · stretch: SQL ← profile.stretch: SQL / writing queries by hand (in progress)
                · gap: Python ← profile.gap: Python or other programming as a required skill
 
-▶ [Worth a look · fit 43.8 · Other] Neurodivergent Fellowship  —  NYC (tier 1) · in_office
-  Why: meets 0/2; NYC tier 1 +20; anchor company +20
-  https://jobs.lever.co/palantir/61eaa54c-e1b7-4064-afad-f7df3d48d652
-  Salary: $110K–$200K (mid $155K) · Extra comp: Bonus · Experience: No years listed · Type: full_time
-  Requirements: Met 0/2 · Stretch: none · Gap: none · Unclear: 2 · TN: unlikely
-  Match score: 25.0 · Flags: Sponsorship unknown, TN unlikely — needs sponsorship or OPT
-     [UNCLEAR] (requ) Eligibility to work in the United States
-     [UNCLEAR] (requ) Willingness to work in New York or Washington, D.C.
+▶ [Deployment] Deployment Strategist  —  NYC (tier 1) · hybrid
+  https://jobs.lever.co/palantir/e0ab8226-b928-4e3a-bf87-08fe7b1ea595
+  Salary: $110K–$170K (mid $140K) · Extra comp: Bonus · Experience: No years listed · Type: full_time
+  Requirements: Met 0/2 · Stretch: SQL · Gap: none · Unclear: 1 · TN: unlikely
+  Flags: Sponsorship unknown, TN unlikely — needs sponsorship or OPT, No gaps
+     [UNCLEAR] (requ) Ability to travel 25 – 75% required. Varies by location and team
+     [STRETCH] (requ) Experience with programming, scripting or statistical packages (e.g. Python, R, Matlab, SQL)
+               · stretch: SQL ← synonym: SQL → in progress
+               · stretch: SQL ← profile.stretch: SQL / writing queries by hand (in progress)
+               · gap: Python ← profile.gap: Python or other programming as a required skill
 
-▶ [Worth a look · fit 27 · Other] Finance Operator  —  NYC (tier 1) · hybrid
-  Why: meets 0/1, gap: graduate degree; NYC tier 1 +20; anchor company +20
+▶ [Other] Finance Operator  —  NYC (tier 1) · hybrid
   https://jobs.lever.co/palantir/4c13fdb2-308e-4185-bb6b-105d7bf38d92
   Salary: $135K–$200K (mid $168K) · Extra comp: Bonus · Experience: No years listed · Type: full_time
   Requirements: Met 0/1 · Stretch: none · Gap: graduate degree · TN: Mgmt Consultant (possible) [consulting]
-  Match score: 0.0 · Flags: Sponsorship unknown
+  Flags: Sponsorship unknown
      [GAP    ] (requ) A law degree and experience practicing law in-house, at a law firm, or in a similarly demanding environment
                · gap: graduate degree ← asks for a graduate degree
 
-▶ [Worth a look · fit 34.9 · Analyst] Compliance Analyst  —  NYC (tier 1) · hybrid
-  Why: meets 0/3, gap: 2+ yrs; required 2 yrs (-15); NYC tier 1 +20
-  https://jobs.lever.co/palantir/c6f9eaaf-b397-476f-8b7d-c511cfb7e5c6
-  Salary: $90K–$150K (mid $120K) · Extra comp: Bonus · Experience: 2+ yrs required · Type: full_time
-  Requirements: Met 0/3 · Stretch: none · Gap: 2+ yrs · Unclear: 2 · TN: unlikely
-  Match score: 16.7 · Flags: Sponsorship unknown, TN unlikely — needs sponsorship or OPT
-     [GAP    ] (requ) 2+ years of experience protecting or auditing modern and technologically complex SaaS environments.
-               · gap: 2+ yrs ← profile.gap: multiple years of full-time experience
-     [UNCLEAR] (requ) Experience facilitating or being the subject a major compliance framework (SOC 2, ISO 27001, etc.)
-     [UNCLEAR] (requ) Experience with parsing key controls in structurally complex technical and business processes.
+▶ [Other] Neurodivergent Fellowship  —  NYC (tier 1) · in_office
+  https://jobs.lever.co/palantir/61eaa54c-e1b7-4064-afad-f7df3d48d652
+  Salary: $110K–$200K (mid $155K) · Extra comp: Bonus · Experience: No years listed · Type: full_time
+  Requirements: Met 0/2 · Stretch: none · Gap: none · Unclear: 2 · TN: unlikely
+  Flags: Sponsorship unknown, TN unlikely — needs sponsorship or OPT, No gaps
+     [UNCLEAR] (requ) Eligibility to work in the United States
+     [UNCLEAR] (requ) Willingness to work in New York or Washington, D.C.
+
+▶ [Product Design] Product Designer, New Grad  —  NYC (tier 1) · hybrid
+  https://jobs.lever.co/palantir/4c0fb3a1-8256-4d14-9a27-23727235752e
+  Salary: $125K–$130K (mid $128K) · Extra comp: Bonus · Experience: New grad · Type: full_time
+  Requirements: Met 2/2 · Stretch: none · Gap: none · TN: unlikely
+  Flags: Sponsorship unknown, TN unlikely — needs sponsorship or OPT, No gaps
+     [MET    ] (requ) Must be planning on graduating in 2027.
+               · met: graduation date ← graduating 2027-05
+     [MET    ] (requ) A portfolio demonstrating at least one software interface design project. If parts of your portfolio are passw
+               · met: interface design ← profile.have: interface design for internal / data-heavy tools
 
 ====================================================================================================
 DROPPED (primary gate — matched text; +other gates)

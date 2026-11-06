@@ -1,4 +1,5 @@
 """Store + Sheet sync: owner columns survive runs, hyperlinks, closed rows, one write per run."""
+from src.output.sheet import HEADERS as H
 import copy
 
 import pytest
@@ -30,6 +31,10 @@ def run_once(store, backend, company, payload, criteria, ts):
     return sync_pipeline(backend, store, criteria, ts)
 
 
+DEC, STATUS, EFFORT, NOTES, FLAGS, ROLE = (H.index(x) for x in
+                                          ("Decision", "Status", "Effort", "Notes", "Flags", "Role"))
+
+
 def rows_by_id(backend):
     rows = backend.read([PIPELINE])[PIPELINE]
     return rows[0], {r[ID_COL]: r + [""] * (len(HEADERS) - len(r)) for r in rows[1:]}
@@ -40,28 +45,29 @@ def test_owner_columns_survive_second_run(criteria, palantir, payload):
     run_once(store, sheet, palantir, payload, criteria, T1)
     header, rows = rows_by_id(sheet)
     assert header == HEADERS and len(rows) == 6
-    assert all("New" in r[10] for r in rows.values())
+    assert all("New" in r[FLAGS] for r in rows.values())
 
     # owner fills Status / Effort / Notes on one row
-    grid_row = next(i for i, r in enumerate(sheet.read([PIPELINE])[PIPELINE]) if "Deployment Strategist" in r[3:4])
-    sheet.set_cell(PIPELINE, grid_row, 14, "Shortlisted")
-    sheet.set_cell(PIPELINE, grid_row, 15, "Deep")
-    sheet.set_cell(PIPELINE, grid_row, 16, "Ask about Warp Speed")
+    grid_row = next(i for i, r in enumerate(sheet.read([PIPELINE])[PIPELINE]) if "Deployment Strategist" in r[ROLE:ROLE + 1])
+    sheet.set_cell(PIPELINE, grid_row, DEC, "Apply")
+    sheet.set_cell(PIPELINE, grid_row, STATUS, "Drafting")
+    sheet.set_cell(PIPELINE, grid_row, EFFORT, "Deep")
+    sheet.set_cell(PIPELINE, grid_row, NOTES, "Ask about Warp Speed")
     pid = sheet.read([PIPELINE])[PIPELINE][grid_row][ID_COL]
 
     calls_before = len(sheet.calls)
     run_once(store, sheet, palantir, payload, criteria, T2)
     assert len(sheet.calls) == calls_before + 1          # one batch_update per run
     _, rows = rows_by_id(sheet)
-    assert rows[pid][14:17] == ["Shortlisted", "Deep", "Ask about Warp Speed"]
-    assert not any("New" in r[10].split(", ") for r in rows.values())   # no longer new
+    assert [rows[pid][i] for i in (DEC, STATUS, EFFORT, NOTES)] == ["Apply", "Drafting", "Deep", "Ask about Warp Speed"]
+    assert not any("New" in r[FLAGS].split(", ") for r in rows.values())   # no longer new
     assert len(rows) == 6                                   # no duplicate rows
 
 
 def test_hyperlinks_and_formatting(criteria, palantir, payload):
     store, sheet = Store(":memory:"), FakeBackend()
     run_once(store, sheet, palantir, payload, criteria, T1)
-    links = sheet.formulas(PIPELINE, 3)
+    links = sheet.formulas(PIPELINE, ROLE)
     assert links and all(f.startswith('=HYPERLINK("https://jobs.lever.co/palantir/') for f in links)
     tab = sheet.tabs[PIPELINE]
     assert tab["frozen"] == 1 and len(tab["cf"]) == 2
@@ -79,22 +85,22 @@ def test_closed_posting_stays_and_sinks(criteria, palantir, payload):
     shrunk = [p for p in copy.deepcopy(payload) if p["id"] != native]
     run_once(store, sheet, palantir, shrunk, criteria, T2)
     rows = sheet.read([PIPELINE])[PIPELINE]
-    assert rows[-1][ID_COL] == first_id and "Closed" in rows[-1][10]
+    assert rows[-1][ID_COL] == first_id and "Closed" in rows[-1][FLAGS]
     run_once(store, sheet, palantir, payload, criteria, T3)    # reappears -> reopened
     rows = sheet.read([PIPELINE])[PIPELINE]
-    assert "Closed" not in next(r for r in rows if r[ID_COL] == first_id)[10]
+    assert "Closed" not in next(r for r in rows if r[ID_COL] == first_id)[FLAGS]
 
 
 def test_touched_row_never_deleted(criteria, palantir, payload):
     store, sheet = Store(":memory:"), FakeBackend()
     run_once(store, sheet, palantir, payload, criteria, T1)
-    sheet.set_cell(PIPELINE, 1, 16, "keep me")
+    sheet.set_cell(PIPELINE, 1, NOTES, "keep me")
     pid = sheet.read([PIPELINE])[PIPELINE][1][ID_COL]
     store.conn.execute("UPDATE scores SET passed=0 WHERE posting_id=?", (pid,))   # e.g. criteria tightened
     store.commit()
     sync_pipeline(sheet, store, criteria, T2)
     _, rows = rows_by_id(sheet)
-    assert pid in rows and rows[pid][16] == "keep me"
+    assert pid in rows and rows[pid][NOTES] == "keep me"
 
 
 def test_first_seen_persists(criteria, palantir, payload):
@@ -112,13 +118,27 @@ def test_sync_all_tabs_one_write(criteria, palantir, payload):
     store_evaluations(store, palantir, evals, T1, criteria)
     store.board_ok("Palantir", "lever", len(evals), T1)
     store.record_run(started_at=T1, finished_at=T1, boards_polled=1, postings_seen=309, new=309,
-                     passed=6, strong=1, worth_a_look=5, errors=0)
+                     passed=6, errors=0)
     store.commit()
     sync_all(sheet, store, criteria, T1)
     assert len(sheet.calls) == 1
     data = sheet.read(ALL_TABS)
     assert data["Dropped"][0] == ["Company", "Role", "Gate", "Matched text", "Date"] and len(data["Dropped"]) == 304
-    assert data["Funnel"][1][1:] == ["1", "309", "309", "6", "1", "5", "0"]
+    assert data["Funnel"][1][1:] == ["1", "309", "309", "6", "303", "0"]
     assert data["Board health"][1][-1] == "OK"
     pipe = data["Pipeline"]
-    assert pipe[1][0] == "Strong" and {r[0] for r in pipe[1:]} <= {"Strong", "Worth a look", "Stored"}
+    assert pipe[0] == H and "Tier" not in pipe[0] and "Score" not in pipe[0]
+
+
+def test_decision_sorting_and_veto(criteria, palantir, payload):
+    store, sheet = Store(":memory:"), FakeBackend()
+    run_once(store, sheet, palantir, payload, criteria, T1)
+    rows = sheet.read([PIPELINE])[PIPELINE]
+    vetoed, applied = rows[1][ID_COL], rows[2][ID_COL]
+    sheet.set_cell(PIPELINE, 1, DEC, "Veto")
+    sheet.set_cell(PIPELINE, 2, DEC, "Apply")
+    run_once(store, sheet, palantir, payload, criteria, T2)
+    order = [r[ID_COL] for r in sheet.read([PIPELINE])[PIPELINE][1:]]
+    decisions = [r[DEC] if len(r) > DEC else "" for r in sheet.read([PIPELINE])[PIPELINE][1:]]
+    assert order[-1] == vetoed and applied in order
+    assert decisions[:4] == ["", "", "", ""] and decisions[4:] == ["Apply", "Veto"]   # undecided first

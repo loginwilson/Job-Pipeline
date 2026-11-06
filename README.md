@@ -4,26 +4,53 @@ Pulls postings from public company job boards (Greenhouse, Lever, Ashby), applie
 `config/criteria.yaml`, and (from step 2 on) keeps a Google Sheet updated.
 Spec: `docs/BUILD_BRIEF.md`, `docs/ARCHITECTURE.md`, `config/criteria.yaml` (criteria wins).
 
-**Status: steps 1, 2 and 4 done** — sources → normalize → gates → requirements match →
-signals → tiers → SQLite (`data/pipeline.db`) → Google Sheet (Pipeline, Dropped, Unparsed
-alerts, Funnel, Board health). Next: hourly workflow + owner setup (step 5); alert-email
-reader once sample emails exist (step 3b).
+**Status:** sources → normalize → drop rules → requirements breakdown → SQLite
+(`data/pipeline.db`) → Google Sheet, every hour via GitHub Actions. The alert-email
+reader (step 3b) is built once sample alert emails exist.
 
-## How ranking works — necessities vs. preferences
+## How it works — the pipeline gives you options, you decide
 
-The pipeline gives you **options**; you decide what stays.
+* **Drop rules are strict.** Experience cap, hard requirement gaps, location, salary,
+  work authorization, employment type, seniority, timing (all in `config/criteria.yaml`).
+  A posting that fails one goes to the **Dropped** tab with the rule and the exact text
+  that triggered it — check it now and then for rules that are too strict.
+* **Everything else lands in the Pipeline tab as facts**: requirements breakdown
+  (`Met 2/3 · Stretch: SQL · Gap: 2+ yrs`), TN fit, salary, extra comp, experience ask,
+  role type, flags (New, No gaps, Salary unknown, Sponsorship unknown, Closed, …).
+  There is no score; you decide.
+* **Decision column: Apply / Wait / Veto.** Undecided postings sort to the top (newest
+  first), then Apply, Wait, Veto; closed postings sink to the bottom. Status (Drafting →
+  Applied → Interviewing → Offer / Rejected / Withdrawn), Effort and Notes are yours too.
+  The pipeline never overwrites your columns and never deletes a row you've touched.
 
-* **Necessities are strict.** Experience cap, requirements (hard gaps), location,
-  salary, work authorization, employment type, seniority, timing → fail = dropped
-  (see the Dropped tab, with the rule and the matched text).
-* **Fit score → Tier.** Requirements match (70%), experience fit (15%) and necessity
-  signals (15%: location tier, timing, salary, sponsorship/TN, technical asks) give the
-  Score column and the Tier (Strong ≥ 70 with no required gaps, Worth a look ≥ 50,
-  Stored otherwise). Stored postings still appear in the Sheet, just lower.
-* **Preferences only reorder.** Role type, lane, description signals, sector, company,
-  and `final_score.role_preference` (Sales −10, Sales-adjacent −5, analyst titles −10)
-  sort postings *within* their tier. They never change a tier or hide a posting.
-  Role type is a column you can filter on.
+## Your Sheet — one-time setup (≈15 min)
+
+1. **Google Cloud project + service account**
+   - Go to <https://console.cloud.google.com/>, create a project (any name, e.g. "job-pipeline").
+   - *APIs & Services → Library* → enable **Google Sheets API**.
+   - *IAM & Admin → Service Accounts → Create service account* (any name). No roles needed.
+   - Open it → *Keys → Add key → Create new key → JSON*. A `.json` file downloads. Keep it private.
+2. **The Sheet**
+   - Create a blank Google Sheet (sheets.new) — name it e.g. "Job Pipeline". This is where you'll work.
+   - *Share* it with the service account's email (looks like `name@project.iam.gserviceaccount.com`) as **Editor**.
+   - Copy the Sheet ID from its URL: `https://docs.google.com/spreadsheets/d/`**`<SHEET_ID>`**`/edit`.
+3. **GitHub secrets** — repo → *Settings → Secrets and variables → Actions → New repository secret*:
+   - `GOOGLE_SERVICE_ACCOUNT_JSON` — paste the whole contents of the JSON key file
+   - `SHEET_ID` — the ID from step 2
+   - `ALERTS_IMAP_USER`, `ALERTS_IMAP_APP_PASSWORD` — later, for job-alert emails (`docs/ALERTS_SETUP.md`)
+4. **First run** — repo → *Actions → hourly pipeline → Run workflow*. When it finishes
+   (≈1–2 min), the Sheet has five tabs: Pipeline, Dropped, Unparsed alerts, Funnel,
+   Board health. After that it runs every hour at :17.
+5. **Add a company** — edit `config/watchlist.yaml`: `name`, `platform`
+   (greenhouse / lever / ashby) and `slug` from the board URL
+   (`jobs.lever.co/<slug>`, `boards.greenhouse.io/<slug>`, `jobs.ashbyhq.com/<slug>`).
+   Check it once with `python -m src.run --print --company "<name>"`.
+
+Open the Sheet from Google Drive or the Google Sheets app on your phone — bookmark it.
+
+**Actions minutes:** hourly runs on a private repo use GitHub Actions minutes (about
+1–2 min per run). If they run short, run the same `python -m src.run` on a small
+always-on server or lower the schedule in `.github/workflows/hourly.yml`.
 
 ## Run
 
@@ -32,7 +59,7 @@ pip install -r requirements.txt
 python -m src.run --print --company Palantir                 # live board
 python -m src.run --print --company Palantir --fixture tests/fixtures/lever_palantir.json.gz
 python -m src.run --fake-sheet data/fake_sheet.json            # full run, local stand-in Sheet
-SHEET_ID=... GOOGLE_SERVICE_ACCOUNT_JSON="$(cat key.json)" python -m src.run   # real Sheet
+SHEET_ID=... GOOGLE_SERVICE_ACCOUNT_JSON="$(cat key.json)" python -m src.run   # real Sheet, from your laptop
 python -m pytest
 ```
 
@@ -50,4 +77,5 @@ Term lists match whole words, case-insensitively (all-caps acronyms like `OPT`, 
 match case-sensitively), hyphens = spaces, `U.S.` = `US`, singular/plural tolerant.
 Every gate is evaluated, so a dropped posting lists all the rules it failed.
 
-The latest Palantir results are in `docs/palantir_results.txt`.
+The ranking code (`src/pipeline/signals.py`, `tiers.py`) is kept but unused; only role-type
+labels come from it. The latest Palantir results are in `docs/palantir_results.txt`.
