@@ -23,28 +23,31 @@ Use this new address when you sign up for alerts below. Where a site only sends 
 
 Set every alert to: **daily**, **full-time**, **entry level / associate**, **on-site + hybrid** (not remote).
 
-Keyword groups (paste into the keyword box; LinkedIn and Indeed accept OR):
+Keep keywords **broad**. The alerts are the wide net; the pipeline's criteria do the real filtering. Let each site's filters (entry level, full-time, city, on-site/hybrid) narrow things down. Use several medium-broad alerts rather than one giant one, because each alert email only shows a batch of jobs.
 
 | Group | Keywords |
 |---|---|
-| A · Deployment | `"deployment strategist" OR "implementation consultant" OR "solutions consultant" OR "implementation specialist"` |
-| B · Product | `"associate product manager" OR "product analyst" OR "product designer" OR "product operations"` |
-| C · Strategy & Ops | `"strategy and operations" OR "business operations" OR bizops OR "founder's associate"` |
-| D · AI & Automation | `"AI operations" OR "AI implementation" OR "workflow automation" OR "process automation"` |
-| E · Real estate finance | `"real estate analyst" OR "acquisitions analyst" OR "asset management analyst" OR "underwriting analyst"` |
-| F · Proptech & RE data | `proptech OR "real estate technology" OR "real estate data"` |
-| G · Hospitality | `"hotel analyst" OR "hospitality analyst" OR "revenue strategy" OR "hotel asset management"` |
-| H · Consulting & analyst | `"business analyst" OR "consulting analyst" OR "associate consultant" OR "strategy analyst"` |
+| B · Associate | `associate` |
+| C · Strategy & Ops | `strategy OR operations` |
+| D · Product | `product` |
+| E · Deployment & Implementation | `implementation OR deployment OR solutions` |
+| F · Consulting | `consultant OR consulting` |
+| G · Real estate | `"real estate" OR proptech` |
+| H · Hospitality | `hospitality OR hotel` |
+| I · AI & Automation | `AI OR automation` |
+| J · New grad | `"new grad" OR "recent graduate" OR 2027` |
+
+If an alert sends almost nothing after a few days, broaden it. If one floods the inbox with obvious misses, split it by city or add one word.
 
 ### Where to set them
 
 | Site | What to set up |
 |---|---|
-| **LinkedIn** | Groups A–H for **New York**. Groups A, B, C, E for **Chicago, Miami, San Francisco, Toronto**. (LinkedIn allows plenty of alerts.) |
-| **Indeed** | Groups A, B, E, H for New York. One broad alert per secondary city: `analyst OR associate OR strategist` + entry level. |
-| **ZipRecruiter** | Groups A, B, E, H for New York. |
-| **Glassdoor** | Groups A, B, E for New York. |
-| **Handshake** | Job alerts for A–H, location New York + Chicago + Toronto. Handshake emails your NYU address — add a filter in your NYU Gmail that forwards Handshake job-alert emails to the new inbox. If NYU blocks auto-forwarding, tell me and we'll handle Handshake another way. |
+| **LinkedIn** | Groups B–J for **New York**. Groups B, C, E, G for **Chicago, Miami, San Francisco, Toronto**. (LinkedIn allows plenty of alerts.) |
+| **Indeed** | Groups B–J for New York. One alert per secondary city: `associate OR operations` + entry level. |
+| **ZipRecruiter** | Groups B, C, E, G for New York. |
+| **Glassdoor** | Groups B, C, E for New York. |
+| **Handshake** | Job alerts for B–J, location New York + Chicago + Toronto. Handshake emails your NYU address — add a filter in your NYU Gmail that forwards Handshake job-alert emails to the new inbox. If NYU blocks auto-forwarding, tell me and we'll handle Handshake another way. |
 | **Built In NYC** and **Built In Chicago** | Saved searches for product, operations, data and analyst roles, entry level. |
 | **Wellfound** | Job alerts: product, operations, strategy; New York; startups. |
 | **YC Work at a Startup** | Profile + job alerts: product, operations, business; New York / SF. |

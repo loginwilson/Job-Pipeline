@@ -452,9 +452,9 @@ discovery:
       titles: [rotational program, analyst program, new grad program, leadership development program, associate program]
       employers: [CRE services firms, large tech, real estate investment managers, consulting firms]
   watchlist_seed_mix:              # rough share of the seeded watchlist
-    ai_data_automation: 30%
+    ai_data_automation: 35%
     proptech_and_cre_data: 25%
-    real_estate_finance: 15%
+    real_estate_finance: 10%   # mostly analyst titles — lowered
     hospitality_and_hospitality_tech: 10%
     consulting_and_advisory: 15%
     other_fit: 5%
@@ -473,6 +473,7 @@ final_score:
   role_preference:             # applied after weighting, in score points
     Sales: -10                 # qualified but less preferred
     Sales-adjacent: -5
+    analyst_titles: -10        # any title containing "analyst" — Login doesn't see himself in these roles; kept, ranked lower
     everything_else: 0
   anchors_always_shown: true
 
