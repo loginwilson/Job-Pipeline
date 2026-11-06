@@ -13,7 +13,8 @@ def _loc(ev: Evaluation) -> str:
     return f"{where} · {p.work_arrangement}"
 
 
-def report(evals: list[Evaluation], company: str, verbose_items: bool = True) -> str:
+def report(evals: list[Evaluation], company: str, verbose_items: bool = True, ranked: dict | None = None) -> str:
+    ranked = ranked or {}
     out: list[str] = []
     kept = [e for e in evals if e.passed]
     dropped = [e for e in evals if not e.passed]
@@ -26,10 +27,19 @@ def report(evals: list[Evaluation], company: str, verbose_items: bool = True) ->
     out.append("=" * 100)
     out.append("KEPT")
     out.append("=" * 100)
-    for e in sorted(kept, key=lambda e: -(e.requirements.score or 0)):
+    order = {"Strong": 0, "Worth a look": 1, "Stored": 2}
+
+    def _k(e):
+        t = ranked.get(e.posting.posting_id, (None, None))[1]
+        return (order.get(t.tier, 3), -t.sort_score) if t else (3, -(e.requirements.score or 0))
+    for e in sorted(kept, key=_k):
         p = e.posting
         r = e.requirements
-        out.append(f"\n▶ {p.title}  —  {_loc(e)}")
+        sig, t = ranked.get(p.posting_id, (None, None))
+        head = f"[{t.tier} · fit {t.fit_score:g} · {sig.role_type}] " if t else ""
+        out.append(f"\n▶ {head}{p.title}  —  {_loc(e)}")
+        if t:
+            out.append(f"  Why: {t.why}")
         out.append(f"  {p.url}")
         out.append(f"  Salary: {p.comp.display()} · Extra comp: {p.comp.extra_comp_display}"
                    f" · Experience: {p.experience.label()} · Type: {p.employment_type}")

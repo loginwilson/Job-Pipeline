@@ -17,11 +17,13 @@ import sys
 
 from .config import load_criteria, load_watchlist
 from .output.console import report
-from .output.sheet import backend_from_env, sync_pipeline
+from .output.sheet import backend_from_env, sync_all
 from .store.db import DEFAULT_DB, Store, now_iso
 from .pipeline.gates import Evaluation, Gates
 from .pipeline.locations import LocationMatcher
 from .pipeline.normalize import normalize_posting
+from .pipeline.signals import SignalScorer
+from .pipeline.tiers import assign_tier
 from .sources import SourceError, get_source, load_fixture
 
 log = logging.getLogger("pipeline")
@@ -45,8 +47,21 @@ def display_fields(ev: Evaluation) -> dict:
             "experience": p.experience.label()}
 
 
-def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str) -> dict:
-    counts = {"seen": len(evals), "new": 0, "passed": 0}
+def rank(evals: list[Evaluation], criteria=None) -> dict:
+    """Signals + tiers for every posting that passed the gates. Returns id -> (Signals, TierResult)."""
+    criteria = criteria or load_criteria()
+    scorer = SignalScorer(criteria)
+    out = {}
+    for ev in evals:
+        if ev.passed:
+            sig = scorer.score(ev)
+            out[ev.posting.posting_id] = (sig, assign_tier(ev, sig, criteria))
+    return out
+
+
+def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, criteria=None) -> dict:
+    counts = {"seen": len(evals), "new": 0, "passed": 0, "strong": 0, "worth_a_look": 0}
+    ranked = rank(evals, criteria)
     store.upsert_company(company.name, company.platform, company.slug, company.anchor)
     for ev in evals:
         p = ev.posting
@@ -55,10 +70,16 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str) -
         p.first_seen = info["first_seen"]
         counts["new"] += int(info["is_new"])
         counts["passed"] += int(ev.passed)
+        sig, t = ranked.get(p.posting_id, (None, None))
+        if t:
+            counts["strong"] += t.tier == "Strong"
+            counts["worth_a_look"] += t.tier == "Worth a look"
         store.save_score(
             p.posting_id, ev.passed, [{"gate": f.gate, "matched": f.matched} for f in ev.failures],
             ev.flags, ev.requirements.summary, ev.requirements.score,
-            ev.tn.label if ev.tn else "", display_fields(ev), ts)
+            ev.tn.label if ev.tn else "", display_fields(ev), ts,
+            role_type=sig.role_type if sig else None, final_score=t.fit_score if t else None,
+            tier=t.tier if t else None, why=t.why if t else None, sort_score=t.sort_score if t else None)
     store.close_missing(company.name, [e.posting.posting_id for e in evals], ts)
     return counts
 
@@ -85,7 +106,8 @@ def main(argv: list[str] | None = None) -> int:
             return 2
     ts = now_iso()
     store = None if args.print else Store(args.db)
-    totals = {"boards_polled": 0, "postings_seen": 0, "new": 0, "passed": 0, "errors": 0}
+    totals = {"boards_polled": 0, "postings_seen": 0, "new": 0, "passed": 0, "strong": 0,
+              "worth_a_look": 0, "errors": 0}
     for company in companies:
         payload = load_fixture(args.fixture) if args.fixture else None
         try:
@@ -98,27 +120,27 @@ def main(argv: list[str] | None = None) -> int:
             continue
         totals["boards_polled"] += 1
         if args.print:
-            print(report(evals, company.name, verbose_items=not args.brief))
+            print(report(evals, company.name, verbose_items=not args.brief, ranked=rank(evals, criteria)))
             print()
             continue
         status = store.board_ok(company.name, company.platform, len(evals), ts)
         if status != "OK":
             log.warning("%s board: %s", company.name, status)
-        c = store_evaluations(store, company, evals, ts)
+        c = store_evaluations(store, company, evals, ts, criteria)
         totals["postings_seen"] += c["seen"]
-        totals["new"] += c["new"]
-        totals["passed"] += c["passed"]
+        for k in ("new", "passed", "strong", "worth_a_look"):
+            totals[k] += c[k]
         log.info("%s: %d postings, %d new, %d passed gates", company.name, c["seen"], c["new"], c["passed"])
     if store is None:
         return 0
     store.mark_evergreen(int(criteria.get("freshness", "evergreen_after_days", default=60)), ts)
-    store.record_run(started_at=ts, finished_at=now_iso(), strong=0, worth_a_look=0, **totals)
+    store.record_run(started_at=ts, finished_at=now_iso(), **totals)
     store.commit()
     backend = backend_from_env(args.fake_sheet)
     if backend is None:
         log.info("Sheet sync skipped: set SHEET_ID and GOOGLE_SERVICE_ACCOUNT_JSON (or --fake-sheet)")
     else:
-        res = sync_pipeline(backend, store, criteria, ts)
+        res = sync_all(backend, store, criteria, ts)
         log.info("Sheet: %d rows in Pipeline (%d batch requests in one call)", res["rows"], res["requests"])
     store.close()
     return 0

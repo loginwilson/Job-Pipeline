@@ -4,12 +4,26 @@ Pulls postings from public company job boards (Greenhouse, Lever, Ashby), applie
 `config/criteria.yaml`, and (from step 2 on) keeps a Google Sheet updated.
 Spec: `docs/BUILD_BRIEF.md`, `docs/ARCHITECTURE.md`, `config/criteria.yaml` (criteria wins).
 
-**Status: steps 1–2 done** — sources → normalize → gates → requirements match → SQLite
-(`data/pipeline.db`) → Google Sheet `Pipeline` tab. Signals/tiers, the other tabs and the
-hourly workflow come next; full setup steps for the owner are added in step 5.
+**Status: steps 1, 2 and 4 done** — sources → normalize → gates → requirements match →
+signals → tiers → SQLite (`data/pipeline.db`) → Google Sheet (Pipeline, Dropped, Unparsed
+alerts, Funnel, Board health). Next: hourly workflow + owner setup (step 5); alert-email
+reader once sample emails exist (step 3b).
 
-Until step 4, the Sheet's Tier, Role type and Why columns are blank and Score shows the
-requirements-match score.
+## How ranking works — necessities vs. preferences
+
+The pipeline gives you **options**; you decide what stays.
+
+* **Necessities are strict.** Experience cap, requirements (hard gaps), location,
+  salary, work authorization, employment type, seniority, timing → fail = dropped
+  (see the Dropped tab, with the rule and the matched text).
+* **Fit score → Tier.** Requirements match (70%), experience fit (15%) and necessity
+  signals (15%: location tier, timing, salary, sponsorship/TN, technical asks) give the
+  Score column and the Tier (Strong ≥ 70 with no required gaps, Worth a look ≥ 50,
+  Stored otherwise). Stored postings still appear in the Sheet, just lower.
+* **Preferences only reorder.** Role type, lane, description signals, sector, company,
+  and `final_score.role_preference` (Sales −10, Sales-adjacent −5, analyst titles −10)
+  sort postings *within* their tier. They never change a tier or hide a posting.
+  Role type is a column you can filter on.
 
 ## Run
 
@@ -36,4 +50,4 @@ Term lists match whole words, case-insensitively (all-caps acronyms like `OPT`, 
 match case-sensitively), hyphens = spaces, `U.S.` = `US`, singular/plural tolerant.
 Every gate is evaluated, so a dropped posting lists all the rules it failed.
 
-The latest Palantir results are in `docs/palantir_step1_results.txt`.
+The latest Palantir results are in `docs/palantir_results.txt`.

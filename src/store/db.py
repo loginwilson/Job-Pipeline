@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS scores (
     posting_id TEXT PRIMARY KEY REFERENCES postings(posting_id),
     passed INTEGER, gate TEXT, matched TEXT, failures TEXT, dropped_at TEXT,
     flags TEXT, requirements_summary TEXT, requirements_score REAL, tn_label TEXT,
-    role_type TEXT, final_score REAL, tier TEXT, why TEXT,
+    role_type TEXT, final_score REAL, sort_score REAL, tier TEXT, why TEXT,
     display TEXT,            -- JSON of Sheet-ready fields
     evaluated_at TEXT
 );
@@ -57,6 +57,9 @@ class Store:
         self.conn = sqlite3.connect(str(path))
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(scores)")}
+        if "sort_score" not in cols:
+            self.conn.execute("ALTER TABLE scores ADD COLUMN sort_score REAL")
 
     def close(self) -> None:
         self.conn.commit()
@@ -102,7 +105,8 @@ class Store:
     def save_score(self, posting_id: str, passed: bool, failures: list[dict], flags: list[str],
                    req_summary: str, req_score: float | None, tn_label: str, display: dict, ts: str,
                    role_type: str | None = None, final_score: float | None = None,
-                   tier: str | None = None, why: str | None = None) -> None:
+                   tier: str | None = None, why: str | None = None,
+                   sort_score: float | None = None) -> None:
         prev = self.conn.execute("SELECT passed, dropped_at FROM scores WHERE posting_id=?",
                                  (posting_id,)).fetchone()
         dropped_at = None
@@ -111,11 +115,11 @@ class Store:
         first = failures[0] if failures else {}
         self.conn.execute(
             "INSERT OR REPLACE INTO scores(posting_id, passed, gate, matched, failures, dropped_at, flags, "
-            "requirements_summary, requirements_score, tn_label, role_type, final_score, tier, why, display, "
-            "evaluated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "requirements_summary, requirements_score, tn_label, role_type, final_score, sort_score, tier, why, "
+            "display, evaluated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (posting_id, int(passed), first.get("gate"), first.get("matched"), json.dumps(failures),
              dropped_at, json.dumps(flags), req_summary, req_score, tn_label, role_type, final_score,
-             tier, why, json.dumps(display, default=str), ts))
+             sort_score, tier, why, json.dumps(display, default=str), ts))
 
     def pipeline_rows(self) -> list[sqlite3.Row]:
         return self.conn.execute(

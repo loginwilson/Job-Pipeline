@@ -103,3 +103,22 @@ def test_first_seen_persists(criteria, palantir, payload):
         store_evaluations(store, palantir, evaluate_company(palantir, payload, criteria), ts)
     row = store.conn.execute("SELECT first_seen, last_seen, is_new FROM postings LIMIT 1").fetchone()
     assert (row["first_seen"], row["last_seen"], row["is_new"]) == (T1, T2, 0)
+
+
+def test_sync_all_tabs_one_write(criteria, palantir, payload):
+    from src.output.sheet import ALL_TABS, sync_all
+    store, sheet = Store(":memory:"), FakeBackend()
+    evals = evaluate_company(palantir, payload, criteria)
+    store_evaluations(store, palantir, evals, T1, criteria)
+    store.board_ok("Palantir", "lever", len(evals), T1)
+    store.record_run(started_at=T1, finished_at=T1, boards_polled=1, postings_seen=309, new=309,
+                     passed=6, strong=1, worth_a_look=5, errors=0)
+    store.commit()
+    sync_all(sheet, store, criteria, T1)
+    assert len(sheet.calls) == 1
+    data = sheet.read(ALL_TABS)
+    assert data["Dropped"][0] == ["Company", "Role", "Gate", "Matched text", "Date"] and len(data["Dropped"]) == 304
+    assert data["Funnel"][1][1:] == ["1", "309", "309", "6", "1", "5", "0"]
+    assert data["Board health"][1][-1] == "OK"
+    pipe = data["Pipeline"]
+    assert pipe[1][0] == "Strong" and {r[0] for r in pipe[1:]} <= {"Strong", "Worth a look", "Stored"}

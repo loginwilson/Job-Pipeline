@@ -97,6 +97,7 @@ def build_pipeline_rows(store: Store, criteria: Criteria, ts: str) -> list[dict]
             "tier": r["tier"] or "", "score": r["final_score"] if r["final_score"] is not None else
             (r["requirements_score"] if r["requirements_score"] is not None else ""),
             "first_seen": r["first_seen"],
+            "sort": r["sort_score"] if r["sort_score"] is not None else None,
             "values": [
                 r["tier"] or "",
                 None,  # score filled below
@@ -110,9 +111,11 @@ def build_pipeline_rows(store: Store, criteria: Criteria, ts: str) -> list[dict]
             ],
         })
         rows[-1]["values"][1] = rows[-1]["score"]
-    rows.sort(key=lambda x: (x["closed"], TIER_ORDER.get(x["tier"], 3),
-                             -(x["score"] if isinstance(x["score"], (int, float)) else -1),
-                             _neg_date(x["first_seen"])))
+    def _key(x):
+        s = x["sort"] if x["sort"] is not None else x["score"]
+        return (x["closed"], TIER_ORDER.get(x["tier"], 3),
+                -(s if isinstance(s, (int, float)) else -1), _neg_date(x["first_seen"]))
+    rows.sort(key=_key)   # tier by fit; within a tier, preferences decide the order
     return rows
 
 
@@ -125,9 +128,17 @@ def _neg_date(iso: str | None) -> float:
 
 # --- sync -----------------------------------------------------------------
 def sync_pipeline(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | None = None) -> dict:
+    """Pipeline tab only (one read + one write)."""
     ts = ts or datetime.now(timezone.utc).isoformat(timespec="seconds")
     meta = backend.ensure_tabs([PIPELINE])
     existing = backend.read([PIPELINE]).get(PIPELINE, [])
+    requests, info = pipeline_requests(meta, existing, store, criteria, ts)
+    backend.batch_update(requests)
+    return info
+
+
+def pipeline_requests(meta: dict, existing: list[list[str]], store: Store, criteria: Criteria,
+                      ts: str) -> tuple[list[dict], dict]:
     owner: dict[str, list[str]] = {}
     orphan_rows: list[list[str]] = []
     db_rows = build_pipeline_rows(store, criteria, ts)
@@ -185,8 +196,68 @@ def sync_pipeline(backend: SheetBackend, store: Store, criteria: Criteria, ts: s
                 "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": '=$A2="Strong"'}]},
                 "format": {"backgroundColor": GREEN}}}}},
         ]
+    return requests, {"rows": len(grid) - 1, "kept_owner_rows": len(orphan_rows), "requests": len(requests)}
+
+
+# --- the other tabs (rewritten in full each run) ---------------------------
+DROPPED, UNPARSED, FUNNEL, HEALTH = "Dropped", "Unparsed alerts", "Funnel", "Board health"
+ALL_TABS = [PIPELINE, DROPPED, UNPARSED, FUNNEL, HEALTH]
+
+
+def _simple_tab(meta: dict, tab: str, header: list[str], rows: list[list], existing_len: int) -> list[dict]:
+    sid = meta[tab]["id"]
+    grid = [header] + rows
+    total = max(len(grid), existing_len)
+    padded = grid + [[""] * len(header)] * (total - len(grid))
+    return [
+        {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
+            "rowCount": max(meta[tab].get("rows", 1000), total + 1),
+            "columnCount": max(meta[tab].get("cols", 26), len(header)), "frozenRowCount": 1}},
+            "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
+        {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
+                         "rows": [{"values": [_cell(v) for v in _pad(r, len(header))]} for r in padded],
+                         "fields": "userEnteredValue"}},
+        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
+                        "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+                        "fields": "userEnteredFormat.textFormat.bold"}},
+    ]
+
+
+def other_tab_rows(store: Store, criteria: Criteria, ts: str, unparsed: list[list] | None = None) -> dict:
+    days = 7
+    dropped = [[r["company"], hyperlink(r["url"], r["title"]), r["gate"], r["matched"], _date(r["dropped_at"])]
+               for r in store.dropped_rows(days, ts)]
+    funnel = [[r["started_at"], r["boards_polled"], r["postings_seen"], r["new"], r["passed"],
+               r["strong"], r["worth_a_look"], r["errors"]] for r in reversed(store.runs())]
+    health = []
+    for r in store.board_health():
+        counts = "" if r["count_last"] is None else (
+            f"{r['count_last']} (prev {r['count_prev']})" if r["count_prev"] is not None else str(r["count_last"]))
+        health.append([r["company"], r["platform"], r["last_success"] or "",
+                       (f"{_date(r['last_error_at'])}: {r['last_error']}" if r["last_error"] else ""),
+                       counts, r["status"]])
+    return {
+        DROPPED: (["Company", "Role", "Gate", "Matched text", "Date"], dropped),
+        UNPARSED: (["Sender", "Subject", "Date"], unparsed or []),
+        FUNNEL: (["Timestamp", "Boards polled", "Postings seen", "New", "Passed gates", "Strong",
+                  "Worth a look", "Errors"], funnel),
+        HEALTH: (["Company", "Platform", "Last success", "Last error", "Postings (last vs previous)",
+                  "Status"], health),
+    }
+
+
+def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | None = None,
+             unparsed: list[list] | None = None) -> dict:
+    """Every tab: one read + one batchUpdate per run."""
+    ts = ts or datetime.now(timezone.utc).isoformat(timespec="seconds")
+    meta = backend.ensure_tabs(ALL_TABS)
+    existing = backend.read(ALL_TABS)
+    requests, info = pipeline_requests(meta, existing.get(PIPELINE, []), store, criteria, ts)
+    for tab, (header, rows) in other_tab_rows(store, criteria, ts, unparsed).items():
+        requests += _simple_tab(meta, tab, header, rows, len(existing.get(tab, [])))
     backend.batch_update(requests)
-    return {"rows": len(grid) - 1, "kept_owner_rows": len(orphan_rows), "requests": len(requests)}
+    info["requests"] = len(requests)
+    return info
 
 
 def _validation(sid: int, col: int, options: list[str], rows: int) -> dict:
