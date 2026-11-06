@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+data/*
+!data/.gitkeep
+.env
+service_account*.json

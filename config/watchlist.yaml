@@ -1,0 +1,17 @@
+# Companies polled every run. Slugs are verified against the live board API
+# before being added (never guessed).
+#   category: watchlist_seed_mix bucket from criteria.yaml discovery
+#   sectors:  tags read by rules (e.g. "consulting", "accounting", "hotel company",
+#             "proptech", "real estate data") — see README
+- name: Palantir
+  platform: lever
+  slug: palantir            # verified 2026-11-05 (309 postings)
+  anchor: true
+  category: ai_data_automation
+  sectors: [ai, data, software]
+- name: WithCoverage
+  platform: greenhouse
+  slug: withcoverage        # verified 2026-11-05 (19 postings)
+  anchor: true
+  category: ai_data_automation
+  sectors: [ai, insurance, software]

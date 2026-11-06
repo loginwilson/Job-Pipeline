@@ -1,0 +1,64 @@
+# ─────────────────────────────────────────────────────────────
+# Reference data and matcher settings — NOT criteria.
+#
+# criteria.yaml decides what passes and how it ranks. This file only helps
+# the pipeline READ postings: how place names map onto the regions that
+# criteria.yaml location.tiers names, and how tolerant text matching is.
+# Editing this file never changes a rule; it fixes a misread.
+# ─────────────────────────────────────────────────────────────
+
+matching:
+  # rapidfuzz score (0-100) for fuzzy title matching (BUILD_BRIEF Step 1b uses 85)
+  fuzzy_min_score: 85
+
+geo:
+  # Each region key must match a region name under criteria.yaml location.tiers.
+  # aliases: extra ways postings name the region itself (cities come from criteria).
+  # states:  state/province qualifiers consistent with the region.
+  regions:
+    NYC:
+      country: US
+      aliases: [New York City, New York, NYC]
+      states: [NY, New York, NJ, New Jersey]
+    Chicago:
+      country: US
+      aliases: [Chicago]
+      states: [IL, Illinois]
+    Florida:
+      country: US
+      states: [FL, Florida]
+    California:
+      country: US
+      states: [CA, California]
+    Toronto:
+      country: CA
+      aliases: [Toronto, Greater Toronto Area, GTA]
+      states: ["ON", Ontario]
+    British Columbia:
+      country: CA
+      states: [BC, British Columbia]
+    Texas:
+      country: US
+      states: [TX, Texas]
+
+  countries:
+    US: [US, USA, U.S., U.S.A., United States, United States of America]
+    CA: [Canada, CAN]
+
+  # Every US state / Canadian province, so "Richmond, VA" is not read as
+  # Richmond, BC and "Vancouver, WA" is not read as Vancouver, BC.
+  us_states: [AL, Alabama, AK, Alaska, AZ, Arizona, AR, Arkansas, CA, California, CO, Colorado,
+    CT, Connecticut, DE, Delaware, DC, D.C., District of Columbia, FL, Florida, GA, Georgia,
+    HI, Hawaii, ID, Idaho, IL, Illinois, IN, Indiana, IA, Iowa, KS, Kansas, KY, Kentucky,
+    LA, Louisiana, ME, Maine, MD, Maryland, MA, Massachusetts, MI, Michigan, MN, Minnesota,
+    MS, Mississippi, MO, Missouri, MT, Montana, NE, Nebraska, NV, Nevada, NH, New Hampshire,
+    NJ, New Jersey, NM, New Mexico, NY, New York, NC, North Carolina, ND, North Dakota,
+    OH, Ohio, OK, Oklahoma, OR, Oregon, PA, Pennsylvania, RI, Rhode Island, SC, South Carolina,
+    SD, South Dakota, TN, Tennessee, TX, Texas, UT, Utah, VT, Vermont, VA, Virginia,
+    WA, Washington, WV, West Virginia, WI, Wisconsin, WY, Wyoming]
+  ca_provinces: [AB, Alberta, BC, British Columbia, MB, Manitoba, NB, New Brunswick,
+    NL, Newfoundland and Labrador, NS, Nova Scotia, NT, Northwest Territories, NU, Nunavut,
+    "ON", Ontario, PE, Prince Edward Island, QC, Quebec, SK, Saskatchewan, YT, Yukon]
+
+  # Words that mark a location entry as remote rather than an office.
+  remote_words: [remote, anywhere, work from home, wfh, distributed]
