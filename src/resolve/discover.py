@@ -46,8 +46,8 @@ def candidate_slugs(name: str, hint: str | None = None) -> list[str]:
     return [c for c in dict.fromkeys(cands) if len(c) >= 2]
 
 
-def _titles(platform: str, payload) -> list[str]:
-    raws = get_source(platform).parse(payload, "probe")
+def _titles(platform: str, payload, slug: str) -> list[str]:
+    raws = get_source(platform).parse(payload, slug)
     return [r.title for r in raws]
 
 
@@ -59,11 +59,15 @@ def find_board(company: str, titles: list[str], hint: str | None = None,
         for platform in PLATFORMS:
             src = get_source(platform)
             try:
-                payload = (src.fetch_payload_list(slug, sess) if platform == "smartrecruiters"
+                payload = (src.fetch_payload_list(slug, sess) if platform in ("smartrecruiters", "workday")
                            else src.fetch_payload(slug, sess))
-            except SourceError:
+            except Exception:
                 continue
-            board_titles = _titles(platform, payload)
+            try:
+                board_titles = _titles(platform, payload, slug)
+            except Exception as exc:      # a malformed board never stops discovery
+                log.warning("discovery: %s:%s unreadable (%s)", platform, slug, exc)
+                continue
             if not board_titles:
                 continue
             for want in titles:
@@ -103,6 +107,10 @@ def verify_board(platform: str, slug: str, session: requests.Session | None = No
     try:
         payload = (src.fetch_payload_list(slug, session) if platform in ("smartrecruiters", "workday")
                    else src.fetch_payload(slug, session))
-    except SourceError:
+    except Exception:
         return 0
-    return len(_titles(platform, payload))
+    try:
+        return len(_titles(platform, payload, slug))
+    except Exception as exc:
+        log.warning("discovery: %s:%s unreadable (%s)", platform, slug, exc)
+        return 0

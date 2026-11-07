@@ -93,3 +93,12 @@ def test_workday_skips_closed():
     item = {"title": "Analyst", "externalPath": "/job/x", "locationsText": "New York, NY", "postedOn": "Posted Today"}
     payload = {"pages": [{"jobPostings": [item]}], "details": {"/job/x": {"jobPostingInfo": {"canApply": False}}}}
     assert get_source("workday").parse(payload, "acme.wd1/Careers") == []
+
+
+def test_verify_workday_board_does_not_crash(monkeypatch):
+    """Run #9 regression: checking a discovered Workday site must parse with its real board id."""
+    from src.resolve import discover
+    from src.sources.workday import WorkdaySource
+    pages = load_fixture(FIXTURES / "workday_costar.json.gz")["pages"]
+    monkeypatch.setattr(WorkdaySource, "fetch_payload_list", lambda self, slug, session=None: {"pages": pages})
+    assert discover.verify_board("workday", "costar.wd1/CoStarCareers") == 20

@@ -316,7 +316,11 @@ def main(argv: list[str] | None = None) -> int:
         jsearch_evals = run_jsearch(store, cfg.get("jsearch") or {}, criteria, gates, matcher, ts)
         known = {normalize(c.name) for c in companies} | {normalize(r["company"]) for r in store.discovered_boards()}
         if muse_evals or jsearch_evals:
-            discover(store, (muse_evals or []) + (jsearch_evals or []), cfg.get("discovery") or {}, known, ts)
+            try:
+                discover(store, (muse_evals or []) + (jsearch_evals or []), cfg.get("discovery") or {}, known, ts)
+            except Exception as exc:  # discovery problems never stop the run
+                log.error("discovery error: %s", exc)
+                totals["errors"] += 1
         watch = {normalize(c.name) for c in companies}
         companies += [Company(name=r["company"], platform=r["platform"], slug=r["slug"])
                       for r in store.discovered_boards() if normalize(r["company"]) not in watch]
@@ -332,8 +336,8 @@ def main(argv: list[str] | None = None) -> int:
             continue        # large career site polled less often; its postings stay as they were
         try:
             evals = evaluate_company(company, payload, criteria, gates, matcher, store, ts)
-        except SourceError as exc:
-            log.error("board error: %s", exc)
+        except Exception as exc:      # one bad board never stops the run
+            log.error("board error: %s:%s %s", company.platform, company.slug, exc)
             totals["errors"] += 1
             if store:
                 store.board_error(company.name, company.platform, str(exc), ts)
