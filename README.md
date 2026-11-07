@@ -33,10 +33,10 @@ rule and the exact text that triggered it):
 | # | Dropped if… |
 |---|---|
 | 1 | not full-time (internship, contract, temp, co-op, short fellowship, part-time) |
-| 2 | not in NYC · Chicago / Florida / California / Toronto · Texas / BC, or **solely** remote |
+| 2 | not in NYC · Chicago / Florida / California / Toronto · Texas / BC, or **solely** remote ("Remote, New York, NY" counts as NYC and is flagged) |
 | 3 | salary midpoint under $100K USD / C$120K (between that and $120K / C$140K → kept, flagged *Low base — check incentives*). No salary posted → kept and flagged, unless it's a role that essentially never pays the floor (retail, warehouse, driver, call center…) or hourly with no amount |
-| 4 | asks 3+ years of experience (required or preferred) |
-| 5 | senior title (Senior, Sr, Staff, Principal, Director, Head of, VP, Chief, Level III+, Lead-as-a-level, people manager) |
+| 4 | asks 3+ years of experience (required or preferred), or implies it without a number ("extensive experience", "mentor less experienced staff") |
+| 5 | senior title (Senior, Sr, Staff, Principal, Director, Head of, VP, Chief, Level III+, Lead-as-a-level, people manager), or the description calls the role senior ("The Sr Marketing Experience Owner is…") |
 | 6 | US job requiring US citizenship, security clearance or U.S.-person status ("no sponsorship" is only flagged — OPT/TN usually fine) |
 | 7 | engineer/developer title (except GTM, Solutions, Sales, Prompt Engineer), or a **required** line demanding coding with no non-coding alternative |
 | 8 | a **required** credential you lack (MBA, JD, Master's, PhD, CPA, bar, RN, PE, CS/engineering-type degree) |
