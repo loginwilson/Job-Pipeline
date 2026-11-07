@@ -24,6 +24,7 @@ Per run: ONE read + ONE spreadsheets.batchUpdate. Tabs are created on first run.
 from __future__ import annotations
 
 import json
+import re
 import logging
 import os
 from datetime import datetime, timedelta, timezone
@@ -155,7 +156,8 @@ def build_rows(store: Store, criteria: Criteria, ts: str, owner_states: dict[str
     rows = []
     for r in store.pipeline_rows():
         try:
-            row = _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses)
+            row = _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses,
+                             fresh.get("evergreen_flag") or f"Open {fresh.get('evergreen_after_days', 180)}+ days")
         except Exception as exc:     # one malformed posting never blocks the Sheet update
             log.warning("Sheet: skipped %s (%s)", r["posting_id"], exc)
             continue
@@ -164,7 +166,8 @@ def build_rows(store: Store, criteria: Criteria, ts: str, owner_states: dict[str
     return rows
 
 
-def _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses) -> dict | None:
+def _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses,
+               evergreen_label="Open 60+ days") -> dict | None:
     """Sheet cells for one stored posting (None when it should not be shown)."""
     d = json.loads(r["display"] or "{}")
     st = owner_states.get(r["posting_id"], {})
@@ -189,7 +192,7 @@ def _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses) -
             flags.append("Follow up")
     flags += json.loads(r["flags"] or "[]")
     if r["evergreen"]:
-        flags.append("Evergreen")
+        flags.append(evergreen_label)
     if r["closed_at"]:
         flags.append("Closed")
     cells = {
@@ -203,8 +206,10 @@ def _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses) -
         "Posted": _date(r["posted_at"]), "First seen": _date(r["first_seen"]),
         "Source": d.get("source", ""), "Posting ID": r["posting_id"],
     }
+    tier = re.search(r"tier (\d)", cells.get("Location") or "")
     return {"posting_id": r["posting_id"], "closed": bool(r["closed_at"]),
-            "first_seen": r["first_seen"], "cells": cells}
+            "first_seen": r["first_seen"], "cells": cells,
+            "tier": int(tier.group(1)) if tier else 9, "posted": r["posted_at"] or ""}
 
 
 def _sort_key(tab: str, row: dict):
@@ -212,7 +217,9 @@ def _sort_key(tab: str, row: dict):
     if tab == APPLICATIONS:
         return (c["Status"] in ENDED, -_interest(c["Interest"]), STATUS_ORDER.get(c["Status"], 6),
                 row["closed"], _neg_date(row["first_seen"]))
-    return (row["closed"], _neg_date(row["first_seen"]))
+    # newest finds first (by day), then NYC before tier 2 before tier 3, then newest posting
+    return (row["closed"], _neg_date((row["first_seen"] or "")[:10]), row.get("tier", 9),
+            _neg_date(str(row.get("posted") or "")[:10]))
 
 
 # --- sync -----------------------------------------------------------------
@@ -327,12 +334,14 @@ def funnel_rows(store: Store) -> list[list]:
         [f"Latest run: {last['started_at'][:16].replace('T', ' ')} UTC · {last['seconds'] or 0:g}s · "
          f"{last['new_passed'] or 0} new options · {cov.get('open_options', '')} open options in total"],
         [],
-        ["Source", "Postings seen", "New", "Passed must-haves", "New options", "Dropped", "Top reasons dropped"],
+        ["Source", "Postings seen", "New", "Passed must-haves", "New options", "Dropped", "Top reasons dropped",
+         "Last checked (UTC)"],
     ]
-    for r in store.run_sources(last["started_at"]):
+    for r in store.latest_source_stats():       # each source's most recent check (some are polled less often)
         reasons = json.loads(r["reasons"] or "{}")
         top = ", ".join(f"{k} {v}" for k, v in sorted(reasons.items(), key=lambda kv: -kv[1])[:4])
-        rows.append([r["source"], r["seen"], r["new"], r["passed"], r["new_passed"], r["dropped"], top])
+        rows.append([r["source"], r["seen"], r["new"], r["passed"], r["new_passed"], r["dropped"], top,
+                     r["started_at"][:16].replace("T", " ")])
     rows += [[], ["Coverage"]]
     polled = cov.get("boards_polled_by_platform") or {}
     rows.append(["Company boards watched", sum(polled.values()),

@@ -199,16 +199,22 @@ openings:
 
 
 # ── FACTS SHOWN IN THE SHEET (never drop anything) ─────────────
-fields:                     # Field column: first match wins (title, then description)
-  Real Estate / Proptech: [real estate, proptech, property, properties, commercial real estate, CRE, REIT, multifamily, leasing, brokerage, mortgage, construction, housing, landlord, tenant]
+fields:                     # Field column (information only). The job title decides when it names a field; else the description.
+  Finance: [finance, financial, investment, investing, investor, private equity, banking, bank, banker, capital markets, fintech, asset management, underwriting, underwriter, trading, trader, quantitative, quant, hedge fund, market maker, securities, credit, lending, loan, loans, mortgage, accounting, accountant, treasury, FP&A, portfolio, tax, audit, actuarial, risk]
+  Real Estate / Proptech: [real estate, proptech, property, properties, commercial real estate, CRE, REIT, multifamily, leasing, brokerage, construction, housing, landlord, tenant]
   Hospitality / Travel: [hospitality, hotel, hotels, lodging, resort, travel industry, travel company, airline, tourism, restaurant, guest experience, short-term rental]
-  AI / Data / Automation: [AI, artificial intelligence, machine learning, LLM, automation, data platform, analytics, SaaS, software]
-  Consulting: [consulting, consultant, advisory]
-  Finance: [finance, investment, investing, private equity, banking, capital markets, fintech, asset management, underwriting]
+  AI / Data / Automation: [AI, artificial intelligence, machine learning, LLM, automation, data, analytics, analyst, SaaS, software, agent, agents]
+  Consulting: [consulting, consultant, advisory, strategist, deployment strategist, forward deployed]
+  Product: [product manager, product management, associate product manager, APM, product operations, program manager, technical program manager, product designer, designer]
+  Sales / GTM: [sales, account executive, account manager, business development, BDR, SDR, partnerships, customer success, solutions consultant, sales engineer, GTM, go to market, revenue]
+  Marketing: [marketing, brand, content, social media, growth, communications, events, community, creative]
+  Operations / Strategy: [operations, strategy, chief of staff, founders office, business operations, bizops, implementation, supply chain, logistics, procurement, project manager, rotational]
+  People / Recruiting: [recruiter, recruiting, talent, people, HR, human resources, sourcer, compensation]
 
 freshness:
   apply_soon_days: 7
-  evergreen_after_days: 60
+  evergreen_after_days: 180          # posted this long ago and still open → flag
+  evergreen_flag: "Open 6+ months — may be always-open"
 
 tracking:                   # how your Status column is followed up
   follow_up_after_days: 10  # flag "Follow up" when an application hasn't moved this long

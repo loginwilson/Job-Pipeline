@@ -123,7 +123,7 @@ def _fetch_with_details(src, company, criteria, gates, matcher, store, ts, cache
 
 
 SOURCE_NAMES = {"lever": "Lever", "greenhouse": "Greenhouse", "ashby": "Ashby", "muse": "The Muse",
-                "smartrecruiters": "SmartRecruiters", "jsearch": "JSearch"}
+                "smartrecruiters": "SmartRecruiters", "jsearch": "JSearch", "workday": "Workday", "oracle": "Oracle"}
 SEARCH_PLATFORMS = ("muse", "jsearch")
 
 
@@ -150,7 +150,8 @@ def display_fields(ev: Evaluation) -> dict:
     b = p.location.best
     where = f"{b.city} (tier {b.tier})" if b else "; ".join(p.locations)
     extra = ", ".join(t for t in p.comp.extra_terms if "structured" not in t) or p.comp.extra_comp_display
-    return {"field": ev.field, "visa": ev.visa, "location": f"{where} · {p.work_arrangement}",
+    how = {"in_office": "in office", "hybrid": "hybrid", "remote": "remote"}.get(p.work_arrangement)
+    return {"field": ev.field, "visa": ev.visa, "location": f"{where} · {how}" if how else where,
             "tier": b.tier if b else 9, "salary": p.comp.display(), "extra_comp": extra if extra != "—" else "",
             "experience": p.experience.label(),
             "source": SOURCE_NAMES.get(p.raw.platform, p.raw.platform) if p.raw else ""}
@@ -581,7 +582,7 @@ def main(argv: list[str] | None = None) -> int:
         store.close_stale("jsearch:", int(js.get("close_after_days_unseen", 7)), ts)
     if store is None:
         return 0
-    store.mark_evergreen(int(criteria.get("freshness", "evergreen_after_days", default=60)), ts)
+    store.mark_evergreen(int(criteria.get("freshness", "evergreen_after_days", default=180)), ts)
     store.compact()
     for st in stats.values():
         totals["postings_seen"] += st["seen"]

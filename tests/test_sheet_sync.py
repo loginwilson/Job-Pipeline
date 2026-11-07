@@ -210,3 +210,17 @@ def test_one_corrupt_posting_never_blocks_the_sheet(criteria, board, evals):
     sync_all(sheet, store, criteria, T1)
     ids = [r[ID_COL] for r in tab(sheet, REVIEW)]
     assert ids and bad not in ids
+
+
+def test_sort_flags_and_source_names(criteria, board, evals):
+    store, sheet = Store(":memory:"), FakeBackend()
+    store_evaluations(store, board, evals, T1, criteria)
+    store.conn.execute("UPDATE postings SET posted_at='2025-01-01' WHERE rowid IN (SELECT rowid FROM postings LIMIT 2)")
+    store.mark_evergreen(180, T1)
+    store.commit()
+    sync_all(sheet, store, criteria, T1)
+    rows = tab(sheet, REVIEW)
+    assert sum("Open 6+ months" in r[FLAGS] for r in rows) >= 1          # board's posted date counts
+    LOC = H.index("Location")
+    tiers = [int(r[LOC].split("tier ")[1][0]) for r in rows if "tier " in r[LOC]]
+    assert tiers == sorted(tiers)                                         # same day found → NYC first

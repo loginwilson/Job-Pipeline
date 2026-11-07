@@ -207,8 +207,9 @@ class Store:
 
     def mark_evergreen(self, days: int, ts: str) -> None:
         cutoff = (datetime.fromisoformat(ts) - timedelta(days=days)).isoformat(timespec="seconds")
-        self.conn.execute("UPDATE postings SET evergreen = CASE WHEN closed_at IS NULL AND first_seen <= ? "
-                          "THEN 1 ELSE 0 END", (cutoff,))
+        # the board's posted date when it has one (a 2017 posting is not new just because we found it today)
+        self.conn.execute("UPDATE postings SET evergreen = CASE WHEN closed_at IS NULL AND "
+                          "MIN(COALESCE(NULLIF(posted_at, ''), first_seen), first_seen) <= ? THEN 1 ELSE 0 END", (cutoff,))
 
     # --- scores ---------------------------------------------------------
     def save_score(self, posting_id: str, passed: bool, failures: list[dict], flags: list[str],
@@ -329,6 +330,12 @@ class Store:
             "INSERT OR REPLACE INTO run_sources VALUES (?,?,?,?,?,?,?,?)",
             [(started_at, src, s["seen"], s["new"], s["passed"], s["new_passed"], s["seen"] - s["passed"],
               json.dumps(dict(s["reasons"]))) for src, s in stats.items()])
+
+    def latest_source_stats(self) -> list[sqlite3.Row]:
+        """Each source's row from the most recent run that checked it."""
+        return self.conn.execute(
+            "SELECT rs.* FROM run_sources rs JOIN (SELECT source, MAX(started_at) m FROM run_sources GROUP BY source) x "
+            "ON rs.source = x.source AND rs.started_at = x.m ORDER BY rs.seen DESC").fetchall()
 
     def run_sources(self, started_at: str) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM run_sources WHERE started_at=? ORDER BY seen DESC",
