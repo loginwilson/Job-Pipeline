@@ -338,8 +338,10 @@ def funnel_rows(store: Store) -> list[list]:
     rows.append(["Company boards watched", sum(polled.values()),
                  ", ".join(f"{k} {v}" for k, v in sorted(polled.items(), key=lambda kv: -kv[1]))])
     disc = cov.get("discovered_by_platform") or {}
+    via = cov.get("discovered_by_source") or {}
     rows.append(["Boards discovered automatically", sum(disc.values()),
-                 f"{cov.get('discovered_this_week', 0)} this week"])
+                 f"{cov.get('discovered_this_week', 0)} this week · found via "
+                 + (", ".join(f"{k} {v}" for k, v in sorted(via.items(), key=lambda kv: -kv[1])) or "—")])
     rows.append(["JSearch searches today", f"{cov.get('jsearch_used_today', 0)} / {cov.get('jsearch_budget', 0)}",
                  f"{cov.get('jsearch_pairs_searched', 0)} of {cov.get('jsearch_pairs_total', 0)} keyword×city pairs covered"])
     rows.append(["The Muse last full sweep", (cov.get("muse_last_sweep") or "never")[:16].replace("T", " ")])

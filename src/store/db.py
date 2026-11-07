@@ -339,6 +339,7 @@ class Store:
         q = self.conn.execute
         return {
             "discovered_by_platform": {r[0]: r[1] for r in q("SELECT platform, COUNT(*) FROM discovered_boards GROUP BY platform")},
+            "discovered_by_source": {(r[0] or "search"): r[1] for r in q("SELECT via, COUNT(*) FROM discovered_boards GROUP BY via")},
             "discovered_this_week": q("SELECT COUNT(*) FROM discovered_boards WHERE found_at >= ?", (week,)).fetchone()[0],
             "jsearch_pairs_searched": q("SELECT COUNT(*) FROM search_pairs WHERE source='jsearch'").fetchone()[0],
             "jsearch_used_today": (q("SELECT used FROM search_usage WHERE source='jsearch' AND day=?",
