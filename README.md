@@ -4,14 +4,14 @@ Pulls postings from public company job boards (Greenhouse, Lever, Ashby), applie
 `config/criteria.yaml`, and (from step 2 on) keeps a Google Sheet updated.
 Spec: `docs/BUILD_BRIEF.md`, `docs/ARCHITECTURE.md`, `config/criteria.yaml` (criteria wins).
 
-**Status (2026-11-07):** live. Sources: company job boards (Greenhouse, Lever, Ashby —
+**Status (2026-11-07):** live. Sources: company job boards (Greenhouse, Lever, Ashby, SmartRecruiters —
 `config/watchlist.yaml` plus boards discovered automatically) polled hourly, and The Muse
 (entry-level jobs in all your cities) swept daily. → must-have rules → SQLite
 (`data/pipeline.db`) → Google Sheet, via GitHub Actions. Next: Google-for-Jobs search
 (JSearch), then job-alert emails.
 
 **Auto-discovery:** every company a search source finds in your cities is checked for a
-Greenhouse / Lever / Ashby board; if that board lists the same job, it joins the hourly
+Greenhouse / Lever / Ashby / SmartRecruiters board; if that board lists the same job, it joins the hourly
 watch (Board health tab). The same job from two sources appears once — the company-board
 copy wins and keeps any decision you already made. Settings: `config/sources.yaml`.
 
@@ -82,8 +82,9 @@ First seen, Source.
    (≈1–2 min), the Sheet has its tabs (To review, My applications, Passed, Dropped,
    Unparsed alerts, Funnel, Board health). After that it runs every hour at :17.
 5. **Add a company** — edit `config/watchlist.yaml`: `name`, `platform`
-   (greenhouse / lever / ashby) and `slug` from the board URL
-   (`jobs.lever.co/<slug>`, `boards.greenhouse.io/<slug>`, `jobs.ashbyhq.com/<slug>`).
+   (greenhouse / lever / ashby / smartrecruiters) and `slug` from the board URL
+   (`jobs.lever.co/<slug>`, `boards.greenhouse.io/<slug>`, `jobs.ashbyhq.com/<slug>`,
+   `jobs.smartrecruiters.com/<slug>`).
    Check it once with `python -m src.run --print --company "<name>"`.
 
 Open the Sheet from Google Drive or the Google Sheets app on your phone — bookmark it.

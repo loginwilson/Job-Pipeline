@@ -37,3 +37,22 @@ def test_ashby_fixtures():
     assert any(c.kind == "ote" for p in ramp for c in p.comp_ranges)
     elise = ab.parse(load_fixture(FIXTURES / "ashby_eliseai.json.gz"), "eliseai")
     assert any("New York City" in p.locations for p in elise)
+
+
+def test_smartrecruiters_fixture():
+    sr = get_source("smartrecruiters")
+    payload = load_fixture(FIXTURES / "smartrecruiters_servicenow.json.gz")
+    raws = sr.parse(payload, "ServiceNow")
+    assert len(raws) == 100
+    detailed = [r for r in raws if r.raw["has_detail"]]
+    assert len(detailed) == len(payload["details"]) and detailed[0].url.startswith("https://jobs.smartrecruiters.com/")
+    assert any(ln.startswith("## ") for ln in detailed[0].description_lines)
+    assert all(r.company == "ServiceNow" and r.employment_type for r in raws)
+
+
+def test_smartrecruiters_skips_inactive():
+    item = {"id": "1", "name": "Analyst", "location": {"fullLocation": "New York, New York, United States"},
+            "typeOfEmployment": {"label": "Full-time"}, "company": {"name": "Acme"}}
+    raws = get_source("smartrecruiters").parse({"pages": [{"content": [item]}],
+                                                "details": {"1": {"active": False}}}, "acme")
+    assert raws == []

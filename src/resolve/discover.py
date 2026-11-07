@@ -1,7 +1,7 @@
 """Auto-discovery: a company found by a search source gets its own job board watched.
 
-For each new company name, try likely board slugs on Greenhouse, Lever and
-Ashby. A board is accepted only if it actually lists the job that led us
+For each new company name, try likely board slugs on Greenhouse, Lever,
+Ashby and SmartRecruiters. A board is accepted only if it actually lists the job that led us
 there (title fuzzy-match >= reference.yaml matching.fuzzy_min_score), so a
 slug that happens to belong to a different company is never added.
 """
@@ -19,7 +19,7 @@ from ..sources import get_source
 from ..sources.base import SourceError
 
 log = logging.getLogger(__name__)
-PLATFORMS = ("greenhouse", "lever", "ashby")
+PLATFORMS = ("greenhouse", "lever", "ashby", "smartrecruiters")
 _SUFFIX = re.compile(r"\b(?:inc|llc|ltd|corp|corporation|co|company|group|holdings|technologies|technology|labs|hq)\b\.?",
                      re.I)
 
@@ -59,7 +59,8 @@ def find_board(company: str, titles: list[str], hint: str | None = None,
         for platform in PLATFORMS:
             src = get_source(platform)
             try:
-                payload = src.fetch_payload(slug, sess)
+                payload = (src.fetch_payload_list(slug, sess) if platform == "smartrecruiters"
+                           else src.fetch_payload(slug, sess))
             except SourceError:
                 continue
             board_titles = _titles(platform, payload)

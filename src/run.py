@@ -38,16 +38,46 @@ from .textmatch import normalize
 log = logging.getLogger("pipeline")
 
 
-def evaluate_company(company, payload=None, criteria=None, gates=None, matcher=None) -> list[Evaluation]:
+def evaluate_company(company, payload=None, criteria=None, gates=None, matcher=None,
+                     store: Store | None = None, ts: str | None = None) -> list[Evaluation]:
     criteria = criteria or load_criteria()
     matcher = matcher or LocationMatcher(criteria)
     gates = gates or Gates(criteria)
     src = get_source(company.platform)
-    raws = src.parse(payload, company.slug) if payload is not None else src.fetch(company.slug)
+    if payload is not None:
+        raws = src.parse(payload, company.slug)
+    elif company.platform == "smartrecruiters":
+        raws = _fetch_smartrecruiters(src, company, criteria, gates, matcher, store, ts)
+    else:
+        raws = src.fetch(company.slug)
     return [gates.evaluate(normalize_posting(r, company, criteria, matcher)) for r in raws]
 
 
-SOURCE_NAMES = {"lever": "Lever", "greenhouse": "Greenhouse", "ashby": "Ashby", "muse": "The Muse"}
+def _fetch_smartrecruiters(src, company, criteria, gates, matcher, store, ts):
+    """List every run; fetch descriptions only for new postings that could pass (cached)."""
+    from .sources.base import RawPosting
+
+    def want(item: dict) -> bool:
+        loc = (item.get("location") or {})
+        stub = RawPosting(platform=src.platform, slug=company.slug, native_id=str(item["id"]),
+                          title=item.get("name") or "", url="",
+                          locations=[loc["fullLocation"]] if loc.get("fullLocation") else [],
+                          country=(loc.get("country") or "").upper() or None,
+                          workplace_type="remote" if loc.get("remote") and not loc.get("hybrid") else None,
+                          employment_type=(item.get("typeOfEmployment") or {}).get("label"))
+        return gates.evaluate(normalize_posting(stub, company, criteria, matcher)).passed
+
+    prefix = f"smartrecruiters:{company.slug}:"
+    cache = store.details_for(prefix) if store is not None else {}
+    before = set(cache)
+    raws = src.fetch(company.slug, want=want, cache=cache)
+    if store is not None:
+        store.save_details(prefix, {k: v for k, v in cache.items() if k not in before}, ts or now_iso())
+    return raws
+
+
+SOURCE_NAMES = {"lever": "Lever", "greenhouse": "Greenhouse", "ashby": "Ashby", "muse": "The Muse",
+                "smartrecruiters": "SmartRecruiters"}
 
 
 def evaluate_raws(raws, criteria, gates, matcher, company: Company | None = None) -> list[Evaluation]:
@@ -211,7 +241,7 @@ def main(argv: list[str] | None = None) -> int:
     for company in companies:
         payload = load_fixture(args.fixture) if args.fixture else None
         try:
-            evals = evaluate_company(company, payload, criteria, gates, matcher)
+            evals = evaluate_company(company, payload, criteria, gates, matcher, store, ts)
         except SourceError as exc:
             log.error("board error: %s", exc)
             totals["errors"] += 1

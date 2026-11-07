@@ -33,6 +33,9 @@ CREATE TABLE IF NOT EXISTS discovered_boards (   -- company boards found automat
 CREATE TABLE IF NOT EXISTS probes (               -- companies checked for a board
     company TEXT PRIMARY KEY, probed_at TEXT, result TEXT
 );
+CREATE TABLE IF NOT EXISTS detail_cache (         -- per-posting details for boards that need them
+    posting_id TEXT PRIMARY KEY, payload TEXT, fetched_at TEXT
+);
 CREATE TABLE IF NOT EXISTS source_runs (          -- last full sweep per search source
     source TEXT PRIMARY KEY, last_complete TEXT
 );
@@ -208,6 +211,16 @@ class Store:
 
     def source_complete(self, source: str, ts: str) -> None:
         self.conn.execute("INSERT OR REPLACE INTO source_runs VALUES (?,?)", (source, ts))
+
+    # --- detail cache (SmartRecruiters) ---------------------------------------
+    def details_for(self, prefix: str) -> dict[str, dict]:
+        rows = self.conn.execute("SELECT posting_id, payload FROM detail_cache WHERE posting_id LIKE ?",
+                                 (prefix + "%",)).fetchall()
+        return {r["posting_id"][len(prefix):]: json.loads(r["payload"]) for r in rows}
+
+    def save_details(self, prefix: str, details: dict[str, dict], ts: str) -> None:
+        self.conn.executemany("INSERT OR REPLACE INTO detail_cache VALUES (?,?,?)",
+                              [(prefix + k, json.dumps(v), ts) for k, v in details.items()])
 
     # --- your columns -----------------------------------------------------
     def save_owner_state(self, posting_id: str, vals: dict, ts: str) -> None:
