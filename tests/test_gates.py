@@ -18,6 +18,8 @@ def test_employment_type(evaluate):
     assert "employment_type" in gates_of(evaluate(title="Analyst, Internship", lines=[PAY_OK]))
     assert "employment_type" in gates_of(evaluate(employment="Contract", lines=[PAY_OK]))
     assert "employment_type" in gates_of(evaluate(employment="Part-time", lines=[PAY_OK]))
+    assert "employment_type" in gates_of(evaluate(title="Member Service Rep (Part-Time)", employment=None,
+                                                  lines=[PAY_OK]))
     short = evaluate(title="Builders Fellowship", employment=None, lines=[PAY_OK, "The fellowship runs for 12 weeks."])
     assert "employment_type" in gates_of(short)
     assert evaluate(title="Contract Operations", lines=[PAY_OK]).passed   # not a contract job

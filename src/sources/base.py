@@ -47,6 +47,7 @@ class RawPosting:
     comp_ranges: list[CompRange] = field(default_factory=list)
     comp_extra: list[str] = field(default_factory=list)          # structured extra-comp signals
     posted_at: str | None = None            # ISO 8601
+    company: str | None = None              # set by search sources (boards take it from the watchlist)
     raw: dict[str, Any] = field(default_factory=dict)
 
 

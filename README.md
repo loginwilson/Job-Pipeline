@@ -4,9 +4,16 @@ Pulls postings from public company job boards (Greenhouse, Lever, Ashby), applie
 `config/criteria.yaml`, and (from step 2 on) keeps a Google Sheet updated.
 Spec: `docs/BUILD_BRIEF.md`, `docs/ARCHITECTURE.md`, `config/criteria.yaml` (criteria wins).
 
-**Status (v2, 2026-11-07):** company job boards (Greenhouse, Lever, Ashby) → must-have
-rules → SQLite (`data/pipeline.db`) → Google Sheet, hourly via GitHub Actions. Next:
-Google-for-Jobs search (JSearch) for wide coverage, then job-alert emails.
+**Status (2026-11-07):** live. Sources: company job boards (Greenhouse, Lever, Ashby —
+`config/watchlist.yaml` plus boards discovered automatically) polled hourly, and The Muse
+(entry-level jobs in all your cities) swept daily. → must-have rules → SQLite
+(`data/pipeline.db`) → Google Sheet, via GitHub Actions. Next: Google-for-Jobs search
+(JSearch), then job-alert emails.
+
+**Auto-discovery:** every company a search source finds in your cities is checked for a
+Greenhouse / Lever / Ashby board; if that board lists the same job, it joins the hourly
+watch (Board health tab). The same job from two sources appears once — the company-board
+copy wins and keeps any decision you already made. Settings: `config/sources.yaml`.
 
 ## How it works — every option comes in, you decide
 

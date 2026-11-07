@@ -1,0 +1,14 @@
+# Where postings come from, besides the company boards in watchlist.yaml.
+# These are settings, not rules — criteria.yaml still decides what you see.
+
+muse:                       # The Muse public API (free, no key)
+  enabled: true
+  levels: [Entry Level]     # Muse's own level filter; criteria rules still apply after
+  every_hours: 20           # full sweep about once a day (results can't be sorted by date)
+  max_pages: 120
+  max_age_days: 60          # skip postings published longer ago than this
+
+discovery:                  # companies found by search → their own job board joins the hourly watch
+  enabled: true
+  max_new_companies_per_run: 40
+  retry_unfound_after_days: 30
