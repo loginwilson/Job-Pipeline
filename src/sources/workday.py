@@ -89,29 +89,46 @@ class WorkdaySource(Source):
                     time.sleep(BACKOFF_S * (2 ** attempt))
         raise SourceError(f"workday: {url} failed: {last}")
 
-    def fetch_list(self, slug: str, session: requests.Session | None = None, max_pages: int = MAX_PAGES) -> list[dict]:
+    def fetch_list(self, slug: str, session: requests.Session | None = None, max_pages: int = MAX_PAGES,
+                   place_ok: Callable[[str], bool] | None = None) -> "Listing":
+        """Every posting on the site. A site too big to read in full (over max_pages) is
+        read again with only its location filters that name one of your cities
+        (`place_ok`); if it is still too big the result is marked truncated."""
         sess = session or requests.Session()
-        items, offset, total = [], 0, None
+        items, total, first = self._pages(slug, sess, max_pages, {})
+        out = Listing(items)
+        if total > len(items) and max_pages > 1:
+            ids = [v["id"] for v in _location_values(first.get("facets") or []) if place_ok and place_ok(v.get("descriptor") or "")]
+            if ids:
+                items, total, _ = self._pages(slug, sess, max_pages, {"locations": ids})
+                out = Listing(items)
+                out.filtered_to = len(ids)
+            out.truncated = total > len(items)
+        return out
+
+    def _pages(self, slug: str, sess: requests.Session, max_pages: int, facets: dict) -> tuple[list[dict], int, dict]:
+        items, offset, total, first = [], 0, None, {}
         for _ in range(max_pages):
             page = self._request("POST", api_root(slug) + "/jobs", sess,
-                                 {"appliedFacets": {}, "limit": PAGE, "offset": offset, "searchText": ""})
+                                 {"appliedFacets": facets, "limit": PAGE, "offset": offset, "searchText": ""})
             if total is None:
-                total = int(page.get("total") or 0)
+                total, first = int(page.get("total") or 0), page
             posts = page.get("jobPostings") or []
             items += posts
             offset += PAGE
             if not posts or offset >= total:
                 break
-        return items
+        return items, total or 0, first
 
     def fetch_payload_list(self, slug: str, session=None) -> dict:
         """One-request probe for discovery."""
         return {"pages": [{"jobPostings": self.fetch_list(slug, session, max_pages=1)}], "details": {}}
 
     def fetch(self, slug: str, session: requests.Session | None = None,
-              want: Callable[[dict], bool] | None = None, cache: dict[str, dict] | None = None) -> list[RawPosting]:
+              want: Callable[[dict], bool] | None = None, cache: dict[str, dict] | None = None,
+              place_ok: Callable[[str], bool] | None = None) -> list[RawPosting]:
         sess = session or requests.Session()
-        items = self.fetch_list(slug, sess)
+        items = self.fetch_list(slug, sess, place_ok=place_ok)
         details: dict[str, dict] = {}
         for it in items:
             path = it.get("externalPath") or ""
@@ -124,7 +141,9 @@ class WorkdaySource(Source):
                     continue
                 if cache is not None:
                     cache[path] = details[path]
-        return self.parse({"pages": [{"jobPostings": items}], "details": details}, slug)
+        out = Listing(self.parse({"pages": [{"jobPostings": items}], "details": details}, slug))
+        out.truncated = getattr(items, "truncated", False)
+        return out
 
     def parse(self, payload: Any, slug: str, now: datetime | None = None) -> list[RawPosting]:
         details = payload.get("details") or {}
@@ -149,3 +168,21 @@ class WorkdaySource(Source):
                     posted_at=posted_date(it.get("postedOn") or d.get("postedOn"), now),
                     raw={"path": path, "has_detail": bool(d)}))
         return out
+
+
+class Listing(list):
+    """A list of postings that knows whether the site had more than we could read."""
+    truncated = False
+    filtered_to = 0
+
+
+def _location_values(facets: list[dict]) -> list[dict]:
+    """The values of the site's 'locations' filter (it can sit inside a group)."""
+    for f in facets:
+        vals = f.get("values") or []
+        if f.get("facetParameter") == "locations":
+            return [v for v in vals if "id" in v]
+        nested = _location_values([v for v in vals if "facetParameter" in v])
+        if nested:
+            return nested
+    return []

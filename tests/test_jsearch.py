@@ -110,3 +110,49 @@ def test_no_key_skips_quietly(monkeypatch, criteria):
     store = Store(":memory:")
     assert run_mod.run_jsearch(store, CFG, criteria, Gates(criteria), LocationMatcher(criteria), T1) is None
     assert store.board_health() == []          # not recorded as a board error
+
+
+def test_workday_big_site_reads_only_your_cities(monkeypatch, criteria):
+    from src.pipeline.locations import LocationMatcher
+    from src.sources import workday
+    m = LocationMatcher(criteria)
+    facets = [{"facetParameter": "locationMainGroup", "values": [
+        {"facetParameter": "locations", "values": [
+            {"descriptor": "US-NY-New York", "id": "ny", "count": 30},
+            {"descriptor": "Santa Clara, CA", "id": "sc", "count": 5000}]}]}]
+    calls = []
+
+    def fake(self, method, url, sess, body=None):
+        calls.append(body["appliedFacets"])
+        if body["appliedFacets"]:
+            n = 30
+            posts = [{"title": f"Analyst {i}", "externalPath": f"/job/NY/{i}", "locationsText": "US-NY-New York"}
+                     for i in range(body["offset"], min(body["offset"] + 20, n))]
+            return {"total": n, "jobPostings": posts}
+        return {"total": 5030, "facets": facets,
+                "jobPostings": [{"title": "X", "externalPath": f"/job/a/{body['offset'] + i}"} for i in range(20)]}
+    monkeypatch.setattr(workday.WorkdaySource, "_request", fake)
+    src = workday.WorkdaySource()
+    items = src.fetch_list("big.wd1/Careers", place_ok=lambda d: m.match_component(d) is not None, max_pages=3)
+    assert len(items) == 30 and not items.truncated and items.filtered_to == 1
+    assert calls[-1] == {"locations": ["ny"]}
+    capped = src.fetch_list("big.wd1/Careers", max_pages=3)           # no city filter available
+    assert capped.truncated and len(capped) == 60
+
+
+def test_truncated_board_closes_nothing(criteria):
+    from src.config import Company
+    from src.run import evaluate_raws, store_evaluations
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.sources.base import RawPosting
+    from src.store.db import Store
+    from conftest import PAY_OK
+    store, co = Store(":memory:"), Company("Big", "workday", "big.wd1/Careers")
+    raw = RawPosting(platform="workday", slug=co.slug, native_id="1", title="Operations Associate", url="u",
+                     locations=["New York, NY"], workplace_type="hybrid", employment_type="Full-time",
+                     description_lines=[PAY_OK])
+    ev = evaluate_raws([raw], criteria, Gates(criteria), LocationMatcher(criteria), company=co)
+    store_evaluations(store, co, ev, "2026-11-07T10:00:00+00:00", criteria)
+    store_evaluations(store, co, [], "2026-11-07T11:00:00+00:00", criteria, close=False)
+    assert store.conn.execute("SELECT closed_at FROM postings").fetchone()[0] is None

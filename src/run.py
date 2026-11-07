@@ -37,6 +37,7 @@ from .pipeline.gates import Evaluation, Gates
 from .pipeline.locations import LocationMatcher
 from .pipeline.normalize import normalize_posting
 from .resolve.discover import board_from_url, find_board, verify_board
+from .sources.workday import Listing
 from .sources import SourceError, get_source, load_fixture
 from .sources.jsearch import JSearchSource, search as jsearch_search
 from .sources.muse import MuseSource, muse_locations
@@ -64,7 +65,9 @@ def evaluate_company(company, payload=None, criteria=None, gates=None, matcher=N
         raws = _fetch_with_details(src, company, criteria, gates, matcher, store, ts, cache)
     else:
         raws = src.fetch(company.slug)
-    return [evaluate_one(r, company, criteria, gates, matcher) for r in raws]
+    out = Listing(evaluate_one(r, company, criteria, gates, matcher) for r in raws)
+    out.truncated = getattr(raws, "truncated", False)
+    return out
 
 
 def evaluate_one(raw, company, criteria, gates, matcher) -> Evaluation:
@@ -102,11 +105,12 @@ def _fetch_with_details(src, company, criteria, gates, matcher, store, ts, cache
         return gates.evaluate(normalize_posting(stub, company, criteria, matcher)).passed
 
     prefix = f"{src.platform}:{company.slug}:"
+    extra = {"place_ok": lambda d: matcher.match_component(d) is not None} if src.platform == "workday" else {}
     if cache is not None:                      # caller loads and saves the cache (parallel polling)
-        return src.fetch(company.slug, want=want, cache=cache)
+        return src.fetch(company.slug, want=want, cache=cache, **extra)
     cache = store.details_for(prefix) if store is not None else {}
     before = set(cache)
-    raws = src.fetch(company.slug, want=want, cache=cache)
+    raws = src.fetch(company.slug, want=want, cache=cache, **extra)
     if store is not None:
         store.save_details(prefix, {k: v for k, v in cache.items() if k not in before}, ts or now_iso())
     return raws
@@ -148,7 +152,7 @@ def display_fields(ev: Evaluation) -> dict:
 
 def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, criteria=None,
                       prefix: str | None = None, board_keys: set[str] | None = None,
-                      board_companies: set[str] | None = None) -> dict:
+                      board_companies: set[str] | None = None, close: bool = True) -> dict:
     """Save one board's (or one search sweep's) postings and close the ones that vanished.
 
     Search-source postings are skipped when the same job is already on a company
@@ -196,7 +200,8 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
         store.save_score(p.posting_id, ev.passed,
                          [{"gate": f.gate, "matched": f.matched} for f in ev.failures],
                          ev.flags, display_fields(ev), ts)
-    store.close_missing(prefix or f"{company.platform}:{company.slug}:", seen, ts)
+    if close:       # a site we could only partly read never closes the postings we didn't reach
+        store.close_missing(prefix or f"{company.platform}:{company.slug}:", seen, ts)
     return counts
 
 
@@ -511,7 +516,9 @@ def main(argv: list[str] | None = None) -> int:
             store.source_complete(f"board:{company.platform}:{company.slug}", ts)
         board_keys |= {dedupe_key(e) for e in evals}
         board_companies.add(normalize(company.name))
-        c = store_evaluations(store, company, evals, ts, criteria)
+        if getattr(evals, "truncated", False):
+            log.warning("%s: more postings than one poll can read; nothing marked closed", company.name)
+        c = store_evaluations(store, company, evals, ts, criteria, close=not getattr(evals, "truncated", False))
         store.note_board_passes(company.name, c["passed"], ts)
         add_stats(stats, SOURCE_NAMES.get(company.platform, company.platform), c)
         log.info("%s: %d postings, %d new, %d passed", company.name, c["seen"], c["new"], c["passed"])
