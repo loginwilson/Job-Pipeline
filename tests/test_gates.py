@@ -165,3 +165,32 @@ def test_field_column(evaluate):
     assert evaluate(title="Acquisitions Associate, Commercial Real Estate", lines=[PAY_OK]).field == "Real Estate / Proptech"
     assert evaluate(title="Hotel Operations Associate", lines=[PAY_OK]).field == "Hospitality / Travel"
     assert evaluate(title="Office Coordinator", lines=[PAY_OK]).field == "Other"
+
+
+def _p(criteria, title, lines, pay="The base salary range is $120,000 - $130,000."):
+    from src.config import Company
+    from src.pipeline.locations import LocationMatcher
+    from src.pipeline.normalize import normalize_posting
+    from src.sources.base import RawPosting
+    raw = RawPosting(platform="lever", slug="x", native_id="1", title=title, url="https://x/1",
+                     locations=["New York, NY"], workplace_type="hybrid", employment_type="Full-time",
+                     description_lines=lines + [pay])
+    return normalize_posting(raw, Company("X", "lever", "x"), criteria, LocationMatcher(criteria))
+
+
+def test_unstated_senior_experience_drops(criteria):
+    from src.pipeline.gates import Gates
+    g = Gates(criteria)
+    ev = g.evaluate(_p(criteria, "Marketing Associate", ["## Requirements", "- Extensive experience in agile product ownership"]))
+    assert not ev.passed and ev.failures[0].gate == "experience"
+    ok = g.evaluate(_p(criteria, "Research Assistant", ["## Requirements", "- Substantial hands-on hardware experience from labs"]))
+    assert "experience" not in [f.gate for f in ok.failures]
+
+
+def test_description_naming_a_senior_title(criteria):
+    from src.pipeline.gates import Gates
+    g = Gates(criteria)
+    ev = g.evaluate(_p(criteria, "Experience Owner", ["The Sr Marketing Experience Owner is self-motivated."]))
+    assert "seniority" in [f.gate for f in ev.failures]
+    ok = g.evaluate(_p(criteria, "Financial Analyst", ["You will report to the Senior Financial Analyst."]))
+    assert "seniority" not in [f.gate for f in ok.failures]

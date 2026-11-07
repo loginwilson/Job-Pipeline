@@ -123,6 +123,11 @@ class Gates:
         if asks:
             top = max(asks, key=lambda a: a.years)
             ev.fail("experience", f"{top.years:g}+ yrs {top.kind}: {top.line}")
+            return
+        vague = find_terms(p.description_lines, self.c.get("experience", "unstated_senior_terms", default=[]) or [],
+                           first_only=True)
+        if vague:
+            ev.fail("experience", f"'{vague[0].term}' (several years implied): {vague[0].line}")
 
     # 5. seniority -----------------------------------------------------------
     def seniority(self, p: Posting, ev: Evaluation) -> None:
@@ -140,6 +145,15 @@ class Gates:
                      or re.search(rf"\blevel\s*(?:{'|'.join(nums)})\b", title, re.I)):
             ev.fail("seniority", f"level numeral: {title}")
             return
+        if s.get("senior_title_in_description"):
+            core = re.sub(r"\s*[\(,–-].*$", "", title).strip()
+            if len(core.split()) >= 2:
+                rx = re.compile(r"(?:^|[.!?:]\s+)[-\s]*(?:the\s+|as\s+(?:an?|the|our)\s+|this\s+)?(?:senior|sr\.?)\s+(?:[A-Za-z&/]+\s+){0,2}" + re.escape(core) + r"\b", re.I)
+                for line in p.description_lines:
+                    m = rx.search(line)
+                    if m:
+                        ev.fail("seniority", f"description calls it '{m.group(0)}': {line.strip()[:160]}")
+                        return
         lead = s.get("lead", {}) or {}
         if lead.get("drop_when_level") and re.search(r"\blead\b", title, re.I) \
                 and not find_terms(title, lead.get("keep_phrases", []), first_only=True):

@@ -68,7 +68,7 @@ salary:
   never_count_as_base: [OTE, on-target earnings, commission, uncapped earnings]
   # When NO salary is posted, these roles are treated as below the floor: they
   # essentially never pay $100K. A posted salary that meets the floor always wins.
-  rarely_meets_floor_titles: [retail associate, retail sales associate, store associate, sales floor associate, cashier, stock associate, stocker, warehouse, picker, packer, material handler, forklift, production associate, assembly associate, assembler, general labor, driver, delivery, courier, server, barista, bartender, cook, dishwasher, host / hostess, housekeeper, housekeeping, janitor, custodian, security officer, security guard, caregiver, home health aide, nursing assistant, call center, customer service representative, member service representative, bank teller, teller, receptionist, pharmacy technician, lab technician, laboratory technician, clinical laboratory, crew member, team member, cleaner, landscaper, mover]
+  rarely_meets_floor_titles: [retail associate, retail sales associate, store associate, sales floor associate, cashier, stock associate, stocker, warehouse, picker, packer, material handler, forklift, production associate, assembly associate, assembler, general labor, driver, delivery, courier, server, barista, bartender, cook, dishwasher, host / hostess, housekeeper, housekeeping, janitor, custodian, security officer, security guard, caregiver, home health aide, nursing assistant, call center, customer service representative, member service representative, bank teller, teller, receptionist, pharmacy technician, lab technician, laboratory technician, clinical laboratory, crew member, team member, cleaner, landscaper, mover, plant operator, machine operator, equipment operator, production operator]
   hourly_without_amount_is_below_floor: true   # pay basis "per hour" stated, no amount
   # shown in the Extra comp column so incentives are easy to judge
   extra_comp_signals: [equity, RSU, restricted stock, stock options, signing bonus, sign-on bonus, annual bonus, performance bonus, commission]
@@ -78,6 +78,8 @@ salary:
 # Lower bound of a range counts ("2–4 years" → 2). Required OR preferred.
 experience:
   drop_at_or_above: 3
+  # Experience asks with no number that still mean "several years" (drop; the line is shown in Dropped)
+  unstated_senior_terms: [extensive experience, significant experience, deep experience, many years of experience, several years of experience, multiple years of experience, several years experience, spent years, seasoned professional, mentor junior, mentor less experienced, mentoring junior, mentor and develop junior, train and mentor less experienced]
   pass_clean: [new grad, new graduate, entry level, early career, recent graduate, "0-1 years"]
   # headings that mark requirement sections (also used by rules 7 and 8)
   parse_sections:
@@ -91,6 +93,7 @@ experience:
 # Level I/II) pass; the 3-year rule handles the rest.
 seniority:
   drop_title_terms: [senior, "sr.", sr, staff, principal, director, "head of", vp, svp, evp, avp, "vice president", chief, "executive director", leader]
+  senior_title_in_description: true   # "Experience Owner" whose text says "the Sr Experience Owner"
   keep_titles_with: [chief of staff]   # level words inside these phrases don't count (years rule still applies)
   drop_level_numerals: [III, IV, V, "3", "4", "5"]   # "Analyst III", "Consultant 4"
   lead:
