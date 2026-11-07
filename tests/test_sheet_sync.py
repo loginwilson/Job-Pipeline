@@ -187,3 +187,15 @@ def test_first_seen_persists(criteria, board, evals):
         store_evaluations(store, board, evals, ts, criteria)
     row = store.conn.execute("SELECT first_seen, last_seen, is_new FROM postings LIMIT 1").fetchone()
     assert (row["first_seen"], row["last_seen"], row["is_new"]) == (T1, T2, 0)
+
+
+def test_dates_without_timezone_do_not_crash(criteria, board, evals):
+    """Run #12 regression: a board gave '2026-11-05' (no timezone) as the posted date."""
+    store, sheet = Store(":memory:"), FakeBackend()
+    store_evaluations(store, board, evals, T1, criteria)
+    store.conn.execute("UPDATE postings SET posted_at='2026-11-05' WHERE rowid IN (SELECT rowid FROM postings LIMIT 3)")
+    store.conn.execute("UPDATE postings SET posted_at='2026-11-05T09:00:00' WHERE rowid IN "
+                       "(SELECT rowid FROM postings LIMIT 3 OFFSET 3)")
+    store.commit()
+    sync_all(sheet, store, criteria, T1)
+    assert tab(sheet, REVIEW)

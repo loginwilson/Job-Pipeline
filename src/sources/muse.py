@@ -22,6 +22,7 @@ import requests
 
 from ..config import Criteria, load_reference
 from ..pipeline.html_text import html_to_lines
+from ..textmatch import parse_when
 from .base import TIMEOUT_S, USER_AGENT, RawPosting, Source, SourceError
 
 API = "https://www.themuse.com/api/public/jobs"
@@ -96,7 +97,8 @@ class MuseSource(Source):
             for r in page.get("results", []):
                 pub = r.get("publication_date")
                 try:
-                    if pub and datetime.fromisoformat(pub.replace("Z", "+00:00")) < cutoff:
+                    when = parse_when(pub)
+                    if when and when < cutoff:
                         continue
                 except ValueError:
                     pass

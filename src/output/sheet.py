@@ -31,6 +31,7 @@ from typing import Any, Protocol
 
 from ..config import Criteria
 from ..store.db import Store
+from ..textmatch import parse_when
 
 REVIEW, APPLICATIONS, PASSED = "To review", "My applications", "Passed"
 DECISION_TABS = [REVIEW, APPLICATIONS, PASSED]
@@ -92,7 +93,8 @@ def _pad(row: list, n: int) -> list:
 
 def _neg_date(iso: str | None) -> float:
     try:
-        return -datetime.fromisoformat((iso or "").replace("Z", "+00:00")).timestamp()
+        dt = parse_when(iso)
+        return -dt.timestamp() if dt else 0.0
     except ValueError:
         return 0.0
 
@@ -146,7 +148,7 @@ def build_rows(store: Store, criteria: Criteria, ts: str, owner_states: dict[str
     track = criteria.get("tracking", default={}) or {}
     follow_days = int(track.get("follow_up_after_days", 10))
     follow_statuses = set(track.get("follow_up_statuses", ["Applied", "Networking"]))
-    now = datetime.fromisoformat(ts)
+    now = parse_when(ts)
     rows = []
     for r in store.pipeline_rows():
         d = json.loads(r["display"] or "{}")
@@ -161,12 +163,14 @@ def build_rows(store: Store, criteria: Criteria, ts: str, owner_states: dict[str
         posted = r["posted_at"] or r["first_seen"]
         if not r["closed_at"] and posted:
             try:
-                if now - datetime.fromisoformat(posted.replace("Z", "+00:00")) <= timedelta(days=apply_days):
+                when = parse_when(posted)
+                if when and now - when <= timedelta(days=apply_days):
                     flags.append("Apply soon")
             except ValueError:
                 pass
         if st.get("status") in follow_statuses and st.get("status_changed_at"):
-            if now - datetime.fromisoformat(st["status_changed_at"]) >= timedelta(days=follow_days):
+            changed = parse_when(st["status_changed_at"])
+            if changed and now - changed >= timedelta(days=follow_days):
                 flags.append("Follow up")
         flags += json.loads(r["flags"] or "[]")
         if r["evergreen"]:

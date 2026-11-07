@@ -191,3 +191,16 @@ def contains_sequence(haystack: list[str], needle: list[str]) -> bool:
     if n == 0:
         return False
     return any(haystack[i:i + n] == needle for i in range(len(haystack) - n + 1))
+
+
+def parse_when(value) -> "datetime | None":
+    """Any ISO date/datetime from a job board → timezone-aware UTC datetime (None if unreadable).
+    Boards differ: '2026-11-05', '2026-11-05T10:00:00', '...Z', '...+00:00'."""
+    from datetime import datetime, timezone
+    if not value:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
