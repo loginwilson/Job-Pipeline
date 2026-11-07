@@ -66,6 +66,10 @@ salary:
   # OTE / commission is never treated as base. An OTE-only posting is kept as
   # "Salary unknown (OTE only)" — commission on top of base is an incentive.
   never_count_as_base: [OTE, on-target earnings, commission, uncapped earnings]
+  # When NO salary is posted, these roles are treated as below the floor: they
+  # essentially never pay $100K. A posted salary that meets the floor always wins.
+  rarely_meets_floor_titles: [retail associate, retail sales associate, store associate, sales floor associate, cashier, stock associate, stocker, warehouse, picker, packer, material handler, forklift, production associate, assembly associate, assembler, general labor, driver, delivery, courier, server, barista, bartender, cook, dishwasher, host / hostess, housekeeper, housekeeping, janitor, custodian, security officer, security guard, caregiver, home health aide, nursing assistant, call center, customer service representative, member service representative, bank teller, teller, receptionist, pharmacy technician, lab technician, laboratory technician, clinical laboratory, crew member, team member, cleaner, landscaper, mover]
+  hourly_without_amount_is_below_floor: true   # pay basis "per hour" stated, no amount
   # shown in the Extra comp column so incentives are easy to judge
   extra_comp_signals: [equity, RSU, restricted stock, stock options, signing bonus, sign-on bonus, annual bonus, performance bonus, commission]
 

@@ -49,6 +49,16 @@ def test_salary(evaluate):
     assert ca.passed and "Low base — check incentives" in ca.flags     # C$ between 120K and 140K
 
 
+def test_salary_rarely_meets_floor(evaluate):
+    for title in ("Retail Sales Associate, Full Time", "Warehouse Associate", "Cashier", "Customer Service Representative"):
+        assert "salary" in gates_of(evaluate(title=title, lines=["Great benefits."])), title
+    # a posted salary that meets the floor always wins
+    assert evaluate(title="Customer Service Representative", lines=["Salary: $120,000 - $130,000/year"]).passed
+    # plain associate / sales associate are real options
+    for title in ("Associate, CFO Services", "Sales Associate, Apartments.com"):
+        assert evaluate(title=title, lines=["Great benefits."]).passed, title
+
+
 # 4. experience
 def test_experience(evaluate):
     assert "experience" in gates_of(evaluate(lines=["## Requirements", "- 3+ years of experience in sales", PAY_OK]))

@@ -87,5 +87,6 @@ class JSearchSource(Source):
                     comp_ranges=ranges, posted_at=j.get("job_posted_at_datetime_utc"),
                     company=j.get("employer_name"),
                     raw={"apply_links": [o.get("apply_link") for o in options] + [j.get("job_apply_link")],
-                         "publisher": j.get("job_publisher"), "website": j.get("employer_website")}))
+                         "publisher": j.get("job_publisher"), "website": j.get("employer_website"),
+                         "pay_basis": (j.get("job_salary_period") or "").lower() or None}))
         return out

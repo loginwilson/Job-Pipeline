@@ -87,6 +87,16 @@ class Gates:
             ev.flag("Salary unknown (OTE only)")
             return
         if not comp.known:
+            sal = self.c.get("salary", default={}) or {}
+            floor = ((sal.get("markets") or {}).get(p.location.market or "US") or {}).get("floor")
+            hit = find_terms(p.title, sal.get("rarely_meets_floor_titles", []) or [], first_only=True)
+            if hit:
+                ev.fail("salary", f"no salary posted; '{hit[0].term}' roles rarely pay the {floor:,} floor: {p.title}")
+                return
+            basis = (p.raw.raw.get("pay_basis") if p.raw and isinstance(p.raw.raw, dict) else None)
+            if basis == "hour" and sal.get("hourly_without_amount_is_below_floor"):
+                ev.fail("salary", f"paid hourly, no amount posted (below the {floor:,} floor): {p.title}")
+                return
             ev.flag("Salary unknown")
             return
         markets = self.c.get("salary", "markets", default={}) or {}
