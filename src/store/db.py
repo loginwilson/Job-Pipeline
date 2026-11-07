@@ -16,7 +16,7 @@ DEFAULT_DB = ROOT / "data" / "pipeline.db"
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS companies (
-    name TEXT PRIMARY KEY, platform TEXT, slug TEXT, anchor INTEGER DEFAULT 0
+    name TEXT PRIMARY KEY, platform TEXT, slug TEXT
 );
 CREATE TABLE IF NOT EXISTS postings (
     posting_id TEXT PRIMARY KEY,
@@ -61,11 +61,11 @@ class Store:
         self.conn.close()
 
     # --- companies / postings ------------------------------------------
-    def upsert_company(self, name: str, platform: str, slug: str, anchor: bool) -> None:
+    def upsert_company(self, name: str, platform: str, slug: str) -> None:
         self.conn.execute(
-            "INSERT INTO companies(name, platform, slug, anchor) VALUES (?,?,?,?) "
-            "ON CONFLICT(name) DO UPDATE SET platform=excluded.platform, slug=excluded.slug, anchor=excluded.anchor",
-            (name, platform, slug, int(anchor)))
+            "INSERT INTO companies(name, platform, slug) VALUES (?,?,?) "
+            "ON CONFLICT(name) DO UPDATE SET platform=excluded.platform, slug=excluded.slug",
+            (name, platform, slug))
 
     def upsert_posting(self, posting_id: str, company: str, title: str, url: str,
                        posted_at: str | None, snapshot: Any, ts: str) -> dict:

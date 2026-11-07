@@ -6,8 +6,8 @@ GOOGLE_SERVICE_ACCOUNT_JSON are set). No scoring: the owner decides each
 posting in the Sheet (Veto / Apply / All-in).
 
   python -m src.run                                  # full run
-  python -m src.run --print --company Palantir       # console report only
-  python -m src.run --company Palantir --fixture tests/fixtures/lever_palantir.json.gz
+  python -m src.run --print --company "<name>"       # console report for one watchlist board
+  python -m src.run --print --company "<name>" --fixture <saved API response>
   python -m src.run --fake-sheet data/fake_sheet.json   # write to a local stand-in Sheet
 """
 from __future__ import annotations
@@ -54,7 +54,7 @@ def display_fields(ev: Evaluation) -> dict:
 
 def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, criteria=None) -> dict:
     counts = {"seen": len(evals), "new": 0, "passed": 0}
-    store.upsert_company(company.name, company.platform, company.slug, company.anchor)
+    store.upsert_company(company.name, company.platform, company.slug)
     for ev in evals:
         p = ev.posting
         info = store.upsert_posting(p.posting_id, p.company, p.title, p.url, p.posted_at,

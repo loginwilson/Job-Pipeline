@@ -4,7 +4,6 @@
 # To add one:  name, platform (greenhouse / lever / ashby), slug (from the board URL,
 # e.g. jobs.lever.co/<slug>, boards.greenhouse.io/<slug>, jobs.ashbyhq.com/<slug>).
 # Optional fields, only if you want the matching criteria rules to apply:
-#   anchor: true          always surface if gates pass (criteria company.anchors)
 #   sectors: [...]        e.g. consulting / accounting / big 4 (Manager-title rule),
 #                         hotel company / lodging (TN Hotel Manager employer test)
 #   defense_primary: true drop all postings (criteria exclusions.government_defense)
@@ -12,8 +11,6 @@
 - name: Palantir
   platform: lever
   slug: palantir
-  anchor: true
 - name: WithCoverage
   platform: greenhouse
   slug: withcoverage
-  anchor: true

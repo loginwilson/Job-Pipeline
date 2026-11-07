@@ -69,8 +69,8 @@ always-on server or lower the schedule in `.github/workflows/hourly.yml`.
 
 ```bash
 pip install -r requirements.txt
-python -m src.run --print --company Palantir                 # live board
-python -m src.run --print --company Palantir --fixture tests/fixtures/lever_palantir.json.gz
+python -m src.run --print --company "<name>"                 # one watchlist board, live
+python -m src.run --print --company "<name>" --fixture <saved API response>
 python -m src.run --fake-sheet data/fake_sheet.json            # full run, local stand-in Sheet
 SHEET_ID=... GOOGLE_SERVICE_ACCOUNT_JSON="$(cat key.json)" python -m src.run   # real Sheet, from your laptop
 python -m pytest
@@ -92,4 +92,3 @@ Every gate is evaluated, so a dropped posting lists all the rules it failed.
 
 `docs/BUILD_BRIEF.md` and `docs/ARCHITECTURE.md` describe the original v1 design (with
 scoring); where they differ from this README or `config/criteria.yaml`, those win.
-The latest Palantir results are in `docs/palantir_results.txt`.

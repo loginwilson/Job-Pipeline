@@ -1,14 +1,13 @@
 """Lever public postings API.
 
-Verified 2026-11-05 against https://api.lever.co/v0/postings/palantir?mode=json
-(fixture: tests/fixtures/lever_palantir.json.gz). Each posting has:
+Response shape verified 2026-11-05 against a live board (fixture:
+tests/fixtures/lever_palantir.json.gz). Each posting has:
   id, text (title), hostedUrl, applyUrl, createdAt (ms epoch), country (ISO-2),
   workplaceType (onsite/hybrid/remote), categories {commitment, location, team,
   allLocations[]}, description/descriptionPlain (opening + body),
   lists[] {text: heading, content: <li> html}, additional/additionalPlain.
-Palantir's response has no salaryRange field; pay is in `additional` text.
-Lever documents an optional salaryRange {min, max, currency, interval}; it is
-read if present.
+Many boards put pay only in the `additional` text. Lever also documents an
+optional salaryRange {min, max, currency, interval}; it is read if present.
 """
 from __future__ import annotations
 

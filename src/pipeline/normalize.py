@@ -18,7 +18,6 @@ from .timing import TimingResult, parse_timing
 class Posting:
     posting_id: str
     company: str
-    anchor: bool
     title: str
     team: str | None
     department: str | None
@@ -144,7 +143,7 @@ def normalize_posting(raw: RawPosting, company: Company, criteria: Criteria,
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     return Posting(
         posting_id=f"{raw.platform}:{raw.slug}:{raw.native_id}",
-        company=company.name, anchor=company.anchor, title=raw.title,
+        company=company.name, title=raw.title,
         team=raw.team, department=raw.department, locations=raw.locations,
         location=loc, work_arrangement=loc.arrangement,
         employment_type=etype, employment_type_reason=ereason,

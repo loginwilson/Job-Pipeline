@@ -1,7 +1,6 @@
 """Greenhouse job board API.
 
-Verified 2026-11-05 against
-https://boards-api.greenhouse.io/v1/boards/withcoverage/jobs?content=true&pay_transparency=true
+Response shape verified 2026-11-05 against live boards
 (fixtures: greenhouse_withcoverage.json.gz, greenhouse_figma.json.gz).
 Response: {"jobs": [...], "meta": {"total": n}}. Each job has id, title,
 absolute_url, location {name}, offices[] {name, location}, departments[] {name},

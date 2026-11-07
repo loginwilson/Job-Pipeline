@@ -89,7 +89,7 @@ def test_technical(evaluate):
     req = ["## Requirements"]
     assert "technical" in gates_of(evaluate(lines=[PAY_OK] + req + ["- Proficiency in Python"]))
     assert "technical" in gates_of(evaluate(title="GTM Engineer", lines=[PAY_OK] + req + ["- Experience writing production code"]))
-    # a non-coding alternative on the line keeps it (Palantir Deployment Strategist wording)
+    # a non-coding alternative on the same line keeps it
     assert evaluate(lines=[PAY_OK] + req + [
         "- Experience with programming, scripting or statistical packages (e.g. Python, R, Matlab, SQL)"]).passed
     assert evaluate(lines=[PAY_OK, "## Nice to have", "- Python"]).passed          # preferred only

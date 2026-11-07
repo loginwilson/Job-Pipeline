@@ -92,7 +92,6 @@ class Company:
     name: str
     platform: str
     slug: str
-    anchor: bool = False
     category: str | None = None
     sectors: list[str] = field(default_factory=list)
     defense_primary: bool = False
@@ -110,7 +109,6 @@ def load_watchlist(path: str | None = None) -> list[Company]:
                 name=row["name"],
                 platform=row["platform"],
                 slug=row["slug"],
-                anchor=bool(row.get("anchor", False)),
                 category=row.get("category"),
                 sectors=list(row.get("sectors") or []),
                 defense_primary=bool(row.get("defense_primary", False)),
