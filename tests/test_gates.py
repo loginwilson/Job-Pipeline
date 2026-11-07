@@ -228,3 +228,14 @@ def test_title_level_credential_and_start_terms(criteria):
     assert "not_a_real_opening" in fails("Interested in future People & Culture opportunities?")
     assert not fails("Graduate Leadership Program - Media Marketing (June Start)")
     assert not fails("Recent Graduate - Trading Assistant (NYC)")
+
+
+def test_title_abbreviations(criteria):
+    from src.pipeline.gates import Gates
+    g = Gates(criteria)
+    fails = lambda t, pay="Salary: $120,000 - $130,000/year": {f.gate for f in g.evaluate(_p(criteria, t, [], pay=pay)).failures}
+    assert "seniority" in fails("FVP, Product Management - Borrow")
+    assert "seniority" in fails("SMTS Device Modeling & Characterization")
+    assert "technical" in fails("Eng., Distrib Tech")
+    assert "salary" in fails("Closer (Residential Mortgage)", pay="")
+    assert not fails("English Content Associate")
