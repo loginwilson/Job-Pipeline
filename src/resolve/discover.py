@@ -101,6 +101,34 @@ def board_from_url(url: str) -> tuple[str, str] | None:
     return None
 
 
+_GH_JOB_ID = re.compile(r"[?&](?:gh_jid|token)=(\d{5,})")
+GREENHOUSE_JOB = "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs/{job_id}"
+
+
+def greenhouse_behind(url: str, company: str, session: requests.Session | None = None) -> str | None:
+    """A company career page that embeds Greenhouse ('stripe.com/jobs?gh_jid=123') → the board
+    slug, found by trying the likely slugs and keeping the one that has that exact job."""
+    m = _GH_JOB_ID.search(url or "")
+    if not m:
+        return None
+    from urllib.parse import urlparse
+    host = urlparse(url).netloc.lower().removeprefix("www.").removeprefix("careers.").removeprefix("jobs.")
+    hint = host.split(".")[0] if host and "greenhouse" not in host else None
+    sess = session or requests.Session()
+    base = candidate_slugs(company, hint)
+    words = re.findall(r"[a-z0-9]+", _SUFFIX.sub(" ", company.lower()))
+    extra = ["".join(w[0] for w in words) if len(words) > 1 else ""] + [b + suf for b in base[:2] for suf in ("us", "careers")]
+    for slug in [c for c in dict.fromkeys(base + extra) if len(c) >= 2][:10]:
+        try:
+            r = sess.get(GREENHOUSE_JOB.format(slug=slug, job_id=m.group(1)), timeout=15,
+                         headers={"User-Agent": "job-pipeline"})
+        except requests.RequestException:
+            continue
+        if r.status_code == 200:
+            return slug
+    return None
+
+
 def verify_board(platform: str, slug: str, session: requests.Session | None = None) -> int:
     """Number of postings on the board (0 if it doesn't exist)."""
     src = get_source(platform)

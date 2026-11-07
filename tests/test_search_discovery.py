@@ -183,3 +183,15 @@ def test_newgrad_list_discovery(monkeypatch, criteria):
     found = run_mod.discover_from_newgrad_lists(store, {"urls": ["x"]}, set(), LocationMatcher(criteria), T1)
     assert [(c.name, c.platform, c.slug) for c in found] == [("Acme", "greenhouse", "acme")]
     assert store.conn.execute("SELECT seen FROM link_domains WHERE domain='careers.ownsite.com'").fetchone()[0] == 1
+
+
+def test_greenhouse_behind_company_career_page():
+    class Sess:
+        def __init__(self): self.urls = []
+        def get(self, url, **kw):
+            self.urls.append(url)
+            return type("R", (), {"status_code": 200 if "/boards/optiverus/jobs/8451763002" in url else 404})()
+    s = Sess()
+    assert discover.greenhouse_behind("https://www.optiver.com/join-us/jobs/8451763002/?gh_jid=8451763002", "Optiver", s) == "optiverus"
+    assert discover.greenhouse_behind("https://www.optiver.com/join-us/jobs/1/", "Optiver", s) is None     # no job id
+    assert len(s.urls) <= 10

@@ -319,9 +319,11 @@ def _add_verified_boards(store: Store, candidates: dict[tuple[str, str], str], k
 def discover_from_newgrad_lists(store: Store, cfg: dict, known: set[str], matcher, ts: str) -> list[Company]:
     """Company boards behind community new-grad lists (listings in your cities only)."""
     from urllib.parse import urlparse
+    from .resolve.discover import _GH_JOB_ID as greenhouse_behind_re, greenhouse_behind
     from .sources import newgrad_lists
     sess = requests.Session()
     candidates: dict[tuple[str, str], str] = {}
+    hidden: dict[str, str] = {}
     local = 0
     for url in cfg.get("urls", []) or []:
         for x in newgrad_lists.open_listings(newgrad_lists.fetch(url, sess)):
@@ -331,8 +333,17 @@ def discover_from_newgrad_lists(store: Store, cfg: dict, known: set[str], matche
             b = board_from_url(x["url"])
             if b:
                 candidates.setdefault(b, x["company"])
+            elif greenhouse_behind_re.search(x["url"]) and normalize(x["company"]) not in known:
+                hidden.setdefault(x["company"], x["url"])     # career page with Greenhouse behind it
             else:
                 store.count_link_domain(urlparse(x["url"]).netloc.lower())
+    todo = [(c, u) for c, u in hidden.items() if store.probe_due(f"ghjid:{normalize(c)}", 30, ts)]
+    with ThreadPoolExecutor(max_workers=PARALLEL_BOARDS) as pool:
+        slugs = list(pool.map(lambda cu: greenhouse_behind(cu[1], cu[0], requests.Session()), todo))
+    for (company, _), slug in zip(todo, slugs):
+        store.record_probe(f"ghjid:{normalize(company)}", slug or "not found", ts)
+        if slug:
+            candidates.setdefault(("greenhouse", slug), company)
     found = _add_verified_boards(store, candidates, known, ts, "newgrad", "New-grad lists", cfg)
     log.info("New-grad lists: %d open listings in your cities, %d company boards, %d new", local, len(candidates), len(found))
     return found
