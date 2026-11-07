@@ -46,7 +46,7 @@ from .textmatch import normalize
 log = logging.getLogger("pipeline")
 
 
-DETAIL_PLATFORMS = ("smartrecruiters", "workday")
+DETAIL_PLATFORMS = ("smartrecruiters", "workday", "oracle")
 PARALLEL_BOARDS = 8
 
 
@@ -94,6 +94,11 @@ def _fetch_with_details(src, company, criteria, gates, matcher, store, ts, cache
                               locations=[item.get("locationsText") or ""])
             if "location" in (item.get("locationsText") or "").lower():   # "2 Locations": decide after detail
                 stub.locations = ["New York, NY"]
+        elif src.platform == "oracle":
+            from .sources.oracle import locations_of
+            stub = RawPosting(platform=src.platform, slug=company.slug, native_id="stub",
+                              title=item.get("Title") or "", url="", locations=locations_of(item),
+                              country=item.get("PrimaryLocationCountry") or None)
         else:
             loc = (item.get("location") or {})
             stub = RawPosting(platform=src.platform, slug=company.slug, native_id=str(item["id"]),
@@ -105,7 +110,8 @@ def _fetch_with_details(src, company, criteria, gates, matcher, store, ts, cache
         return gates.evaluate(normalize_posting(stub, company, criteria, matcher)).passed
 
     prefix = f"{src.platform}:{company.slug}:"
-    extra = {"place_ok": lambda d: matcher.match_component(d) is not None} if src.platform == "workday" else {}
+    extra = ({"place_ok": lambda d: matcher.match_component(d) is not None}
+             if src.platform in ("workday", "oracle") else {})
     if cache is not None:                      # caller loads and saves the cache (parallel polling)
         return src.fetch(company.slug, want=want, cache=cache, **extra)
     cache = store.details_for(prefix) if store is not None else {}
@@ -416,6 +422,24 @@ def discover(store: Store, evals: list[Evaluation], cfg: dict, known: set[str], 
     return found
 
 
+def probe(spec: str) -> int:
+    """Fetch one board with the real rules and print what it found (no database, no Sheet)."""
+    import collections
+    platform, _, slug = spec.partition(":")
+    criteria = load_criteria()
+    company = Company(name=f"probe {slug}", platform=platform, slug=slug)
+    evals = evaluate_company(company, None, criteria, Gates(criteria), LocationMatcher(criteria), None, now_iso(), {})
+    passed = [e for e in evals if e.passed]
+    reasons = collections.Counter(e.failures[0].gate for e in evals if not e.passed)
+    print(f"{spec}: {len(evals)} postings, {len(passed)} pass, truncated={getattr(evals, 'truncated', False)}")
+    print("drops:", dict(reasons.most_common()))
+    for e in passed[:40]:
+        p = e.posting
+        print(f"  PASS {p.title[:60]} | {', '.join(p.locations)[:40]} | {p.comp.matched_text[:40] if p.comp.known else 'no pay'}"
+              f" | {p.experience.label()} | desc lines {len(p.description_lines)}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Job pipeline")
     ap.add_argument("--print", action="store_true", help="print a console report (step 1)")
@@ -423,8 +447,11 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--fixture", help="use a saved API response instead of the live board")
     ap.add_argument("--brief", action="store_true", help="omit the dropped list")
     ap.add_argument("--db", default=str(DEFAULT_DB), help="SQLite path")
+    ap.add_argument("--probe", help="check one board, e.g. oracle:jpmc.fa.oraclecloud.com/CX_1001, and print a summary")
     ap.add_argument("--fake-sheet", help="write the Sheet to this local JSON file instead of Google")
     args = ap.parse_args(argv)
+    if args.probe:
+        return probe(args.probe)
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     criteria = load_criteria()

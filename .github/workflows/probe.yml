@@ -1,0 +1,33 @@
+name: probe a board
+
+# Manual check of one or more job boards with the real rules (no database, no Sheet).
+# Used to verify a new adapter on GitHub's network before it joins the hourly run.
+on:
+  workflow_dispatch:
+    inputs:
+      boards:
+        description: "space-separated platform:slug, e.g. oracle:jpmc.fa.oraclecloud.com/CX_1001"
+        required: true
+        default: "oracle:jpmc.fa.oraclecloud.com/CX_1001 oracle:hdpc.fa.us2.oraclecloud.com/LateralHiring oracle:eofe.fa.us2.oraclecloud.com/CX_1001 oracle:egug.fa.us2.oraclecloud.com/CX_1"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - name: Probe
+        env:
+          BOARDS: ${{ inputs.boards }}
+        run: |
+          for b in $BOARDS; do
+            python -m src.run --probe "$b" || echo "PROBE FAILED: $b"
+          done

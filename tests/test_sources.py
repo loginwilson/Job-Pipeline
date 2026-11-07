@@ -56,3 +56,20 @@ def test_smartrecruiters_skips_inactive():
     raws = get_source("smartrecruiters").parse({"pages": [{"content": [item]}],
                                                 "details": {"1": {"active": False}}}, "acme")
     assert raws == []
+
+
+def test_oracle_parse_and_link():
+    from src.resolve.discover import board_from_url
+    from src.sources.oracle import OracleSource
+    assert board_from_url("https://jpmc.fa.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1001/job/210677412") \
+        == ("oracle", "jpmc.fa.oraclecloud.com/CX_1001")
+    payload = {"pages": [{"requisitionList": [
+        {"Id": "1", "Title": "Analyst", "PostedDate": "2026-10-30", "PrimaryLocation": "New York, NY, United States",
+         "PrimaryLocationCountry": "US", "secondaryLocations": [{"Name": "Jersey City, NJ, United States"}]}]}],
+        "details": {"1": {"ExternalDescriptionStr": "<p>Do things</p>",
+                          "ExternalQualificationsStr": "<ul><li>Bachelor's degree</li></ul>",
+                          "JobSchedule": "Full time", "WorkplaceType": "Hybrid"}}}
+    r = OracleSource().parse(payload, "jpmc.fa.oraclecloud.com/CX_1001")[0]
+    assert r.url.endswith("/sites/CX_1001/job/1") and r.workplace_type == "hybrid"
+    assert r.locations == ["New York, NY, United States", "Jersey City, NJ, United States"]
+    assert "- Bachelor's degree" in r.description_lines and r.employment_type == "Full time"

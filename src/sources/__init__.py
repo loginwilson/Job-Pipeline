@@ -2,6 +2,7 @@ from .ashby import AshbySource
 from .base import RawPosting, Source, SourceError, load_fixture
 from .greenhouse import GreenhouseSource
 from .lever import LeverSource
+from .oracle import OracleSource
 from .smartrecruiters import SmartRecruitersSource
 from .workday import WorkdaySource
 
@@ -11,6 +12,7 @@ ADAPTERS: dict[str, Source] = {
     "ashby": AshbySource(),
     "smartrecruiters": SmartRecruitersSource(),
     "workday": WorkdaySource(),
+    "oracle": OracleSource(),
 }
 
 

@@ -84,6 +84,7 @@ _LINK_PATTERNS = [
     ("ashby", re.compile(r"jobs\.ashbyhq\.com/([A-Za-z0-9_.%-]+)")),
     ("smartrecruiters", re.compile(r"(?:jobs|careers)\.smartrecruiters\.com/([A-Za-z0-9_-]+)")),
 ]
+_ORACLE = re.compile(r"https?://([a-z0-9-]+\.fa\.(?:[a-z0-9]+\.)?oraclecloud\.com)/hcmUI/CandidateExperience/[A-Za-z-]+/sites/([A-Za-z0-9_]+)")
 _WORKDAY = re.compile(r"https?://([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?([A-Za-z0-9_-]+)")
 
 
@@ -98,6 +99,9 @@ def board_from_url(url: str) -> tuple[str, str] | None:
     m = _WORKDAY.search(url)
     if m:
         return "workday", f"{m.group(1)}.{m.group(2)}/{m.group(3)}"
+    m = _ORACLE.search(url)
+    if m:
+        return "oracle", f"{m.group(1)}/{m.group(2)}"
     return None
 
 
@@ -133,7 +137,7 @@ def verify_board(platform: str, slug: str, session: requests.Session | None = No
     """Number of postings on the board (0 if it doesn't exist)."""
     src = get_source(platform)
     try:
-        payload = (src.fetch_payload_list(slug, session) if platform in ("smartrecruiters", "workday")
+        payload = (src.fetch_payload_list(slug, session) if platform in ("smartrecruiters", "workday", "oracle")
                    else src.fetch_payload(slug, session))
     except Exception:
         return 0
