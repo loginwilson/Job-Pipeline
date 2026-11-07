@@ -180,8 +180,10 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
         if is_search and store.open_key(key, f"{company.platform}:"):
             counts["reasons"]["duplicate (other search source)"] += 1
             continue        # the same job is already in from another search source
+        # a full copy is kept only for postings that pass (the ones you may apply to)
+        snapshot = (p.raw.raw if p.raw else {}) if ev.passed else None
         info = store.upsert_posting(p.posting_id, p.company, p.title, p.url, p.posted_at,
-                                    p.raw.raw if p.raw else {}, ts, dedupe_key=key)
+                                    snapshot, ts, dedupe_key=key)
         if not is_search:
             store.merge_search_copies(p.posting_id, key, ts)
         seen.append(p.posting_id)
@@ -495,6 +497,7 @@ def main(argv: list[str] | None = None) -> int:
     if store is None:
         return 0
     store.mark_evergreen(int(criteria.get("freshness", "evergreen_after_days", default=60)), ts)
+    store.compact()
     for st in stats.values():
         totals["postings_seen"] += st["seen"]
         totals["new"] += st["new"]

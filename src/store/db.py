@@ -122,13 +122,15 @@ class Store:
             self.conn.execute(
                 "INSERT INTO postings(posting_id, company, title, url, posted_at, first_seen, last_seen, "
                 "closed_at, is_new, snapshot, dedupe_key) VALUES (?,?,?,?,?,?,?,NULL,1,?,?)",
-                (posting_id, company, title, url, posted_at, ts, ts, json.dumps(snapshot, default=str),
-                 dedupe_key))
+                (posting_id, company, title, url, posted_at, ts, ts,
+                 json.dumps(snapshot, default=str) if snapshot is not None else None, dedupe_key))
             return {"first_seen": ts, "is_new": True}
         self.conn.execute(
             "UPDATE postings SET title=?, url=?, posted_at=COALESCE(?, posted_at), last_seen=?, "
-            "closed_at=NULL, is_new=0, dedupe_key=COALESCE(?, dedupe_key) WHERE posting_id=?",
-            (title, url, posted_at, ts, dedupe_key, posting_id))
+            "closed_at=NULL, is_new=0, dedupe_key=COALESCE(?, dedupe_key), "
+            "snapshot=COALESCE(snapshot, ?) WHERE posting_id=?",
+            (title, url, posted_at, ts, dedupe_key,
+             json.dumps(snapshot, default=str) if snapshot is not None else None, posting_id))
         return {"first_seen": row["first_seen"], "is_new": False}
 
     def merge_search_copies(self, board_id: str, dedupe_key: str, ts: str) -> str | None:
@@ -194,6 +196,14 @@ class Store:
         self.conn.executemany("UPDATE postings SET closed_at=?, is_new=0 WHERE posting_id=?",
                               [(ts, pid) for pid in missing])
         return len(missing)
+
+    def compact(self) -> None:
+        """Drop full copies of postings that fail the rules; reclaim space now and then."""
+        self.conn.execute("UPDATE postings SET snapshot=NULL WHERE snapshot IS NOT NULL AND posting_id IN "
+                          "(SELECT posting_id FROM scores WHERE passed=0)")
+        self.conn.commit()
+        if str(self.path) != ":memory:":
+            self.conn.execute("VACUUM")
 
     def mark_evergreen(self, days: int, ts: str) -> None:
         cutoff = (datetime.fromisoformat(ts) - timedelta(days=days)).isoformat(timespec="seconds")
