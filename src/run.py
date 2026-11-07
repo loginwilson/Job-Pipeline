@@ -30,8 +30,9 @@ from .store.db import DEFAULT_DB, Store, now_iso
 from .pipeline.gates import Evaluation, Gates
 from .pipeline.locations import LocationMatcher
 from .pipeline.normalize import normalize_posting
-from .resolve.discover import find_board
+from .resolve.discover import board_from_url, find_board, verify_board
 from .sources import SourceError, get_source, load_fixture
+from .sources.jsearch import JSearchSource, search as jsearch_search
 from .sources.muse import MuseSource, muse_locations
 from .textmatch import normalize
 
@@ -77,7 +78,8 @@ def _fetch_smartrecruiters(src, company, criteria, gates, matcher, store, ts):
 
 
 SOURCE_NAMES = {"lever": "Lever", "greenhouse": "Greenhouse", "ashby": "Ashby", "muse": "The Muse",
-                "smartrecruiters": "SmartRecruiters"}
+                "smartrecruiters": "SmartRecruiters", "jsearch": "JSearch"}
+SEARCH_PLATFORMS = ("muse", "jsearch")
 
 
 def evaluate_raws(raws, criteria, gates, matcher, company: Company | None = None) -> list[Evaluation]:
@@ -119,7 +121,7 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
     decisions carry over).
     """
     counts = {"seen": len(evals), "new": 0, "passed": 0}
-    is_search = company.platform == "muse"
+    is_search = company.platform in SEARCH_PLATFORMS
     if not is_search:
         store.upsert_company(company.name, company.platform, company.slug)
     seen = []
@@ -130,6 +132,8 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
             continue        # the company-board copy is stored instead
         if is_search and board_companies and normalize(p.company) in board_companies:
             continue        # we watch this company's board and the job isn't on it: not active
+        if is_search and store.open_key(key, f"{company.platform}:"):
+            continue        # the same job is already in from another search source
         info = store.upsert_posting(p.posting_id, p.company, p.title, p.url, p.posted_at,
                                     p.raw.raw if p.raw else {}, ts, dedupe_key=key)
         if not is_search:
@@ -169,6 +173,34 @@ def run_muse(store: Store, cfg: dict, criteria, gates, matcher, ts: str, payload
     return evaluate_raws(raws, criteria, gates, matcher), complete
 
 
+def run_jsearch(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> list[Evaluation] | None:
+    """Spend today's JSearch budget on the least-recently searched keyword x city pairs."""
+    if not cfg.get("enabled"):
+        return None
+    budget = store.budget_left("jsearch", int(cfg.get("requests_per_day", 0)), ts)
+    if budget <= 0:
+        return None
+    pairs = {f"{kw} in {c['query']}": c for kw in cfg.get("keywords", []) for c in cfg.get("cities", [])}
+    src, evals, spent = JSearchSource(), [], 0
+    sess = requests.Session()
+    for pair, first in store.next_pairs("jsearch", list(pairs), budget):
+        window = cfg.get("first_fill_window", "month") if first else cfg.get("window", "3days")
+        try:
+            payload = jsearch_search(pair, pairs[pair].get("country", "us"), window, sess)
+        except SourceError as exc:
+            log.error("JSearch: %s", exc)
+            store.board_error("JSearch (search)", "jsearch", str(exc), ts)
+            break
+        spent += 1
+        raws = src.parse(payload)
+        store.mark_pair("jsearch", pair, len(raws), ts)
+        evals += evaluate_raws(raws, criteria, gates, matcher)
+    store.spend("jsearch", spent, ts)
+    store.commit()
+    log.info("JSearch: %d searches, %d postings", spent, len(evals))
+    return evals
+
+
 def discover(store: Store, evals: list[Evaluation], cfg: dict, known: set[str], ts: str) -> list[Company]:
     """Probe for the company boards behind search results. Returns newly found boards."""
     if not cfg.get("enabled", True):
@@ -178,10 +210,35 @@ def discover(store: Store, evals: list[Evaluation], cfg: dict, known: set[str], 
         if not ev.posting.location.offices:
             continue   # only companies hiring in your cities
         p = ev.posting
-        entry = by_company.setdefault(p.company, {"titles": [], "hint": p.raw.slug if p.raw else None})
+        hint = p.raw.slug if p.raw and p.raw.platform == "muse" else None
+        site = (p.raw.raw.get("website") if p.raw else None) or ""
+        m = re.search(r"https?://(?:www\.)?([a-z0-9-]+)\.", site.lower())
+        entry = by_company.setdefault(p.company, {"titles": [], "hint": hint or (m.group(1) if m else None)})
         entry["titles"].append(p.title)
     found, probed = [], 0
     sess = requests.Session()
+    # 1. apply links that point straight into a company board — no guessing needed
+    for ev in evals:
+        p = ev.posting
+        if normalize(p.company) in known or not p.location.offices:
+            continue
+        for link in (p.raw.raw.get("apply_links") if p.raw else None) or []:
+            hit = board_from_url(link or "")
+            if not hit:
+                continue
+            platform, slug = hit
+            if platform == "workday":
+                store.record_ats_link(slug, "workday", p.company, ts)
+                continue
+            n = verify_board(platform, slug, sess)
+            if n:
+                store.add_discovered(p.company, platform, slug, SOURCE_NAMES.get(p.raw.platform, ""), p.title, ts)
+                store.record_probe(p.company, f"{platform}:{slug}", ts)
+                known.add(normalize(p.company))
+                found.append(Company(name=p.company, platform=platform, slug=slug))
+                log.info("Discovered %s board for %s from an apply link (%d postings)", platform, p.company, n)
+                break
+    # 2. otherwise try likely board names
     for name, info in sorted(by_company.items()):
         if normalize(name) in known or not store.probe_due(name, int(cfg.get("retry_unfound_after_days", 30)), ts):
             continue
@@ -191,7 +248,7 @@ def discover(store: Store, evals: list[Evaluation], cfg: dict, known: set[str], 
         hit = find_board(name, info["titles"], info["hint"], sess)
         store.record_probe(name, f"{hit.platform}:{hit.slug}" if hit else "none", ts)
         if hit:
-            store.add_discovered(name, hit.platform, hit.slug, "The Muse", hit.matched_title, ts)
+            store.add_discovered(name, hit.platform, hit.slug, "search", hit.matched_title, ts)
             found.append(Company(name=name, platform=hit.platform, slug=hit.slug))
             log.info("Discovered %s board for %s (%s, %d postings)", hit.platform, name, hit.slug, hit.postings)
     store.commit()
@@ -224,13 +281,14 @@ def main(argv: list[str] | None = None) -> int:
     totals = {"boards_polled": 0, "postings_seen": 0, "new": 0, "passed": 0, "errors": 0}
 
     # 1–2. search sources + discovery (full runs only)
-    muse_evals, muse_complete = (None, False)
+    muse_evals, muse_complete, jsearch_evals = (None, False, None)
     if store is not None and not single:
         cfg = load_sources_config()
         muse_evals, muse_complete = run_muse(store, cfg.get("muse") or {}, criteria, gates, matcher, ts)
+        jsearch_evals = run_jsearch(store, cfg.get("jsearch") or {}, criteria, gates, matcher, ts)
         known = {normalize(c.name) for c in companies} | {normalize(r["company"]) for r in store.discovered_boards()}
-        if muse_evals:
-            discover(store, muse_evals, cfg.get("discovery") or {}, known, ts)
+        if muse_evals or jsearch_evals:
+            discover(store, (muse_evals or []) + (jsearch_evals or []), cfg.get("discovery") or {}, known, ts)
         watch = {normalize(c.name) for c in companies}
         companies += [Company(name=r["company"], platform=r["platform"], slug=r["slug"])
                       for r in store.discovered_boards() if normalize(r["company"]) not in watch]
@@ -275,6 +333,17 @@ def main(argv: list[str] | None = None) -> int:
         for k in ("new", "passed"):
             totals[k] += c[k]
         log.info("The Muse: %d postings kept after merging with company boards, %d passed", c["seen"], c["passed"])
+    if jsearch_evals is not None:
+        c = store_evaluations(store, Company(name="JSearch", platform="jsearch", slug="search"), jsearch_evals, ts,
+                              criteria, prefix="jsearch:__none__", board_keys=board_keys,
+                              board_companies=board_companies)
+        totals["postings_seen"] += c["seen"]
+        for k in ("new", "passed"):
+            totals[k] += c[k]
+        log.info("JSearch: %d postings stored, %d passed", c["seen"], c["passed"])
+    if store is not None and not single:
+        js = (load_sources_config().get("jsearch") or {})
+        store.close_stale("jsearch:", int(js.get("close_after_days_unseen", 7)), ts)
     if store is None:
         return 0
     store.mark_evergreen(int(criteria.get("freshness", "evergreen_after_days", default=60)), ts)

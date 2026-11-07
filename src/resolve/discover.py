@@ -71,3 +71,38 @@ def find_board(company: str, titles: list[str], hint: str | None = None,
                 if fuzz.token_sort_ratio(want, best) >= min_score:
                     return Found(company, platform, slug, len(board_titles), best)
     return None
+
+
+_LINK_PATTERNS = [
+    ("greenhouse", re.compile(r"(?:job-)?boards(?:-api)?\.greenhouse\.io/(?:embed/job_app\?for=)?([A-Za-z0-9_-]+)")),
+    ("greenhouse", re.compile(r"greenhouse\.io/.*[?&]for=([A-Za-z0-9_-]+)")),
+    ("lever", re.compile(r"jobs\.lever\.co/([A-Za-z0-9_.-]+)")),
+    ("ashby", re.compile(r"jobs\.ashbyhq\.com/([A-Za-z0-9_.%-]+)")),
+    ("smartrecruiters", re.compile(r"(?:jobs|careers)\.smartrecruiters\.com/([A-Za-z0-9_-]+)")),
+]
+_WORKDAY = re.compile(r"https?://([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?([A-Za-z0-9_-]+)")
+
+
+def board_from_url(url: str) -> tuple[str, str] | None:
+    """('greenhouse', slug) etc. for a link into a known job board; ('workday', root) for Workday."""
+    if not url:
+        return None
+    for platform, rx in _LINK_PATTERNS:
+        m = rx.search(url)
+        if m and m.group(1).lower() not in ("embed", "jobs", "v1"):
+            return platform, m.group(1)
+    m = _WORKDAY.search(url)
+    if m:
+        return "workday", f"https://{m.group(1)}.{m.group(2)}.myworkdayjobs.com/{m.group(3)}"
+    return None
+
+
+def verify_board(platform: str, slug: str, session: requests.Session | None = None) -> int:
+    """Number of postings on the board (0 if it doesn't exist)."""
+    src = get_source(platform)
+    try:
+        payload = (src.fetch_payload_list(slug, session) if platform == "smartrecruiters"
+                   else src.fetch_payload(slug, session))
+    except SourceError:
+        return 0
+    return len(_titles(platform, payload))

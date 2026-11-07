@@ -39,6 +39,7 @@ jobs:
         env:
           GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
           SHEET_ID: ${{ secrets.SHEET_ID }}
+          JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}
           ALERTS_IMAP_USER: ${{ secrets.ALERTS_IMAP_USER }}
           ALERTS_IMAP_APP_PASSWORD: ${{ secrets.ALERTS_IMAP_APP_PASSWORD }}
         run: python -m src.run

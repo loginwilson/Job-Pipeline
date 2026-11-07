@@ -36,6 +36,15 @@ CREATE TABLE IF NOT EXISTS probes (               -- companies checked for a boa
 CREATE TABLE IF NOT EXISTS detail_cache (         -- per-posting details for boards that need them
     posting_id TEXT PRIMARY KEY, payload TEXT, fetched_at TEXT
 );
+CREATE TABLE IF NOT EXISTS search_pairs (         -- keyword x city searches, rotated
+    source TEXT, pair TEXT, last_searched TEXT, last_count INTEGER, PRIMARY KEY (source, pair)
+);
+CREATE TABLE IF NOT EXISTS search_usage (         -- requests spent per day (budget)
+    source TEXT, day TEXT, used INTEGER, PRIMARY KEY (source, day)
+);
+CREATE TABLE IF NOT EXISTS ats_links (            -- career-site links seen in search results (e.g. Workday)
+    url_root TEXT PRIMARY KEY, platform TEXT, company TEXT, first_seen TEXT
+);
 CREATE TABLE IF NOT EXISTS source_runs (          -- last full sweep per search source
     source TEXT PRIMARY KEY, last_complete TEXT
 );
@@ -117,7 +126,8 @@ class Store:
         """
         row = self.conn.execute(
             "SELECT posting_id, first_seen FROM postings WHERE dedupe_key=? AND posting_id<>? "
-            "AND posting_id LIKE 'muse:%' AND merged_into IS NULL", (dedupe_key, board_id)).fetchone()
+            "AND (posting_id LIKE 'muse:%' OR posting_id LIKE 'jsearch:%') AND merged_into IS NULL",
+            (dedupe_key, board_id)).fetchone()
         if row is None:
             return None
         self.conn.execute("UPDATE postings SET merged_into=?, closed_at=COALESCE(closed_at, ?) WHERE posting_id=?",
@@ -140,8 +150,21 @@ class Store:
 
     def open_board_key(self, dedupe_key: str) -> bool:
         """True if a company-board posting with this key is already stored."""
-        return self.conn.execute("SELECT 1 FROM postings WHERE dedupe_key=? AND posting_id NOT LIKE 'muse:%'",
-                                 (dedupe_key,)).fetchone() is not None
+        return self.conn.execute("SELECT 1 FROM postings WHERE dedupe_key=? AND posting_id NOT LIKE 'muse:%' "
+                                 "AND posting_id NOT LIKE 'jsearch:%'", (dedupe_key,)).fetchone() is not None
+
+    def open_key(self, dedupe_key: str, exclude_prefix: str) -> bool:
+        """True if another open posting (any source but `exclude_prefix`) has this key."""
+        return self.conn.execute("SELECT 1 FROM postings WHERE dedupe_key=? AND posting_id NOT LIKE ? "
+                                 "AND closed_at IS NULL AND merged_into IS NULL",
+                                 (dedupe_key, exclude_prefix + "%")).fetchone() is not None
+
+    def close_stale(self, prefix: str, days: int, ts: str) -> int:
+        """Close open postings from a rotating search not seen for `days` days."""
+        cutoff = (datetime.fromisoformat(ts) - timedelta(days=days)).isoformat(timespec="seconds")
+        cur = self.conn.execute("UPDATE postings SET closed_at=?, is_new=0 WHERE posting_id LIKE ? "
+                                "AND closed_at IS NULL AND last_seen < ?", (ts, prefix + "%", cutoff))
+        return cur.rowcount
 
     def close_missing(self, prefix: str, seen_ids: Iterable[str], ts: str) -> int:
         """Close open postings whose id starts with `prefix` (one board / one source) and weren't seen."""
@@ -202,6 +225,27 @@ class Store:
 
     def record_probe(self, company: str, result: str, ts: str) -> None:
         self.conn.execute("INSERT OR REPLACE INTO probes VALUES (?,?,?)", (company, ts, result))
+
+    def next_pairs(self, source: str, pairs: list[str], n: int) -> list[tuple[str, bool]]:
+        """The n least-recently searched pairs, never-searched first. Returns (pair, first_time)."""
+        last = {r["pair"]: r["last_searched"] for r in
+                self.conn.execute("SELECT pair, last_searched FROM search_pairs WHERE source=?", (source,))}
+        order = sorted(pairs, key=lambda p: (p in last, last.get(p) or ""))
+        return [(p, p not in last) for p in order[:n]]
+
+    def mark_pair(self, source: str, pair: str, count: int, ts: str) -> None:
+        self.conn.execute("INSERT OR REPLACE INTO search_pairs VALUES (?,?,?,?)", (source, pair, ts, count))
+
+    def budget_left(self, source: str, per_day: int, ts: str) -> int:
+        r = self.conn.execute("SELECT used FROM search_usage WHERE source=? AND day=?", (source, ts[:10])).fetchone()
+        return max(0, per_day - (r["used"] if r else 0))
+
+    def spend(self, source: str, n: int, ts: str) -> None:
+        self.conn.execute("INSERT INTO search_usage VALUES (?,?,?) ON CONFLICT(source, day) DO UPDATE SET "
+                          "used = used + excluded.used", (source, ts[:10], n))
+
+    def record_ats_link(self, url_root: str, platform: str, company: str, ts: str) -> None:
+        self.conn.execute("INSERT OR IGNORE INTO ats_links VALUES (?,?,?,?)", (url_root, platform, company, ts))
 
     def source_due(self, source: str, every_hours: float, ts: str) -> bool:
         r = self.conn.execute("SELECT last_complete FROM source_runs WHERE source=?", (source,)).fetchone()

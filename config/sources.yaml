@@ -12,3 +12,36 @@ discovery:                  # companies found by search → their own job board 
   enabled: true
   max_new_companies_per_run: 40
   retry_unfound_after_days: 30
+
+jsearch:                    # Google for Jobs via JSearch (OpenWeb Ninja) — key: JSEARCH_API_KEY
+  enabled: true
+  requests_per_day: 6       # free plan = 200/month. Pro ($25, 10,000/month) → set to 300
+  # one search per keyword group × city area; the run rotates through all pairs
+  keywords:                 # the same broad groups as the job-alert setup
+    - associate
+    - strategy OR operations
+    - product
+    - implementation OR deployment OR solutions
+    - consultant OR consulting
+    - real estate OR proptech
+    - hospitality OR hotel
+    - AI OR automation
+    - new grad OR recent graduate OR entry level
+  cities:                   # one per area in criteria location tiers (search radius covers suburbs)
+    - {query: "New York, NY", country: us}
+    - {query: "Jersey City, NJ", country: us}
+    - {query: "Chicago, IL", country: us}
+    - {query: "Miami, FL", country: us}
+    - {query: "Tampa, FL", country: us}
+    - {query: "Orlando, FL", country: us}
+    - {query: "San Francisco, CA", country: us}
+    - {query: "Los Angeles, CA", country: us}
+    - {query: "San Diego, CA", country: us}
+    - {query: "Toronto, ON", country: ca}
+    - {query: "Austin, TX", country: us}
+    - {query: "Dallas, TX", country: us}
+    - {query: "Houston, TX", country: us}
+    - {query: "Vancouver, BC", country: ca}
+  first_fill_window: month  # date_posted for a pair's first search
+  window: 3days             # afterwards, only recent postings
+  close_after_days_unseen: 7
