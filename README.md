@@ -1,24 +1,26 @@
 # Job Pipeline
 
-Pulls postings from public company job boards (Greenhouse, Lever, Ashby), applies
-`config/criteria.yaml`, and (from step 2 on) keeps a Google Sheet updated.
-Spec: `docs/BUILD_BRIEF.md`, `docs/ARCHITECTURE.md`, `config/criteria.yaml` (criteria wins).
+Collects every public job posting it can find in your cities, drops the ones that fail your
+must-haves (`config/criteria.yaml`), and keeps a Google Sheet updated where you decide what
+to do with each one. Runs on GitHub Actions twice an hour (`.github/workflows/hourly.yml`).
 
-**Status (2026-11-07):** live. Sources: company job boards (Greenhouse, Lever, Ashby, SmartRecruiters, Workday —
-`config/watchlist.yaml` plus boards discovered automatically) polled hourly, and The Muse
-(entry-level jobs in all your cities) swept daily, and JSearch (Google for Jobs: LinkedIn,
-Indeed, Glassdoor, company sites) — keyword × city searches rotated within a daily request
-budget (`config/sources.yaml`; needs the `JSEARCH_API_KEY` GitHub secret). → must-have rules
-→ SQLite (`data/pipeline.db`) → Google Sheet, via GitHub Actions. Next: job-alert emails,
-then adapters for the career-site platforms search results point to most (tracked in the
-`link_domains` table).
+## Where postings come from (`config/sources.yaml`)
 
-**Auto-discovery:** Hacker News "Who is hiring?" posts that mention your cities are read daily
-for job-board links; and every company a search source finds in your cities is checked for a
-Greenhouse / Lever / Ashby / SmartRecruiters / Workday board (apply links first, then name
-lookups); if that board lists the same job, it joins the hourly
-watch (Board health tab). The same job from two sources appears once — the company-board
-copy wins and keeps any decision you already made. Settings: `config/sources.yaml`.
+| Source | What it is | How often |
+|---|---|---|
+| **Company job boards** | Greenhouse, Lever, Ashby, SmartRecruiters and Workday boards — the ones in `config/watchlist.yaml` plus every board discovered automatically | Every run; Workday sites and boards with nothing passing for 3 days every 6 hours |
+| **JSearch** (Google for Jobs) | LinkedIn, Indeed, Glassdoor and company sites, searched by keyword group × city | Within the daily request budget (`requests_per_day`; free plan = 6/day). Needs the `JSEARCH_API_KEY` secret |
+| **The Muse** | Entry-level postings in all your cities (≤30 days old) | Daily |
+| **Hacker News "Who is hiring?"** | Discovery only: job-board links in posts that mention your cities | Daily |
+
+**Auto-discovery.** Every company these sources surface in your cities is checked for its own
+board (apply links first, then name lookups, confirmed by the same job being listed there).
+Found boards join the watch and show in the Board health tab. The same job from several
+sources appears once — the company-board copy wins and keeps any decision you already made.
+
+**Active only.** Board postings show while they're in the company's live feed; search
+postings must be recent and, when we watch that company's board, listed on it. Closed
+postings you never touched leave To review.
 
 ## How it works — every option comes in, you decide
 
@@ -32,7 +34,7 @@ rule and the exact text that triggered it):
 |---|---|
 | 1 | not full-time (internship, contract, temp, co-op, short fellowship, part-time) |
 | 2 | not in NYC · Chicago / Florida / California / Toronto · Texas / BC, or **solely** remote |
-| 3 | salary midpoint under $100K USD / C$120K (between that and $120K / C$140K → kept, flagged *Low base — check incentives*; no salary → kept, flagged) |
+| 3 | salary midpoint under $100K USD / C$120K (between that and $120K / C$140K → kept, flagged *Low base — check incentives*). No salary posted → kept and flagged, unless it's a role that essentially never pays the floor (retail, warehouse, driver, call center…) or hourly with no amount |
 | 4 | asks 3+ years of experience (required or preferred) |
 | 5 | senior title (Senior, Sr, Staff, Principal, Director, Head of, VP, Chief, Level III+, Lead-as-a-level, people manager) |
 | 6 | US job requiring US citizenship, security clearance or U.S.-person status ("no sponsorship" is only flagged — OPT/TN usually fine) |
