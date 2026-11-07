@@ -28,6 +28,7 @@ from .workday import Listing
 
 PAGE = 25
 MAX_PAGES = 48          # up to 1,200 postings per site per poll
+FILTERED_PAGES_FACTOR = 3   # read through your cities' filters: up to 3,600
 API = "https://{host}/hcmRestApi/resources/latest/"
 
 
@@ -88,7 +89,7 @@ class OracleSource(Source):
         if total > len(items) and max_pages > 1:
             ids = [str(f["Id"]) for f in facets if f.get("Id") and place_ok and place_ok(f.get("Name") or "")]
             if ids:
-                items, total, _ = self._pages(slug, sess, max_pages, ids)
+                items, total, _ = self._pages(slug, sess, max_pages * FILTERED_PAGES_FACTOR, ids)
                 out = Listing(items)
                 out.filtered_to = len(ids)
             out.truncated = total > len(items)

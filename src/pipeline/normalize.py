@@ -80,7 +80,7 @@ _RAW_TYPES = [
     (re.compile(r"apprentic", re.I), "apprenticeship"),
 ]
 _TITLE_TYPES = [
-    (re.compile(r"\binternships?\b|\binterns?\b", re.I), "internship"),
+    (re.compile(r"\binternships?\b|\binterns?\b|\bsummer (?:analyst|associate|analysts|associates)\b", re.I), "internship"),
     (re.compile(r"\bpart[\s_-]?time\b", re.I), "part_time"),
     (re.compile(r"\bco[- ]?op\b", re.I), "co_op"),
     (re.compile(r"\bapprentice(?:ship)?s?\b", re.I), "apprenticeship"),

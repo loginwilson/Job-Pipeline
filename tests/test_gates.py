@@ -239,3 +239,13 @@ def test_title_abbreviations(criteria):
     assert "technical" in fails("Eng., Distrib Tech")
     assert "salary" in fails("Closer (Residential Mortgage)", pay="")
     assert not fails("English Content Associate")
+
+
+def test_bank_internships_and_manager_levels(criteria):
+    from src.pipeline.gates import Gates
+    g = Gates(criteria)
+    fails = lambda t: {f.gate for f in g.evaluate(_p(criteria, t, [])).failures}
+    assert "employment_type" in fails("2027 Markets Summer Analyst Program - Research")
+    assert "seniority" in fails("Manager-Data Science (New York, NY)")
+    assert "seniority" in fails("Managers, Data Analytics")
+    assert not fails("Summer 2027 - Associate Product Manager (New Grad)")

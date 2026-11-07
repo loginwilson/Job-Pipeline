@@ -104,7 +104,7 @@ seniority:
     keep: [associate product manager, product manager, program manager, project manager, implementation manager, customer success manager, account manager, partner manager, partnerships manager, product operations manager, assistant manager, manager in training, management trainee]
     drop_when:
       level_titles: [senior manager, engineering manager, general manager]
-      title_starts_with: ["manager,", "manager -", "manager of", "manager –"]   # "Manager, Strategy" (not "Program Manager, X")
+      title_starts_with: ["manager,", "manager -", "manager-", "manager of", "manager –", "managers,", "managers -"]   # "Manager, Strategy" (not "Program Manager, X")
       duties_include: [direct reports, manage a team, lead a team of, people management, hire and develop]
     keep_takes_precedence: true
 

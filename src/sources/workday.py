@@ -27,6 +27,7 @@ from .base import BACKOFF_S, RETRIES, TIMEOUT_S, USER_AGENT, RawPosting, Source,
 
 PAGE = 20
 MAX_PAGES = 60          # up to 1,200 postings per site per poll
+FILTERED_PAGES_FACTOR = 3   # read through your cities' filters: up to 3,600
 _COUNTRY = {"united states of america": "US", "united states": "US", "canada": "CA"}
 
 
@@ -100,7 +101,7 @@ class WorkdaySource(Source):
         if total > len(items) and max_pages > 1:
             ids = [v["id"] for v in _location_values(first.get("facets") or []) if place_ok and place_ok(v.get("descriptor") or "")]
             if ids:
-                items, total, _ = self._pages(slug, sess, max_pages, {"locations": ids})
+                items, total, _ = self._pages(slug, sess, max_pages * FILTERED_PAGES_FACTOR, {"locations": ids})
                 out = Listing(items)
                 out.filtered_to = len(ids)
             out.truncated = total > len(items)
