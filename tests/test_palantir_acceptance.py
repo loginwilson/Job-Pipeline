@@ -1,12 +1,4 @@
-"""BUILD_BRIEF Step 8 acceptance checks on the saved Palantir fixture (2026-11-05).
-
-The live postings differ from the brief's expectations in two places and
-criteria.yaml wins (see README "Palantir check"):
-  * both Warp Speed Deployment Strategist postings say "U.S. Person Required"
-    -> work_authorization drop ("U.S. persons" is a drop term)
-  * "Deployment Strategist, New Grad - Warp Speed" pays $110K-$120K
-    (midpoint $115K < $120K extra-comp floor) -> salary drop
-"""
+"""Must-have rules on the saved Palantir fixture (2026-11-05)."""
 import re
 
 import pytest
@@ -31,28 +23,39 @@ def gates(e):
     return {f.gate for f in e.failures}
 
 
-def test_expected_keeps(evals):
-    assert find(evals, "Product Designer, New Grad").passed
-    assert find(evals, "Deployment Strategist").passed
-    assert find(evals, "Deployment Strategist", "Chicago, IL").passed
+def test_passed_set(evals):
+    passed = {(e.posting.title, e.posting.locations[0]) for e in evals if e.passed}
+    assert passed == {
+        ("Product Designer, New Grad", "New York, NY"),
+        ("Deployment Strategist", "New York, NY"),
+        ("Deployment Strategist", "Chicago, IL"),
+        ("Neurodivergent Fellowship", "New York, NY"),
+        ("Compliance Analyst", "New York, NY"),
+        ("Talent Strategist", "New York, NY"),
+        ("Talent Program and Events Strategist", "New York, NY"),
+        ("Mobility Tax Analyst", "Palo Alto, CA"),
+    }
 
 
-def test_warp_speed_follow_criteria(evals):
-    ws = find(evals, "Deployment Strategist - Warp Speed")
-    assert gates(ws) == {"work_authorization"}
-    assert "U.S. Person" in ws.failures[0].matched
-    ng = find(evals, "Deployment Strategist, New Grad - Warp Speed")
-    assert {"salary", "work_authorization"} <= gates(ng)
+def test_low_base_flagged_not_dropped(evals):
+    assert "Low base — check incentives" in find(evals, "Talent Strategist").flags
+    assert "Salary unknown" in find(evals, "Deployment Strategist", "Chicago, IL").flags
+
+
+def test_warp_speed_needs_us_person(evals):
+    for title in ("Deployment Strategist - Warp Speed", "Deployment Strategist, New Grad - Warp Speed"):
+        e = find(evals, title)
+        assert "work_authorization" in gates(e) and "U.S. Person" in e.failures[0].matched
 
 
 def test_engineer_titles_dropped(evals):
-    eng = [e for e in evals if re.search(r"engineer", e.posting.title, re.I)]
-    assert eng and all("engineering_title" in gates(e) for e in eng)
+    eng = [e for e in evals if re.search(r"engineer|developer", e.posting.title, re.I)]
+    assert eng and all("technical" in gates(e) for e in eng)
 
 
-def test_gov_defense_dropped(evals):
+def test_government_roles_never_pass(evals):
     gov = [e for e in evals if re.search(r"US Government|Defense", e.posting.title)]
-    assert gov and all("gov_defense" in gates(e) for e in gov)
+    assert gov and not any(e.passed for e in gov)
 
 
 def test_internships_dropped(evals):
@@ -61,11 +64,10 @@ def test_internships_dropped(evals):
     assert interns and all("employment_type" in gates(e) for e in interns)
 
 
-def test_kept_us_postings_have_tn_category(evals):
-    kept = [e for e in evals if e.passed and e.posting.is_us]
-    assert kept and all(e.tn and e.tn.label.startswith("TN:") for e in kept)
+def test_law_degree_dropped(evals):
+    assert "credentials" in gates(find(evals, "Finance Operator"))
 
 
-def test_requirements_summary_printed_for_kept(evals):
+def test_passed_us_postings_show_visa(evals):
     for e in (x for x in evals if x.passed):
-        assert e.requirements.summary.startswith(("Met ", "No requirements"))
+        assert e.visa.startswith("OPT year 1") and e.field

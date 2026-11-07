@@ -1,546 +1,183 @@
 # ─────────────────────────────────────────────────────────────
-# Job Scraper Criteria — Login Wilson
-# Version 1.1 · 2026-11-05
+# Job Pipeline Criteria — Login Wilson
+# Version 2.0 · 2026-11-07
 #
-# v1.1 CHANGE (crunch time — broaden):
-#   Ranking is now driven by REQUIREMENTS MATCH (does Login meet what the
-#   posting asks for?), not by role/title. Title lanes are labels, not
-#   filters. Login makes the final call on whether a role is worth applying to.
-#   Broadening is toward roles he's LIKELY TO QUALIFY FOR (real estate,
-#   hospitality, consulting, analyst, ops). Engineering stays a hard drop.
-#   Sales passes but ranks lower (qualified, less preferred).
-#   Hard constraints (salary, location, work auth, gov/defense, seniority,
-#   years of experience, employment type) are unchanged.
+# v2: MUST-HAVES ONLY. The pipeline collects every posting it can find and
+# drops only the ones Login could not or would not take. It does not score
+# or rank by preference. Everything that passes lands in the Sheet with the
+# facts needed to decide, and Login buckets each one himself:
+#     Veto    — not for me
+#     Apply   — a real option, standard application
+#     All-in  — I want this; strong application + networking
 #
-# How a posting moves through the pipeline:
-#   1. GATES      → pass/fail. Fail any gate and the posting is dropped.
-#   2. REQUIREMENTS MATCH → each stated requirement classified
-#                   met / stretch / gap against the candidate profile.
-#   3. SIGNALS    → light rule-based adjustments (tie-breakers).
-#   4. AI REVIEW  → confirms the requirements match, labels role type,
-#                   returns a one-line reason.
-#   5. TIERS      → strong / worth a look / stored-but-hidden, by match.
-#
-# Penalty/bonus sizes are starting values. Tune them after calibration
-# (label ~30 real postings, compare against the AI reviewer).
+# Each rule below is a DROP rule unless it says "flag". A flag never removes
+# a posting; it adds a note in the Flags column.
 # ─────────────────────────────────────────────────────────────
 
-north_star: >
-  Embed with a team or customer, find where their operations are
-  inefficient or broken, figure out the solution, and automate it using
-  data and AI — working alongside engineers rather than as one.
-  Bonus when the domain is real estate.
-
-weights:
-  small: 5
-  large: 15
-  heavy: 25
-  big_bump: 20
-  bump: 10
-  mild: 5
+candidate:
+  citizenship: Canada
+  degree: BS Hospitality, Travel & Tourism Management (concentration Hotel Real Estate Finance & Development), NYU
+  graduation: 2027-05
+  # OPT must start within 60 days of graduation, so the job should start
+  # between graduation and this date. Later stated starts are flagged, not dropped.
+  latest_preferred_start: 2027-08-01
+  # degree fields Login has (or that clearly cover him) — used by the credentials rule
+  degree_fields: [business, finance, real estate, hospitality, hotel, tourism, travel, management]
 
 
-# ═════════════════════════════════════════════════════════════
-# 1. GATES (drop on fail)
-# ═════════════════════════════════════════════════════════════
-
+# 1 ── EMPLOYMENT TYPE ─────────────────────────────────────────
 employment_type:
-  allow: [full_time, part_time_permanent]
-  drop: [contract, temp, contract_to_hire, internship, co_op, apprenticeship, fellowship_under_6_months]
+  allow: [full_time]
+  drop: [part_time, contract, temp, contract_to_hire, internship, co_op, apprenticeship, fellowship_under_6_months]
 
-salary:
-  role: gate              # requirement, not a ranking factor
-  test: midpoint          # midpoint of the posted range
-  multi_range: use_target_city_range   # e.g. Palantir lists ranges by city
-  hourly_to_annual_hours: 2080
-  part_time: test_full_time_equivalent
-  markets:
-    US:
-      currency: USD
-      pass: 140000
-      pass_with_extra_comp: 120000     # 120k–140k passes only with extra comp
-    CA:
-      currency: CAD
-      pass: 160000
-      pass_with_extra_comp: 140000     # CAD floor — 140k–160k passes only with extra comp
-  extra_comp_signals:
-    - equity
-    - RSU
-    - stock options
-    - signing bonus
-    - sign-on bonus
-    - annual bonus
-    - performance bonus
-  unquantified_equity: count_and_flag  # "competitive equity" counts, flagged
-  never_count_as_base: [OTE, on-target earnings, commission, uncapped earnings]
-  missing_salary: keep_and_flag        # "salary unknown", ranks below confirmed passes
-  score_bump_above_target: mild        # only salary effect on ranking
 
-seniority:
-  drop_title_terms: [senior, "sr.", "sr ", staff, principal, lead, director, "head of", vp, "vice president", executive]
-  manager_titles:
-    # "Manager" means different things by industry: an IC role (APM,
-    # Implementation Manager), a hospitality new-grad track, or a career
-    # level in consulting / Big 4 / real estate finance (4–6+ yrs).
-    # Drop only when it signals a level or people management; the
-    # 2-year experience cap catches the rest.
-    keep: [associate product manager, product manager, implementation manager, customer success manager, account manager, product operations manager, assistant manager, manager in training, management trainee]
-    drop_when:
-      level_titles: [senior manager, engineering manager, general manager, "manager, " ]   # "Manager, Deal Advisory" style level titles
-      standalone_manager_at: [consulting, big 4, accounting, real estate private equity, investment management]
-      duties_include: [direct reports, manage a team, lead a team of, people management, hire and develop]
-    keep_takes_precedence: true   # "Product Manager, Growth" stays; "Manager, Deal Advisory" drops
-
-experience:
-  pass_clean: [new grad, new graduate, entry level, early career, "0-1 years", no_years_listed]
-  # v1.1: 2 years is the max. Anything asking 3+ (required OR preferred) drops.
-  ranges_use: lower_bound   # "2–4 years" → 2 (passes with penalty); "3–5 years" → 3 (drops)
-  required:
-    "1-2": -small
-    "2":   -large
-    drop_at_or_above: 3
-  preferred:              # "preferred" is a wish, but same cap
-    "1-2": 0
-    "2": -small
-    drop_at_or_above: 3
-  parse_sections:
-    required: [minimum qualifications, basic qualifications, requirements, what you'll need, must have]
-    preferred: [preferred qualifications, nice to have, bonus points, plus]
-  field_match_offset:     # reduces or erases the experience penalty
-    terms: [real estate, proptech, commercial real estate, data, automation, operations, client-facing, customer-facing, startup]
-    effect: offset_up_to_full_penalty
-  friendly_wording_bonus:
-    terms: [or equivalent experience, internships count, recent graduates, new graduates encouraged]
-    effect: mild
-
+# 2 ── LOCATION ────────────────────────────────────────────────
+# Tiers only order the list; any listed city passes. Anywhere else drops.
 location:
-  work_arrangement:
-    allow: [in_office, hybrid]
-    drop: [fully_remote]
-  multi_location: use_best_listed_office_tier   # "NYC, SF, or Remote" → NYC
+  drop_fully_remote: true        # "NYC or Remote" counts as NYC; solely remote drops
+  multi_location: use_best_listed_office_tier
   tiers:
     1:
-      points: big_bump
       NYC: [Manhattan, Brooklyn, Queens, Bronx, Staten Island, Jersey City, Hoboken]
     2:
-      points: bump
       Chicago: [Chicago, Evanston, Oak Park]
       Florida: [Miami, Miami Beach, Fort Lauderdale, West Palm Beach, Boca Raton, Tampa, Orlando]
       California: [San Francisco, Oakland, Palo Alto, Mountain View, Menlo Park, Redwood City, San Mateo, Sunnyvale, San Jose, Los Angeles, Santa Monica, Culver City, San Diego]
       Toronto: [Toronto, Mississauga, Markham, Vaughan, Oakville]
     3:
-      points: 0
-      British Columbia: [Vancouver, Burnaby, Richmond, Surrey]
       Texas: [Austin, Dallas, Houston]
-  drop_everything_else: true   # incl. Westchester, Long Island, Stamford
+      British Columbia: [Vancouver, Burnaby, Richmond, Surrey]
 
-work_authorization:            # US roles only — Canadian roles skip this block
+
+# 3 ── SALARY ──────────────────────────────────────────────────
+# Tested on the midpoint of the posted range (the target city's range when
+# ranges are listed by city). Hourly x 2080.
+#   midpoint >= comfortable        → passes
+#   floor <= midpoint < comfortable → kept, flag "Low base — check incentives"
+#                                     (Login judges whether equity / bonus /
+#                                      commission / IPO upside is strong enough)
+#   midpoint < floor               → dropped
+#   no salary posted               → kept, flag "Salary unknown"
+salary:
+  hourly_to_annual_hours: 2080
+  markets:
+    US: {currency: USD, comfortable: 120000, floor: 100000}
+    CA: {currency: CAD, comfortable: 140000, floor: 120000}
+  # OTE / commission is never treated as base. An OTE-only posting is kept as
+  # "Salary unknown (OTE only)" — commission on top of base is an incentive.
+  never_count_as_base: [OTE, on-target earnings, commission, uncapped earnings]
+  # shown in the Extra comp column so incentives are easy to judge
+  extra_comp_signals: [equity, RSU, restricted stock, stock options, signing bonus, sign-on bonus, annual bonus, performance bonus, commission]
+
+
+# 4 ── EXPERIENCE ──────────────────────────────────────────────
+# Lower bound of a range counts ("2–4 years" → 2). Required OR preferred.
+experience:
+  drop_at_or_above: 3
+  pass_clean: [new grad, new graduate, entry level, early career, recent graduate, "0-1 years"]
+  # headings that mark requirement sections (also used by rules 7 and 8)
+  parse_sections:
+    required: [minimum qualifications, basic qualifications, required qualifications, requirements, qualifications, what you'll need, what we require, what you bring, what you'll bring, what we're looking for, who you are, about you, you have, must have, skills and experience]
+    preferred: [preferred qualifications, nice to have, bonus points, plus, preferred, what we value]
+
+
+# 5 ── SENIORITY ───────────────────────────────────────────────
+# Entry-level titles (Associate, Analyst, Coordinator, Specialist,
+# Representative, Consultant I, Strategist, APM, Rotational, New Grad, Junior,
+# Level I/II) pass; the 3-year rule handles the rest.
+seniority:
+  drop_title_terms: [senior, "sr.", sr, staff, principal, director, "head of", vp, svp, evp, avp, "vice president", chief, "executive director"]
+  keep_titles_with: [chief of staff]   # level words inside these phrases don't count (years rule still applies)
+  drop_level_numerals: [III, IV, V, "3", "4", "5"]   # "Analyst III", "Consultant 4"
+  lead:
+    drop_when_level: true          # "Lead Analyst", "Team Lead", "Product Lead"
+    keep_phrases: [lead generation, lead gen, onboarding lead]
+  manager_titles:
+    keep: [associate product manager, product manager, implementation manager, customer success manager, account manager, partner manager, partnerships manager, product operations manager, assistant manager, manager in training, management trainee]
+    drop_when:
+      level_titles: [senior manager, engineering manager, general manager, "manager, "]
+      duties_include: [direct reports, manage a team, lead a team of, people management, hire and develop]
+    keep_takes_precedence: true
+
+
+# 6 ── WORK AUTHORIZATION (US jobs; Canadian jobs need no visa) ────
+# Year one is OPT (no employer sponsorship needed; job must relate to the
+# degree). After that, TN. Only postings he can never take are dropped.
+work_authorization:
   drop_terms:
     - must be a U.S. citizen
     - U.S. citizenship required
     - US citizenship required
+    - U.S. citizens only
     - security clearance
     - clearance required
     - active clearance
+    - Top Secret
+    - TS/SCI
+    - secret clearance
     - U.S. persons
     - ITAR
     - export control
-  bonus_terms: [visa sponsorship available, we sponsor, H-1B, TN visa, OPT, CPT, international candidates]
-  bonus: bump
-  silent: keep_and_flag        # "sponsorship unknown"
-  no_sponsorship:
-    terms: [no visa sponsorship, unable to sponsor, will not sponsor, without sponsorship now or in the future]
-    rule: keep_only_if_tn_path_is_likely_or_possible   # see tn_alignment
-    penalty: -heavy
-    flag: "TN possible — verify"
-    note: Revisit after attorney / NYU Office of Global Services check. Loosen if TN is realistic, else drop all.
-
-  # v1.1: every US posting is mapped to the TN category it would most
-  # plausibly use, judged on DUTIES (not title) and on Login's degree.
-  # TN requires the degree in hand, so it only covers post-graduation starts.
+  no_sponsorship:                  # flag only
+    terms: [no visa sponsorship, unable to sponsor, will not sponsor, not able to sponsor, without sponsorship now or in the future, sponsorship is not available, does not sponsor]
+    flag: "No H-1B sponsorship — OPT/TN likely fine"
+  sponsorship_available_terms: [visa sponsorship available, we sponsor, H-1B, TN visa, OPT, CPT, international candidates]
+  # Shown in the Visa column for US jobs (information, never a drop).
   tn_alignment:
-    applies_to: US roles only
     categories:
       hotel_manager:
-        fit: likely_if_duties_match
-        credential: bachelor's in hotel or restaurant management (Login's hospitality degree is the closest match on the list — confirm the degree title satisfies it)
+        credential: bachelor's in hotel or restaurant management (hospitality degree is the closest match — confirm)
         employer_must_be: hotel or lodging facility (owner, operator, or hotel company)
         duties_signal: [hotel operations, oversee property, budgets, P&L, guest satisfaction, staff, rooms, front office, hotel general manager track]
         unclear: hotel asset management, revenue management and corporate roles — not clearly covered; flag "verify"
         excluded: restaurant manager roles
       management_consultant:
-        fit: possible
         credential: any bachelor's degree
         duties_signal: [advisory, recommendations, client engagements, project-based, consulting]
-        best_for_lanes: [consulting, deployment roles at consulting-style firms]
-        caution: most scrutinized TN category — permanent in-house operating roles relabeled as consulting get denied
-      other_categories:
-        fit: unlikely
-        examples: [economist, computer systems analyst, graphic designer, urban planner, mathematician/statistician]
-        reason: degree does not match the required field
-    scoring:
-      likely: bump                 # e.g. hotel company role with on-property management duties
-      possible: mild
-      unlikely: 0
-      flag_if_unlikely: "TN unlikely — needs sponsorship or OPT"
+        caution: most scrutinized TN category — in-house roles relabeled as consulting get denied
+    scoring: {}
     timing_rule:
       us_role_starting_before_graduation: flag "TN not available before degree — needs other work authorization"
-    canadian_roles: no visa needed — flag "No visa needed", no score change (location tiers still rule)
-
-exclusions:
-  government_defense:
-    title_or_team_terms: [US Government, U.S. Government, Defense, Federal, Public Sector, National Security, Intelligence Community, DoD, Military, Government]
-    drop_defense_primary_companies: true
-    note: Palantir commercial roles (incl. Warp Speed) stay in; only gov/defense postings drop.
-  industries: []
-  companies: []
 
 
-# ═════════════════════════════════════════════════════════════
-# 2. SIGNALS (rule-based scoring)
-# ═════════════════════════════════════════════════════════════
+# 7 ── TECHNICAL ───────────────────────────────────────────────
+# Engineer/developer titles drop, except titles that are usually built on
+# AI / no-code tools. Those (and every other posting) then drop only if a
+# REQUIRED line demands coding with no non-coding alternative on that line.
+technical:
+  drop_titles: [engineer, engineering, developer, data scientist, machine learning, ml engineer, architect, devops, sre, programmer]
+  keep_titles: [gtm engineer, go to market engineer, solutions engineer, sales engineer, prompt engineer, solutions engineering, sales engineering]
+  required_drop:
+    languages: [Python, JavaScript, TypeScript, Java, C++, C#, Ruby, Scala, Rust, Kotlin, Swift, Golang, PHP]
+    phrases: [production code, production-quality code, write code, writing code, coding experience, programming experience, software development experience, software engineering experience, years of software engineering, build and train machine learning models, train machine learning models, building machine learning models, training ML models, building ML models]
+  # if any of these appears on the same line, the line offers a non-coding path → keep
+  ok_alternatives: [SQL, Excel, spreadsheets, Tableau, Power BI, Looker, no-code, low-code, Zapier, n8n, Clay, Airtable, AI tools, ChatGPT, LLMs, statistical packages, or equivalent]
 
-roles:
-  # v1.1: lanes are LABELS only. No title has to match a lane to pass.
-  # Each posting gets a role_type label so Login can filter in the sheet.
-  mode: label_only
-  lane_match_points: mild      # small tie-breaker, was the main ranking driver
-  role_type_labels: [Deployment, Product, Product Design, Workflow Automation, Strategy & Ops, Real Estate Data, Real Estate Finance, Hospitality, Consulting, Research, Analyst, Customer Success, Sales, Sales-adjacent, Other]
-  lanes:
-    deployment:
-      - deployment strategist
-      - forward deployed strategist
-      - forward deployed operator
-      - implementation manager
-      - implementation specialist
-      - implementation consultant
-      - solutions strategist
-      - solutions consultant
-      - customer deployment
-      - onboarding lead
-    product:
-      - associate product manager
-      - product manager
-      - product designer
-      - product analyst
-      - product operations
-    workflow_automation:
-      - ai operations
-      - ai implementation
-      - automation specialist
-      - automation strategist
-      - business systems analyst
-      - process automation
-      - workflow automation
-    strategy:
-      - strategy & operations
-      - strategy and operations
-      - bizops
-      - business operations
-      - founder's associate
-      - associate chief of staff
-      - ai strategy
-      - strategic projects
-    real_estate_data:          # bonus lane
-      titles: [data, research, strategy, analytics]
-      requires_company_sector: [proptech, real estate data, real estate technology]
-      bonus: bump
-  # v1.1: Login's fit rarely falls on the technical side, so engineering
-  # stays a HARD DROP by title. Sales roles are ones he qualifies for but
-  # prefers less: they pass, labeled Sales, and rank below equal matches.
-  drop_titles:
-    engineering:
-      rule: drop_any_title_containing_engineer   # incl. forward deployed, solutions, sales, GTM engineer
-      also: [developer, data scientist, machine learning, ml engineer, architect, devops, sre]
-  sales_titles:                # pass, labeled role_type "Sales", ranked lower
-    - account executive
-    - account manager
-    - business development
-    - business development representative
-    - sales development representative
-    - sdr
-    - bdr
-    - sales associate
-    - investment sales associate
-    - capital markets associate
-    - leasing associate
-  department_names_ignored: true   # Palantir files Deployment Strategist under "Business Development" — judge the title and duties, not the department
 
-description:
-  # v1.1: description signals are tie-breakers now; requirements_match ranks.
-  core_signals:
-    effect: mild
-    terms:
-      - inefficiencies
-      - workflows
-      - process improvement
-      - operationalize
-      - automate
-      - automation
-      - discovery
-      - define requirements
-      - data integration
-      - schemas
-      - data modeling
-      - prototype
-      - prototyping
-      - deploy
-      - outcomes
-      - partner with engineering
-      - work alongside engineers
-      - edge cases
-  customer_facing_neutral:     # never penalized
-    - client-facing
-    - customer-facing
-    - embed with customers
-    - stakeholder management
-    - onboarding
-  sales_flags:                 # v1.1: qualified but less preferred — label and rank lower, never drop
-    penalty_each: 0            # the ranking penalty lives in final_score.role_preference
-    label_if_count_at_least: 2     # → role_type "Sales-adjacent" (non-sales title, sales-heavy duties)
-    drop: false
-    terms: [quota, OTE, commission, prospecting, cold outreach, cold calling, closing deals, book of business, upsell targets, renewal targets, hunter, pipeline generation, revenue targets]
-  technical:
-    clean:                     # building with AI as your engineers fits here
-      - comfortable with SQL
-      - comfortable with Python
-      - technical aptitude
-      - familiarity with APIs
-      - low-code
-      - no-code
-      - AI tools
-    penalty:                   # v1.1: SQL = stretch (in progress); programming = gap
-      effect: -small
-      stretch_terms: [proficient in SQL, SQL required, advanced Excel]
-      gap_terms: [Python required, proficient in Python, programming experience required, experience with dbt, experience with Spark, scripting required]
-    drop:
-      - CS degree required
-      - computer science degree required
-      - years of software engineering
-      - production code
-      - system design
-      - build and train ML models
-      - train machine learning models
-  product_design_signals:      # own signal set for the product design lane
-    effect: mild
-    terms: [portfolio, interaction design, user research, Figma, prototyping, complex data, data-dense interfaces, workflow tools, internal tools]
-  sector_bonus:                # v1.1: lowered, tie-breakers
-    ai_data_automation: mild
-    real_estate_proptech_cre: bump
+# 8 ── CREDENTIALS ─────────────────────────────────────────────
+# A REQUIRED line that demands a credential Login doesn't have drops the
+# posting — unless the same line also accepts a bachelor's / his field /
+# "or equivalent", or calls it preferred.
+credentials:
+  drop_required: [MBA, JD, Juris Doctor, law degree, "Master's degree", "Masters degree", "Master of", PhD, Ph.D., doctorate, CPA, bar admission, admitted to the bar, licensed attorney, registered nurse, RN license, PE license, professional engineer]
+  unrelated_degree_fields: [computer science, computer engineering, software engineering, electrical engineering, mechanical engineering, engineering, nursing, medicine, pharmacy, architecture, physics, chemistry, biology, mathematics, statistics, data science]
+  softeners: [or equivalent, equivalent experience, or related experience, preferred, a plus, nice to have, any field, any discipline]
 
-company:
-  stage: neutral
-  drop_if: [headcount_under_10, pre_seed]
-  anchors:                     # always surface if gates pass, regardless of score
-    - WithCoverage
-    - Palantir
-  upside_signals:
-    hiring_velocity: open_role_count_growth_on_own_board   # measured by the scraper
-    recent_funding_months: 18
-    top_tier_investors: [Sequoia, a16z, Andreessen Horowitz, Founders Fund, Thrive Capital, Y Combinator]
-    category_leader: manual    # set by hand, via anchors
-  scoring:
-    anchor_or_strong_upside: big_bump
-    established_no_momentum: 0
-    small_no_signals: -mild
 
+# 9 ── START DATE ──────────────────────────────────────────────
 timing:
-  rank:
-    post_grad_full_time: 0           # summer/fall 2027 — ideal
-    january_part_time: -small
-    january_full_time: -large
-  drop: degree_required_before_start_if_start_before_2027-05
-  flag_january_flexibility_terms: [flexible schedule, students welcome, part-time available, finish your degree]
+  drop_start_before_graduation: true
+  flag_start_after: "Starts after Aug 1 — check OPT timing"
 
-freshness:                     # live feeds — tracking, not filtering
-  track_first_seen: true
-  flag_new_since_last_check: true
+
+# ── FACTS SHOWN IN THE SHEET (never drop anything) ─────────────
+fields:                     # Field column: first match wins (title, then description)
+  Real Estate / Proptech: [real estate, proptech, property, properties, commercial real estate, CRE, REIT, multifamily, leasing, brokerage, mortgage, construction, housing, landlord, tenant]
+  Hospitality / Travel: [hospitality, hotel, hotels, lodging, resort, travel industry, travel company, airline, tourism, restaurant, guest experience, short-term rental]
+  AI / Data / Automation: [AI, artificial intelligence, machine learning, LLM, automation, data platform, analytics, SaaS, software]
+  Consulting: [consulting, consultant, advisory]
+  Finance: [finance, investment, investing, private equity, banking, capital markets, fintech, asset management, underwriting]
+
+freshness:
   apply_soon_days: 7
-  closed_detection: mark_closed_when_removed_from_source
   evergreen_after_days: 60
-  initial_backfill_max_age_days: 30
-
-
-# ═════════════════════════════════════════════════════════════
-# 2b. REQUIREMENTS MATCH (v1.1 — the main ranking driver)
-# ═════════════════════════════════════════════════════════════
-
-requirements_match:
-  extract_from: [required_text, preferred_text]   # split each into individual requirements
-  classify_each_against: candidate_profile.skills
-  classes:
-    met: Login clearly has it (skills.have, or experience that proves it)
-    stretch: learnable fast or partially held (skills.stretch) — e.g. SQL, Figma
-    gap: hard to close before applying (skills.gap) — e.g. CS degree, production coding, years in a specific role
-  scoring:                    # 0–100 match score
-    required_met: 10          # points per required item met
-    required_stretch: 5
-    required_gap: 0
-    preferred_met: 4
-    preferred_stretch: 2
-    normalize: percent_of_max_possible
-  hard_gap_drop:              # any of these as a REQUIRED item drops the posting
-    - CS / computer science degree required
-    - writing production code
-    - building or training ML models
-    - years of software engineering
-    - active security clearance
-  field_match_offset: carried over from experience.field_match_offset
-  output_summary: "Met 6/8 · Stretch: SQL, Figma · Gap: none"
-
-
-  # v1.1: common posting phrases → Login's profile, so the matcher
-  # recognizes requirements he already meets even when worded differently.
-  requirement_synonyms:
-    met:
-      "bachelor's degree in business, finance, real estate, hospitality or related": degree (graduating May 2027)
-      "real estate license": NY real estate salesperson license
-      "knowledge of commercial real estate / CRE markets": two summers in NYC CRE investment sales
-      "market research / market analysis": CRE market research, territory analysis
-      "lead generation / owner outreach / prospecting experience": CRE prospecting (role may be Sales-adjacent)
-      "client-facing / stakeholder communication": client-facing work, consulting practicum
-      "process improvement / automation": built Territory Intelligence and C.R.E.D.
-      "data analysis / working with large datasets": public-data and property-records systems
-      "GIS / mapping": Territory Intelligence
-      "product sense / defining requirements": designed and scoped both systems
-      "experience with AI tools / LLMs": builds with AI daily
-      "startup experience / comfortable with ambiguity": startup community, Founder Institute
-      "hospitality / hotel industry knowledge": hospitality degree, hotel real estate concentration
-      "strong academic record": 4.0 GPA
-    stretch:
-      "underwriting / financial modeling": coursework only — confirm comfort level
-      "Excel proficiency / Argus": confirm
-      "SQL": in progress
-      "Figma": in progress
-      "dashboards / Tableau / Power BI": confirm
-      "CRM (Salesforce, HubSpot)": confirm
-
-
-# ═════════════════════════════════════════════════════════════
-# 2d. DISCOVERY (v1.1 — what the pipeline goes looking for)
-# ═════════════════════════════════════════════════════════════
-# Titles no longer gate, but search keywords and the watchlist still
-# decide what flows in. These lanes are added because Login's experience
-# and degree line up with their typical requirements. Salary and the
-# other gates still apply — many of these pay near the $120K
-# extra-comp floor, so expect some to drop on salary.
-
-discovery:
-  original_lanes: roles.lanes          # still searched
-  expanded_lanes:
-    real_estate_finance:
-      titles: [acquisitions analyst, investment analyst, real estate analyst, underwriting analyst, asset management analyst, capital markets analyst, real estate associate, development analyst, portfolio analyst]
-      employers: [REITs, real estate private equity, real estate investment managers, lenders and debt funds, developers]
-    real_estate_data_and_proptech:
-      titles: [research analyst, data analyst, market analyst, solutions consultant, implementation consultant, customer success, product analyst, operations associate, business analyst]
-      employers: [CRE data platforms, proptech SaaS, property management software, construction tech, real estate marketplaces]
-    hospitality:
-      titles: [hotel asset management analyst, hospitality investment analyst, revenue strategy analyst, hospitality consulting analyst, hotel development analyst, commercial strategy analyst, hotel operations strategy, hotel management development program, hotel innovation / technology associate]
-      tn_note: hotel-company roles with management duties are the strongest TN Hotel Manager fit; on-property management tracks often pay below the salary gate — watch the Dropped tab
-      employers: [hotel owners and REITs, hotel asset managers, hospitality advisory firms, hospitality tech (revenue management, data, booking platforms)]
-    consulting:
-      titles: [business analyst, consulting analyst, associate consultant, real estate advisory analyst, strategy analyst, transformation analyst, AI consulting analyst]
-      employers: [management consulting firms, Big 4 real estate and deal advisory, AI implementation consultancies, CRE services firms' advisory and technology arms]
-    sales_less_preferred:          # qualified, ranked below equal matches
-      titles: [account executive, business development associate, investment sales associate, capital markets associate, partnerships associate, account manager]
-      employers: [proptech and CRE data platforms, AI startups selling to real estate, CRE services firms]
-      note: CRE brokerage seats are mostly commission — the salary gate (OTE never counts as base) drops most of them.
-    operations_and_bizops:
-      titles: [operations associate, business operations analyst, revenue operations analyst, strategy and operations associate, special projects associate, chief of staff office associate]
-      employers: [venture-backed AI and data startups, proptech]
-    rotational_and_new_grad_programs:
-      titles: [rotational program, analyst program, new grad program, leadership development program, associate program]
-      employers: [CRE services firms, large tech, real estate investment managers, consulting firms]
-  watchlist_seed_mix:              # rough share of the seeded watchlist
-    ai_data_automation: 35%
-    proptech_and_cre_data: 25%
-    real_estate_finance: 10%   # mostly analyst titles — lowered
-    hospitality_and_hospitality_tech: 10%
-    consulting_and_advisory: 15%
-    other_fit: 5%
-  search_queries: generate titles × seniority words × target cities for every lane above
-
-
-# ═════════════════════════════════════════════════════════════
-# 2c. FINAL SCORE (v1.1)
-# ═════════════════════════════════════════════════════════════
-
-final_score:
-  weights:
-    requirements_match: 0.70   # main driver
-    experience_fit: 0.15       # years asked vs new grad, after penalties/offsets
-    signals: 0.15              # location tier, timing, sector, company upside, lane, salary bump
-  role_preference:             # applied after weighting, in score points
-    Sales: -10                 # qualified but less preferred
-    Sales-adjacent: -5
-    analyst_titles: -10        # any title containing "analyst" — Login doesn't see himself in these roles; kept, ranked lower
-    everything_else: 0
-  anchors_always_shown: true
-
-
-# ═════════════════════════════════════════════════════════════
-# 3. AI REVIEW
-# ═════════════════════════════════════════════════════════════
-
-ai_review:
-  input: [north_star, candidate_profile, posting, rule_flags, requirements_match]
-  outputs:
-    fit_for_employer: 0-100    # v1.1 PRIMARY — confirms/corrects requirements_match
-    fit_for_me: 0-100          # v1.1 secondary — shown as info, does not gate or tier
-    role_type: one of roles.role_type_labels
-    reason: one_line           # e.g. "meets 7/8, SQL stretch; deployment-style role"
-    sales_in_disguise: bool    # label only
-    tn_category_guess: string  # only when no-sponsorship rule applies
-  calibration:
-    label_first_n: 30
-    then: tune weights and reviewer prompt to match your labels
-
-candidate_profile:
-  # v1.1: the filter now asks "is Login qualified?" first. Ranking is only
-  # as good as this list — Login should review and extend it.
-  summary: >
-    Senior at NYU (BS Hospitality, Travel & Tourism Management; concentration
-    in Hotel Real Estate Finance and Development; 4.0; graduating May 2027).
-    Two summers at a NYC commercial real estate investment sales firm; active
-    NY real estate salesperson license; startup ecosystem experience. Built
-    Territory Intelligence (GIS public-data territory platform) and C.R.E.D.
-    (property records extraction/resolution) and designed their interfaces.
-    Builds with AI as his engineers; does not code from scratch or train models.
-  skills:
-    have:
-      - commercial real estate (investment sales, prospecting, owner outreach, market research)
-      - NY real estate salesperson license
-      - real estate finance and investment analysis (coursework: investment analysis & financing, asset management, hotel ownership)
-      - building data systems with AI tools (public-data ingestion, records extraction and entity resolution)
-      - GIS / mapping of public data
-      - schema design, data modeling, edge-case definition
-      - workflow automation and process improvement
-      - product thinking — defining what should be built
-      - interface design for internal / data-heavy tools
-      - client-facing communication and relationship building; can sell
-      - consulting project work (client engagement, strategy recommendations)
-      - startup community building and operations (co-founded a ~150-member student builders community)
-      - strong academics (4.0 GPA)
-    stretch:                   # learnable fast or in progress
-      - SQL / writing queries by hand (in progress)
-      - Figma (in progress)
-      - Excel / financial modeling   # confirm level
-      - dashboards / BI tools        # confirm
-    gap:
-      - Python or other programming as a required skill
-      - coding from scratch / production code
-      - building or training AI agents or ML models
-      - CS or engineering degree
-      - multiple years of full-time experience in a specific role
-
-
-# ═════════════════════════════════════════════════════════════
-# 4. TIERS
-# ═════════════════════════════════════════════════════════════
-
-tiers:                         # v1.1: tiered by qualification, not preference
-  strong:       {final_score: ">= 70", no_required_gaps: true}
-  worth_a_look: {final_score: ">= 50"}
-  stored_hidden: everything_else_that_passed_gates
-  anchors_always_shown: true
-  note: fit_for_me and role_type are shown as columns for Login to filter on; they never hide a posting.

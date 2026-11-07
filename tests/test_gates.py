@@ -1,3 +1,4 @@
+"""The nine must-haves (criteria.yaml v2)."""
 from conftest import PAY_OK
 
 
@@ -8,90 +9,118 @@ def gates_of(ev):
 def test_clean_posting_passes(evaluate):
     ev = evaluate(lines=[PAY_OK])
     assert ev.passed, ev.failures
+    assert ev.visa.startswith("OPT year 1")
 
 
+# 1. employment type
 def test_employment_type(evaluate):
     assert "employment_type" in gates_of(evaluate(employment="Internship", lines=[PAY_OK]))
     assert "employment_type" in gates_of(evaluate(title="Analyst, Internship", lines=[PAY_OK]))
     assert "employment_type" in gates_of(evaluate(employment="Contract", lines=[PAY_OK]))
-    short = evaluate(title="Builders Fellowship", employment=None,
-                     lines=[PAY_OK, "The fellowship runs for 12 weeks."])
+    assert "employment_type" in gates_of(evaluate(employment="Part-time", lines=[PAY_OK]))
+    short = evaluate(title="Builders Fellowship", employment=None, lines=[PAY_OK, "The fellowship runs for 12 weeks."])
     assert "employment_type" in gates_of(short)
-    assert evaluate(title="Contract Operations", lines=[PAY_OK]).passed  # not a contract job
+    assert evaluate(title="Contract Operations", lines=[PAY_OK]).passed   # not a contract job
 
 
-def test_salary_gate(evaluate):
-    assert evaluate(lines=["Salary: $140,000 - $140,000/year"]).passed
-    assert "salary" in gates_of(evaluate(lines=["Salary: $120,000 - $140,000/year"]))  # no extra comp
-    assert evaluate(lines=["Salary: $120,000 - $140,000/year. Plus annual bonus."]).passed
-    assert "salary" in gates_of(evaluate(lines=["Salary: $100,000 - $130,000/year. RSU grant."]))
+# 2. location
+def test_location(evaluate):
+    assert "location" in gates_of(evaluate(locations=["Stamford, CT"], lines=[PAY_OK]))
+    assert "location" in gates_of(evaluate(locations=["Richmond, VA"], lines=[PAY_OK]))
+    assert "location" in gates_of(evaluate(workplace="remote", lines=[PAY_OK]))
+    multi = evaluate(locations=["NYC, SF, or Remote"], workplace=None, lines=[PAY_OK])
+    assert multi.passed and multi.posting.location.best.region == "NYC"
+    assert evaluate(locations=["Austin, TX"], lines=[PAY_OK]).passed       # tier 3 still passes
+
+
+# 3. salary
+def test_salary(evaluate):
+    assert evaluate(lines=["Salary: $120,000 - $130,000/year"]).passed
+    low = evaluate(lines=["Salary: $100,000 - $110,000/year"])
+    assert low.passed and "Low base — check incentives" in low.flags
+    assert "salary" in gates_of(evaluate(lines=["Salary: $80,000 - $110,000/year. Generous equity."]))
     unknown = evaluate(lines=["Great benefits."])
     assert unknown.passed and "Salary unknown" in unknown.flags
+    ote = evaluate(lines=["OTE: $150,000 - $200,000 with uncapped commission."])
+    assert ote.passed and "Salary unknown (OTE only)" in ote.flags
+    ca = evaluate(locations=["Toronto, ON"], lines=["Salary $125,000 - $135,000 per year"])
+    assert ca.passed and "Low base — check incentives" in ca.flags     # C$ between 120K and 140K
 
 
+# 4. experience
+def test_experience(evaluate):
+    assert "experience" in gates_of(evaluate(lines=["## Requirements", "- 3+ years of experience in sales", PAY_OK]))
+    assert "experience" in gates_of(evaluate(lines=["## Nice to have", "- 3-5 years of experience", PAY_OK]))
+    assert evaluate(lines=["## Requirements", "- 2–4 years of experience in operations", PAY_OK]).passed
+    assert "experience" in gates_of(evaluate(lines=["## Requirements", "- At least three years of experience", PAY_OK]))
+
+
+# 5. seniority
 def test_seniority(evaluate):
-    assert "seniority" in gates_of(evaluate(title="Senior Analyst", lines=[PAY_OK]))
-    assert "seniority" in gates_of(evaluate(title="Sr. Associate", lines=[PAY_OK]))
-    assert "seniority" in gates_of(evaluate(title="Head of Growth", lines=[PAY_OK]))
-    assert "seniority" not in gates_of(evaluate(title="AVP Growth Partner", lines=[PAY_OK]))  # whole words only
-    assert evaluate(title="Account Executive", lines=[PAY_OK]).passed       # sales title wins
-    assert evaluate(title="Product Manager, Growth", lines=[PAY_OK]).passed  # keep takes precedence
-    assert "seniority" in gates_of(evaluate(title="Manager, Deal Advisory", lines=[PAY_OK]))
-    assert "seniority" in gates_of(evaluate(title="Manager", lines=[PAY_OK], sectors=["consulting"]))
+    for title in ("Senior Analyst", "Sr. Associate", "Head of Growth", "VP, Partnerships", "Director of Ops",
+                  "Lead Analyst", "Team Lead, Operations", "Analyst III", "Senior Manager, Strategy"):
+        assert "seniority" in gates_of(evaluate(title=title, lines=[PAY_OK])), title
+    for title in ("Account Executive", "Product Manager, Growth", "Lead Generation Specialist",
+                  "Onboarding Lead", "Chief of Staff", "Analyst II", "Associate Consultant",
+                  "Product Designer, New Grad - 2027"):
+        assert "seniority" not in gates_of(evaluate(title=title, lines=[PAY_OK])), title
     assert "seniority" in gates_of(evaluate(title="Operations Manager",
                                             lines=[PAY_OK, "You will manage a team of five."]))
 
 
-def test_experience(evaluate):
-    assert "experience" in gates_of(evaluate(lines=["## Requirements", "- 3+ years of experience in sales", PAY_OK]))
-    assert "experience" in gates_of(evaluate(lines=["## Nice to have", "- 3-5 years of experience", PAY_OK]))
-    ok = evaluate(lines=["## Requirements", "- 2–4 years of experience in operations", PAY_OK])
-    assert ok.passed and ok.posting.experience.max_years("required") == 2
-    assert evaluate(lines=["## Requirements", "- At least one year of experience", PAY_OK]).passed
-    assert "experience" in gates_of(evaluate(lines=["## Requirements", "- At least three years of experience", PAY_OK]))
-
-
-def test_location(evaluate):
-    assert "location" in gates_of(evaluate(locations=["Stamford, CT"], lines=[PAY_OK]))
-    assert "location" in gates_of(evaluate(locations=["Richmond, VA"], lines=[PAY_OK]))
-    assert "work_arrangement" in gates_of(evaluate(workplace="remote", lines=[PAY_OK]))
-    multi = evaluate(locations=["NYC, SF, or Remote"], workplace=None, lines=[PAY_OK])
-    assert multi.passed and multi.posting.location.best.region == "NYC"
-
-
+# 6. work authorization
 def test_work_authorization(evaluate):
-    assert "work_authorization" in gates_of(evaluate(lines=[PAY_OK, "U.S. Person Required"]))
-    assert "work_authorization" in gates_of(evaluate(lines=[PAY_OK, "Must be able to obtain a security clearance."]))
+    for line in ("U.S. Person Required", "Must be able to obtain a security clearance.",
+                 "Active U.S. DoD Top Secret clearance", "Must be a U.S. citizen"):
+        assert "work_authorization" in gates_of(evaluate(lines=[PAY_OK, line])), line
     nosp = evaluate(lines=[PAY_OK, "We are unable to sponsor visas."])
-    assert "work_authorization" in gates_of(nosp)  # TN unlikely for a generic role
-    canada = evaluate(locations=["Toronto, ON"], lines=["Salary $170,000 - $180,000", "U.S. Person Required"])
-    assert canada.passed and "No visa needed" in canada.flags
-    opt = evaluate(lines=[PAY_OK, "You may opt out of marketing emails."])
-    assert opt.sponsorship == "unknown"  # 'opt out' is not OPT
+    assert nosp.passed and "No H-1B sponsorship — OPT/TN likely fine" in nosp.flags
+    canada = evaluate(locations=["Toronto, ON"], lines=["Salary $150,000 - $170,000", "U.S. Person Required"])
+    assert canada.passed and canada.visa == "No visa needed (Canada)"
 
 
-def test_gov_defense_and_engineering(evaluate):
-    assert "gov_defense" in gates_of(evaluate(title="Deployment Strategist - US Government", lines=[PAY_OK]))
-    assert "gov_defense" in gates_of(evaluate(title="Analyst", team="Public Sector", lines=[PAY_OK]))
-    assert "engineering_title" in gates_of(evaluate(title="Forward Deployed Engineer", lines=[PAY_OK]))
-    assert "engineering_title" in gates_of(evaluate(title="Solutions Architect", lines=[PAY_OK]))
-    assert "gov_defense" in gates_of(evaluate(lines=[PAY_OK], defense_primary=True))
+# 7. technical
+def test_technical(evaluate):
+    for title in ("Software Engineer", "Forward Deployed Engineer", "Data Scientist", "Solutions Architect",
+                  "Frontend Developer"):
+        assert "technical" in gates_of(evaluate(title=title, lines=[PAY_OK])), title
+    for title in ("GTM Engineer", "Solutions Engineer", "Sales Engineer", "Prompt Engineer"):
+        assert evaluate(title=title, lines=[PAY_OK]).passed, title
+    req = ["## Requirements"]
+    assert "technical" in gates_of(evaluate(lines=[PAY_OK] + req + ["- Proficiency in Python"]))
+    assert "technical" in gates_of(evaluate(title="GTM Engineer", lines=[PAY_OK] + req + ["- Experience writing production code"]))
+    # a non-coding alternative on the line keeps it (Palantir Deployment Strategist wording)
+    assert evaluate(lines=[PAY_OK] + req + [
+        "- Experience with programming, scripting or statistical packages (e.g. Python, R, Matlab, SQL)"]).passed
+    assert evaluate(lines=[PAY_OK, "## Nice to have", "- Python"]).passed          # preferred only
+    assert evaluate(lines=[PAY_OK] + req + ["- Familiarity with APIs and AI tools"]).passed
 
 
-def test_technical_and_hard_gap(evaluate):
-    assert "technical" in gates_of(evaluate(lines=[PAY_OK, "You will write production code daily."]))
-    hg = evaluate(lines=[PAY_OK, "## Requirements", "- Bachelor's degree in Computer Science"])
-    assert "hard_gap" in gates_of(hg)
-    ok = evaluate(lines=[PAY_OK, "## Requirements", "- Bachelor's degree in Business, Economics, Computer Science or related"])
-    assert "hard_gap" not in gates_of(ok)
+# 8. credentials
+def test_credentials(evaluate):
+    req = [PAY_OK, "## Requirements"]
+    for line in ("- JD and active bar membership", "- MBA required", "- CPA license",
+                 "- Bachelor's degree in Computer Science or related field"):
+        assert "credentials" in gates_of(evaluate(lines=req + [line])), line
+    for line in ("- Bachelor's degree required; MBA preferred",
+                 "- Bachelor's degree in Business, Economics, Computer Science or related field",
+                 "- Degree in Engineering or equivalent experience",
+                 "- Undergraduate degree, with a preference for JD"):
+        assert "credentials" not in gates_of(evaluate(lines=req + [line])), line
 
 
-def test_timing(evaluate):
+# 9. start date
+def test_start_date(evaluate):
+    assert "start_date" in gates_of(evaluate(lines=[PAY_OK, "Start date: January 2027"]))
     early = evaluate(lines=[PAY_OK, "## Requirements", "- Must have graduated between May 2025 and June 2026"])
-    assert "timing" in gates_of(early)
-    jan = evaluate(lines=[PAY_OK, "Start date: January 2027", "Bachelor's degree required"])
-    assert "timing" in gates_of(jan)
+    assert "start_date" in gates_of(early)
+    assert evaluate(lines=[PAY_OK, "## Requirements", "- Must be graduating in Spring 2027"]).passed
+    late = evaluate(lines=[PAY_OK, "Program start date: September 2027"])
+    assert late.passed and "Starts after Aug 1 — check OPT timing" in late.flags
+    assert "Starts after Aug 1 — check OPT timing" not in evaluate(lines=[PAY_OK, "Start date: June 2027"]).flags
 
 
-def test_company(evaluate):
-    assert "company" in gates_of(evaluate(lines=[PAY_OK], headcount=5))
+def test_field_column(evaluate):
+    assert evaluate(title="Acquisitions Associate, Commercial Real Estate", lines=[PAY_OK]).field == "Real Estate / Proptech"
+    assert evaluate(title="Hotel Operations Associate", lines=[PAY_OK]).field == "Hospitality / Travel"
+    assert evaluate(title="Office Coordinator", lines=[PAY_OK]).field == "Other"

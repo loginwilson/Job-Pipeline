@@ -1,17 +1,17 @@
 """Google Sheet sync — the Sheet is a view of SQLite.
 
-No scoring: the pipeline applies the drop rules and records facts; the owner
-decides each posting with the Decision column (Apply / Wait / Veto).
+No scoring: the pipeline applies the must-have rules and records facts; the
+owner decides each posting with the Decision column (Veto / Apply / All-in).
 
 Per run: ONE read (values of the tabs) + ONE spreadsheets.batchUpdate (all
 writes and formatting). Tabs are only created on the first run.
 
 Pipeline tab rules:
   * upsert by Posting ID (hidden last column); pipeline columns are rewritten
-    from the DB; owner columns (Decision, Status, Effort, Notes) are found by
+    from the DB; owner columns (Decision, Status, Notes) are found by
     header name and always carried over;
   * a row the owner touched is never deleted, even if it left the DB view;
-  * sort: undecided first, then Apply, Wait, Veto; closed postings at the
+  * sort: undecided first, then All-in, Apply, Veto; closed postings at the
     bottom; newest first within each group.
 """
 from __future__ import annotations
@@ -26,16 +26,15 @@ from ..config import Criteria
 from ..store.db import Store
 
 PIPELINE = "Pipeline"
-HEADERS = ["Decision", "Company", "Role", "Role type", "Requirements", "Location", "Salary",
-           "Extra comp", "Experience ask", "Flags", "First seen", "Posted",
-           "Status", "Effort", "Notes", "Posting ID"]
-OWNER_HEADERS = ("Decision", "Status", "Effort", "Notes")
+HEADERS = ["Decision", "Company", "Role", "Field", "Location", "Salary", "Extra comp",
+           "Experience ask", "Visa", "Flags", "Posted", "First seen", "Source",
+           "Status", "Notes", "Posting ID"]
+OWNER_HEADERS = ("Decision", "Status", "Notes")
 OWNER_COLS = tuple(HEADERS.index(h) for h in OWNER_HEADERS)
 ID_COL = HEADERS.index("Posting ID")
-DECISION_OPTIONS = ["Apply", "Wait", "Veto"]
-STATUS_OPTIONS = ["Drafting", "Applied", "Interviewing", "Offer", "Rejected", "Withdrawn"]
-EFFORT_OPTIONS = ["Deep", "Standard", "Quick"]
-DECISION_ORDER = {"": 0, "Apply": 1, "Wait": 2, "Veto": 3}
+DECISION_OPTIONS = ["Veto", "Apply", "All-in"]
+STATUS_OPTIONS = ["Drafting", "Applied", "Networking", "Interviewing", "Offer", "Rejected", "Withdrawn"]
+DECISION_ORDER = {"": 0, "All-in": 1, "Apply": 2, "Veto": 3}
 GREEN = {"red": 0.85, "green": 0.94, "blue": 0.83}
 GRAY = {"red": 0.6, "green": 0.6, "blue": 0.6}
 
@@ -104,14 +103,13 @@ def build_pipeline_rows(store: Store, criteria: Criteria, ts: str) -> list[dict]
         if r["closed_at"]:
             flags.append("Closed")
         cells = {
-            "Company": ("★ " if d.get("anchor") else "") + r["company"],
+            "Company": r["company"],
             "Role": hyperlink(r["url"], r["title"]),
-            "Role type": r["role_type"] or "",
-            "Requirements": " · ".join(x for x in (r["requirements_summary"], r["tn_label"]) if x),
-            "Location": d.get("location", ""), "Salary": d.get("salary", ""),
+            "Field": d.get("field", ""), "Location": d.get("location", ""), "Salary": d.get("salary", ""),
             "Extra comp": d.get("extra_comp", ""), "Experience ask": d.get("experience", ""),
-            "Flags": ", ".join(dict.fromkeys(flags)),
-            "First seen": _date(r["first_seen"]), "Posted": _date(r["posted_at"]),
+            "Visa": d.get("visa", ""), "Flags": ", ".join(dict.fromkeys(flags)),
+            "Posted": _date(r["posted_at"]), "First seen": _date(r["first_seen"]),
+            "Source": d.get("source", ""),
         }
         rows.append({"posting_id": r["posting_id"], "closed": bool(r["closed_at"]),
                      "first_seen": r["first_seen"], "cells": cells})
@@ -197,7 +195,6 @@ def pipeline_requests(meta: dict, existing: list[list[str]], store: Store, crite
             "fields": "userEnteredFormat.textFormat.bold"}},
         _validation(sid, col["Decision"], DECISION_OPTIONS, need_rows),
         _validation(sid, col["Status"], STATUS_OPTIONS, need_rows),
-        _validation(sid, col["Effort"], EFFORT_OPTIONS, need_rows),
         {"setBasicFilter": {"filter": {"range": {
             "sheetId": sid, "startRowIndex": 0, "endRowIndex": len(grid),
             "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}}}},
@@ -210,7 +207,7 @@ def pipeline_requests(meta: dict, existing: list[list[str]], store: Store, crite
         flags, dec = _col_letter(col["Flags"]), _col_letter(col["Decision"])
         rules = [
             (f'=OR(REGEXMATCH(${flags}2,"Closed"),${dec}2="Veto")', {"textFormat": {"foregroundColor": GRAY}}),
-            (f'=${dec}2="Apply"', {"backgroundColor": GREEN}),
+            (f'=${dec}2="All-in"', {"backgroundColor": GREEN}),
         ]
         for i, (formula, fmt) in enumerate(rules):
             requests.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [full], "booleanRule": {

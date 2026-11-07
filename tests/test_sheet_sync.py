@@ -31,8 +31,7 @@ def run_once(store, backend, company, payload, criteria, ts):
     return sync_pipeline(backend, store, criteria, ts)
 
 
-DEC, STATUS, EFFORT, NOTES, FLAGS, ROLE = (H.index(x) for x in
-                                          ("Decision", "Status", "Effort", "Notes", "Flags", "Role"))
+DEC, STATUS, NOTES, FLAGS, ROLE = (H.index(x) for x in ("Decision", "Status", "Notes", "Flags", "Role"))
 
 
 def rows_by_id(backend):
@@ -44,24 +43,23 @@ def test_owner_columns_survive_second_run(criteria, palantir, payload):
     store, sheet = Store(":memory:"), FakeBackend()
     run_once(store, sheet, palantir, payload, criteria, T1)
     header, rows = rows_by_id(sheet)
-    assert header == HEADERS and len(rows) == 6
+    assert header == HEADERS and len(rows) == 8
     assert all("New" in r[FLAGS] for r in rows.values())
 
     # owner fills Status / Effort / Notes on one row
     grid_row = next(i for i, r in enumerate(sheet.read([PIPELINE])[PIPELINE]) if "Deployment Strategist" in r[ROLE:ROLE + 1])
-    sheet.set_cell(PIPELINE, grid_row, DEC, "Apply")
-    sheet.set_cell(PIPELINE, grid_row, STATUS, "Drafting")
-    sheet.set_cell(PIPELINE, grid_row, EFFORT, "Deep")
-    sheet.set_cell(PIPELINE, grid_row, NOTES, "Ask about Warp Speed")
+    sheet.set_cell(PIPELINE, grid_row, DEC, "All-in")
+    sheet.set_cell(PIPELINE, grid_row, STATUS, "Networking")
+    sheet.set_cell(PIPELINE, grid_row, NOTES, "Coffee chat with DS team")
     pid = sheet.read([PIPELINE])[PIPELINE][grid_row][ID_COL]
 
     calls_before = len(sheet.calls)
     run_once(store, sheet, palantir, payload, criteria, T2)
     assert len(sheet.calls) == calls_before + 1          # one batch_update per run
     _, rows = rows_by_id(sheet)
-    assert [rows[pid][i] for i in (DEC, STATUS, EFFORT, NOTES)] == ["Apply", "Drafting", "Deep", "Ask about Warp Speed"]
+    assert [rows[pid][i] for i in (DEC, STATUS, NOTES)] == ["All-in", "Networking", "Coffee chat with DS team"]
     assert not any("New" in r[FLAGS].split(", ") for r in rows.values())   # no longer new
-    assert len(rows) == 6                                   # no duplicate rows
+    assert len(rows) == 8                                   # no duplicate rows
 
 
 def test_hyperlinks_and_formatting(criteria, palantir, payload):
@@ -118,27 +116,29 @@ def test_sync_all_tabs_one_write(criteria, palantir, payload):
     store_evaluations(store, palantir, evals, T1, criteria)
     store.board_ok("Palantir", "lever", len(evals), T1)
     store.record_run(started_at=T1, finished_at=T1, boards_polled=1, postings_seen=309, new=309,
-                     passed=6, errors=0)
+                     passed=8, errors=0)
     store.commit()
     sync_all(sheet, store, criteria, T1)
     assert len(sheet.calls) == 1
     data = sheet.read(ALL_TABS)
-    assert data["Dropped"][0] == ["Company", "Role", "Gate", "Matched text", "Date"] and len(data["Dropped"]) == 304
-    assert data["Funnel"][1][1:] == ["1", "309", "309", "6", "303", "0"]
+    assert data["Dropped"][0] == ["Company", "Role", "Gate", "Matched text", "Date"] and len(data["Dropped"]) == 302
+    assert data["Funnel"][1][1:] == ["1", "309", "309", "8", "301", "0"]
     assert data["Board health"][1][-1] == "OK"
     pipe = data["Pipeline"]
     assert pipe[0] == H and "Tier" not in pipe[0] and "Score" not in pipe[0]
+    assert all(r[H.index("Field")] for r in pipe[1:]) and all(r[H.index("Source")] == "Lever" for r in pipe[1:])
 
 
 def test_decision_sorting_and_veto(criteria, palantir, payload):
     store, sheet = Store(":memory:"), FakeBackend()
     run_once(store, sheet, palantir, payload, criteria, T1)
     rows = sheet.read([PIPELINE])[PIPELINE]
-    vetoed, applied = rows[1][ID_COL], rows[2][ID_COL]
+    vetoed, applied, allin = rows[1][ID_COL], rows[2][ID_COL], rows[3][ID_COL]
     sheet.set_cell(PIPELINE, 1, DEC, "Veto")
     sheet.set_cell(PIPELINE, 2, DEC, "Apply")
+    sheet.set_cell(PIPELINE, 3, DEC, "All-in")
     run_once(store, sheet, palantir, payload, criteria, T2)
     order = [r[ID_COL] for r in sheet.read([PIPELINE])[PIPELINE][1:]]
     decisions = [r[DEC] if len(r) > DEC else "" for r in sheet.read([PIPELINE])[PIPELINE][1:]]
-    assert order[-1] == vetoed and applied in order
-    assert decisions[:4] == ["", "", "", ""] and decisions[4:] == ["Apply", "Veto"]   # undecided first
+    assert order[-1] == vetoed and order[-3] == allin and order[-2] == applied
+    assert decisions == [""] * 5 + ["All-in", "Apply", "Veto"]   # undecided first, then All-in, Apply, Veto

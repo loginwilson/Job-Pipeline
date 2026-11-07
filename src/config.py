@@ -57,24 +57,24 @@ class Criteria:
         except ValueError as exc:
             raise KeyError(f"Unknown weight name {value!r} in criteria.yaml") from exc
 
-    # --- candidate facts derived from criteria text -------------------------
-    @property
-    def graduation(self) -> tuple[int, int]:
-        """(year, month) the candidate graduates, read from timing.drop."""
-        rule = str(self.get("timing", "drop", default=""))
-        m = re.search(r"(\d{4})-(\d{2})", rule)
+    # --- candidate facts ------------------------------------------------
+    @staticmethod
+    def _ym(value) -> tuple[int, int]:
+        m = re.search(r"(\d{4})-(\d{2})", str(value))
         if not m:
-            raise ValueError("timing.drop must contain the graduation date as YYYY-MM")
+            raise ValueError(f"expected YYYY-MM, got {value!r}")
         return int(m.group(1)), int(m.group(2))
 
     @property
-    def gpa(self) -> float | None:
-        blob = " ".join(
-            [str(self.get("candidate_profile", "summary", default=""))]
-            + [str(s) for s in self.get("candidate_profile", "skills", "have", default=[]) or []]
-        )
-        m = re.search(r"(\d\.\d{1,2})\s*GPA|GPA\s*(?:of\s*)?(\d\.\d{1,2})", blob)
-        return float(m.group(1) or m.group(2)) if m else None
+    def graduation(self) -> tuple[int, int]:
+        """(year, month) the candidate graduates — candidate.graduation."""
+        return self._ym(self.get("candidate", "graduation"))
+
+    @property
+    def latest_start(self) -> tuple[int, int, int] | None:
+        v = self.get("candidate", "latest_preferred_start")
+        m = re.search(r"(\d{4})-(\d{2})-(\d{2})", str(v)) if v else None
+        return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
 
 
 @lru_cache(maxsize=4)

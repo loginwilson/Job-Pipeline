@@ -1,8 +1,9 @@
 """Entry point: python -m src.run
 
-Each run: poll every watchlist board -> normalize -> gates -> requirements
-match -> SQLite (data/pipeline.db) -> Google Sheet (if SHEET_ID and
-GOOGLE_SERVICE_ACCOUNT_JSON are set). No scoring: the owner decides in the Sheet.
+Each run: poll every watchlist board -> normalize -> must-have rules ->
+SQLite (data/pipeline.db) -> Google Sheet (if SHEET_ID and
+GOOGLE_SERVICE_ACCOUNT_JSON are set). No scoring: the owner decides each
+posting in the Sheet (Veto / Apply / All-in).
 
   python -m src.run                                  # full run
   python -m src.run --print --company Palantir       # console report only
@@ -22,7 +23,6 @@ from .store.db import DEFAULT_DB, Store, now_iso
 from .pipeline.gates import Evaluation, Gates
 from .pipeline.locations import LocationMatcher
 from .pipeline.normalize import normalize_posting
-from .pipeline.signals import SignalScorer
 from .sources import SourceError, get_source, load_fixture
 
 log = logging.getLogger("pipeline")
@@ -37,41 +37,23 @@ def evaluate_company(company, payload=None, criteria=None, gates=None, matcher=N
     return [gates.evaluate(normalize_posting(r, company, criteria, matcher)) for r in raws]
 
 
+SOURCE_NAMES = {"lever": "Lever", "greenhouse": "Greenhouse", "ashby": "Ashby"}
+
+
 def display_fields(ev: Evaluation) -> dict:
+    """Facts shown in the Sheet."""
     p = ev.posting
     b = p.location.best
     where = f"{b.city} (tier {b.tier})" if b else "; ".join(p.locations)
-    return {"anchor": p.anchor, "location": f"{where} · {p.work_arrangement}",
-            "salary": p.comp.display(), "extra_comp": p.comp.extra_comp_display,
-            "experience": p.experience.label()}
-
-
-def label(evals: list[Evaluation], criteria=None) -> dict:
-    """Facts for postings that passed the drop rules: role type + factual flags.
-
-    No scoring: the owner decides (Apply / Wait / Veto) in the Sheet.
-    """
-    criteria = criteria or load_criteria()
-    scorer = SignalScorer(criteria)
-    out = {}
-    for ev in evals:
-        if not ev.passed:
-            continue
-        role_type, adjacent, _ = scorer.role_type(ev)
-        if adjacent:
-            ev.flag("Sales-adjacent")
-        r = ev.requirements
-        if r and r.items and not r.has_required_gap:
-            ev.flag("No gaps")
-        if r and r.score is None:
-            ev.flag("Requirements not parsed")
-        out[ev.posting.posting_id] = role_type
-    return out
+    extra = ", ".join(t for t in p.comp.extra_terms if "structured" not in t) or p.comp.extra_comp_display
+    return {"field": ev.field, "visa": ev.visa, "location": f"{where} · {p.work_arrangement}",
+            "tier": b.tier if b else 9, "salary": p.comp.display(), "extra_comp": extra if extra != "—" else "",
+            "experience": p.experience.label(),
+            "source": SOURCE_NAMES.get(p.raw.platform, p.raw.platform) if p.raw else ""}
 
 
 def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, criteria=None) -> dict:
     counts = {"seen": len(evals), "new": 0, "passed": 0}
-    roles = label(evals, criteria)
     store.upsert_company(company.name, company.platform, company.slug, company.anchor)
     for ev in evals:
         p = ev.posting
@@ -80,10 +62,9 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
         p.first_seen = info["first_seen"]
         counts["new"] += int(info["is_new"])
         counts["passed"] += int(ev.passed)
-        store.save_score(
-            p.posting_id, ev.passed, [{"gate": f.gate, "matched": f.matched} for f in ev.failures],
-            ev.flags, ev.requirements.summary, ev.requirements.score,
-            ev.tn.label if ev.tn else "", display_fields(ev), ts, role_type=roles.get(p.posting_id))
+        store.save_score(p.posting_id, ev.passed,
+                         [{"gate": f.gate, "matched": f.matched} for f in ev.failures],
+                         ev.flags, display_fields(ev), ts)
     store.close_missing(company.name, [e.posting.posting_id for e in evals], ts)
     return counts
 
@@ -93,7 +74,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--print", action="store_true", help="print a console report (step 1)")
     ap.add_argument("--company", help="only this watchlist company")
     ap.add_argument("--fixture", help="use a saved API response instead of the live board")
-    ap.add_argument("--brief", action="store_true", help="omit per-requirement breakdown")
+    ap.add_argument("--brief", action="store_true", help="omit the dropped list")
     ap.add_argument("--db", default=str(DEFAULT_DB), help="SQLite path")
     ap.add_argument("--fake-sheet", help="write the Sheet to this local JSON file instead of Google")
     args = ap.parse_args(argv)
@@ -123,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
             continue
         totals["boards_polled"] += 1
         if args.print:
-            print(report(evals, company.name, verbose_items=not args.brief, roles=label(evals, criteria)))
+            print(report(evals, company.name, verbose=not args.brief))
             print()
             continue
         status = store.board_ok(company.name, company.platform, len(evals), ts)

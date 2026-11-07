@@ -23,7 +23,7 @@ def test_ote_never_base(make, evaluate):
     p = make(lines=["OTE: $150,000 - $200,000 with uncapped commission."])
     assert p.comp.ote_only and not p.comp.known
     ev = evaluate(lines=["OTE: $150,000 - $200,000 with uncapped commission."])
-    assert ev.failures[0].gate == "salary"
+    assert ev.passed and "Salary unknown (OTE only)" in ev.flags     # kept; commission is an incentive
     p2 = make(lines=["Base salary $90,000 - $100,000. OTE $180,000 - $200,000."])
     assert p2.comp.midpoint_annual == 95000
 

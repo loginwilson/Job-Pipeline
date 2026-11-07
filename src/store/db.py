@@ -25,18 +25,16 @@ CREATE TABLE IF NOT EXISTS postings (
     is_new INTEGER DEFAULT 1, evergreen INTEGER DEFAULT 0,
     snapshot TEXT            -- full raw posting, stored the first time it is seen
 );
-CREATE TABLE IF NOT EXISTS scores (
+CREATE TABLE IF NOT EXISTS scores (       -- rule results (no scoring since v2)
     posting_id TEXT PRIMARY KEY REFERENCES postings(posting_id),
     passed INTEGER, gate TEXT, matched TEXT, failures TEXT, dropped_at TEXT,
-    flags TEXT, requirements_summary TEXT, requirements_score REAL, tn_label TEXT,
-    role_type TEXT, final_score REAL, sort_score REAL, tier TEXT, why TEXT,
-    display TEXT,            -- JSON of Sheet-ready fields
+    flags TEXT,
+    display TEXT,            -- JSON of Sheet-ready facts (field, visa, salary, ...)
     evaluated_at TEXT
 );
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT, finished_at TEXT,
-    boards_polled INTEGER, postings_seen INTEGER, new INTEGER, passed INTEGER,
-    strong INTEGER, worth_a_look INTEGER, errors INTEGER
+    boards_polled INTEGER, postings_seen INTEGER, new INTEGER, passed INTEGER, errors INTEGER
 );
 CREATE TABLE IF NOT EXISTS board_health (
     company TEXT PRIMARY KEY, platform TEXT, last_success TEXT, last_error TEXT,
@@ -57,9 +55,6 @@ class Store:
         self.conn = sqlite3.connect(str(path))
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
-        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(scores)")}
-        if "sort_score" not in cols:
-            self.conn.execute("ALTER TABLE scores ADD COLUMN sort_score REAL")
 
     def close(self) -> None:
         self.conn.commit()
@@ -103,10 +98,7 @@ class Store:
 
     # --- scores ---------------------------------------------------------
     def save_score(self, posting_id: str, passed: bool, failures: list[dict], flags: list[str],
-                   req_summary: str, req_score: float | None, tn_label: str, display: dict, ts: str,
-                   role_type: str | None = None, final_score: float | None = None,
-                   tier: str | None = None, why: str | None = None,
-                   sort_score: float | None = None) -> None:
+                   display: dict, ts: str) -> None:
         prev = self.conn.execute("SELECT passed, dropped_at FROM scores WHERE posting_id=?",
                                  (posting_id,)).fetchone()
         dropped_at = None
@@ -115,11 +107,9 @@ class Store:
         first = failures[0] if failures else {}
         self.conn.execute(
             "INSERT OR REPLACE INTO scores(posting_id, passed, gate, matched, failures, dropped_at, flags, "
-            "requirements_summary, requirements_score, tn_label, role_type, final_score, sort_score, tier, why, "
-            "display, evaluated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "display, evaluated_at) VALUES (?,?,?,?,?,?,?,?,?)",
             (posting_id, int(passed), first.get("gate"), first.get("matched"), json.dumps(failures),
-             dropped_at, json.dumps(flags), req_summary, req_score, tn_label, role_type, final_score,
-             sort_score, tier, why, json.dumps(display, default=str), ts))
+             dropped_at, json.dumps(flags), json.dumps(display, default=str), ts))
 
     def pipeline_rows(self) -> list[sqlite3.Row]:
         return self.conn.execute(

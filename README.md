@@ -4,24 +4,37 @@ Pulls postings from public company job boards (Greenhouse, Lever, Ashby), applie
 `config/criteria.yaml`, and (from step 2 on) keeps a Google Sheet updated.
 Spec: `docs/BUILD_BRIEF.md`, `docs/ARCHITECTURE.md`, `config/criteria.yaml` (criteria wins).
 
-**Status:** sources → normalize → drop rules → requirements breakdown → SQLite
-(`data/pipeline.db`) → Google Sheet, every hour via GitHub Actions. The alert-email
-reader (step 3b) is built once sample alert emails exist.
+**Status (v2, 2026-11-07):** company job boards (Greenhouse, Lever, Ashby) → must-have
+rules → SQLite (`data/pipeline.db`) → Google Sheet, hourly via GitHub Actions. Next:
+Google-for-Jobs search (JSearch) for wide coverage, then job-alert emails.
 
-## How it works — the pipeline gives you options, you decide
+## How it works — every option comes in, you decide
 
-* **Drop rules are strict.** Experience cap, hard requirement gaps, location, salary,
-  work authorization, employment type, seniority, timing (all in `config/criteria.yaml`).
-  A posting that fails one goes to the **Dropped** tab with the rule and the exact text
-  that triggered it — check it now and then for rules that are too strict.
-* **Everything else lands in the Pipeline tab as facts**: requirements breakdown
-  (`Met 2/3 · Stretch: SQL · Gap: 2+ yrs`), TN fit, salary, extra comp, experience ask,
-  role type, flags (New, No gaps, Salary unknown, Sponsorship unknown, Closed, …).
-  There is no score; you decide.
-* **Decision column: Apply / Wait / Veto.** Undecided postings sort to the top (newest
-  first), then Apply, Wait, Veto; closed postings sink to the bottom. Status (Drafting →
-  Applied → Interviewing → Offer / Rejected / Withdrawn), Effort and Notes are yours too.
-  The pipeline never overwrites your columns and never deletes a row you've touched.
+The pipeline collects as many postings as it can and drops only the ones you
+couldn't or wouldn't take. **No scoring, no ranking by preference.**
+
+**Must-haves** (`config/criteria.yaml` — a posting fails any one → Dropped tab, with the
+rule and the exact text that triggered it):
+
+| # | Dropped if… |
+|---|---|
+| 1 | not full-time (internship, contract, temp, co-op, short fellowship, part-time) |
+| 2 | not in NYC · Chicago / Florida / California / Toronto · Texas / BC, or **solely** remote |
+| 3 | salary midpoint under $100K USD / C$120K (between that and $120K / C$140K → kept, flagged *Low base — check incentives*; no salary → kept, flagged) |
+| 4 | asks 3+ years of experience (required or preferred) |
+| 5 | senior title (Senior, Sr, Staff, Principal, Director, Head of, VP, Chief, Level III+, Lead-as-a-level, people manager) |
+| 6 | US job requiring US citizenship, security clearance or U.S.-person status ("no sponsorship" is only flagged — OPT/TN usually fine) |
+| 7 | engineer/developer title (except GTM, Solutions, Sales, Prompt Engineer), or a **required** line demanding coding with no non-coding alternative |
+| 8 | a **required** credential you lack (MBA, JD, Master's, PhD, CPA, bar, RN, PE, CS/engineering-type degree) |
+| 9 | starts before you graduate (May 2027); starts after Aug 1, 2027 are flagged for OPT timing |
+
+**You decide** in the Pipeline tab's **Decision** column:
+**Veto** (not for me) · **Apply** (real option) · **All-in** (strong application + networking).
+Undecided postings sort to the top, newest first; then All-in, Apply, Veto; closed at the
+bottom. Facts to decide with: Field, Location, Salary, Extra comp, Experience ask, Visa
+(OPT year 1 · likely TN category later), Flags, Posted, Source. **Status** (Drafting →
+Applied → Networking → Interviewing → Offer / Rejected / Withdrawn) and **Notes** are yours;
+the pipeline never overwrites them or deletes a row you touched.
 
 ## Your Sheet — one-time setup (≈15 min)
 
@@ -77,5 +90,6 @@ Term lists match whole words, case-insensitively (all-caps acronyms like `OPT`, 
 match case-sensitively), hyphens = spaces, `U.S.` = `US`, singular/plural tolerant.
 Every gate is evaluated, so a dropped posting lists all the rules it failed.
 
-The ranking code (`src/pipeline/signals.py`, `tiers.py`) is kept but unused; only role-type
-labels come from it. The latest Palantir results are in `docs/palantir_results.txt`.
+`docs/BUILD_BRIEF.md` and `docs/ARCHITECTURE.md` describe the original v1 design (with
+scoring); where they differ from this README or `config/criteria.yaml`, those win.
+The latest Palantir results are in `docs/palantir_results.txt`.
