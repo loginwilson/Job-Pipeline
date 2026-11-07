@@ -55,6 +55,7 @@ def test_new_postings_land_in_review(criteria, board, evals):
     assert sheet.read([REVIEW])[REVIEW][0] == H
     assert all(r[DEC] == "Pending" and "New" in r[FLAGS] for r in tab(sheet, REVIEW))
     assert set(sheet.tabs) == set(ALL_TABS) and len(sheet.calls) == 1       # one write per run
+    assert sheet.tabs[REVIEW]["index"] == 0                                   # To review opens first
 
 
 def test_decisions_move_rows_and_survive(criteria, board, evals):

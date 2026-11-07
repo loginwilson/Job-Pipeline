@@ -366,6 +366,9 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     requests, info = decision_tab_requests(meta, existing, store, criteria, ts)
     for tab, (header, rows) in other_tab_rows(store, criteria, ts, unparsed).items():
         requests += _simple_tab(meta, tab, header, rows, len(existing.get(tab, [])))
+    for i, tab in enumerate(ALL_TABS):           # keep the tab order: To review first
+        requests.append({"updateSheetProperties": {"properties": {"sheetId": meta[tab]["id"], "index": i},
+                                                   "fields": "index"}})
     backend.batch_update(requests)
     info["requests"] = len(requests)
     return info
@@ -384,8 +387,15 @@ class GspreadBackend:
         meta = self.ss.fetch_sheet_metadata({"fields": "sheets(properties,conditionalFormats)"})
         have = {s["properties"]["title"]: s for s in meta["sheets"]}
         missing = [t for t in tabs if t not in have]
-        if missing:
-            self.ss.batch_update({"requests": [{"addSheet": {"properties": {"title": t}}} for t in missing]})
+        reqs = [{"addSheet": {"properties": {"title": t}}} for t in missing]
+        # the blank default tab Google creates would otherwise open first
+        for default in ("Sheet1", "Feuille 1", "Hoja 1"):
+            if default in have and default not in tabs and len(have) + len(missing) > 1:
+                vals = self.ss.values_batch_get([f"'{default}'!A1:Z50"]).get("valueRanges", [{}])[0].get("values")
+                if not vals:
+                    reqs.append({"deleteSheet": {"sheetId": have[default]["properties"]["sheetId"]}})
+        if reqs:
+            self.ss.batch_update({"requests": reqs})
             return self.ensure_tabs(tabs)
         out = {}
         for t in tabs:
@@ -451,7 +461,10 @@ class FakeBackend:
                 gp = body["properties"].get("gridProperties", {})
                 tab["rows"] = gp.get("rowCount", tab["rows"])
                 tab["cols"] = gp.get("columnCount", tab["cols"])
-                tab["frozen"] = gp.get("frozenRowCount", 0)
+                if "frozenRowCount" in gp:
+                    tab["frozen"] = gp["frozenRowCount"]
+                if "index" in body["properties"]:
+                    tab["index"] = body["properties"]["index"]
             elif kind == "addConditionalFormatRule":
                 self._tab_by_id(body["rule"]["ranges"][0]["sheetId"])["cf"].append(body)
             else:
