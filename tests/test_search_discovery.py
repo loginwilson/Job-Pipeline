@@ -160,3 +160,26 @@ def test_hn_posts_and_discovery(monkeypatch, criteria):
     found = run_mod.discover_from_hn(store, {"threads": 1}, set(), LocationMatcher(criteria), T1)
     assert sorted((c.name, c.platform, c.slug) for c in found) == [
         ("Acme Robotics", "ashby", "acme-robotics"), ("Coolco", "lever", "coolco")]   # Berlin-only post skipped
+
+
+def test_newgrad_list_discovery(monkeypatch, criteria):
+    import src.run as run_mod
+    from src.sources import newgrad_lists
+    data = load_fixture(FIXTURES / "newgrad_list.json.gz")
+    assert 0 < len(newgrad_lists.open_listings(data)) < len(data)          # closed listings skipped
+    fake = [
+        {"company_name": "Acme", "title": "Analyst", "active": True, "locations": ["New York, NY"],
+         "url": "https://job-boards.greenhouse.io/acme/jobs/1"},
+        {"company_name": "Faraway", "title": "Analyst", "active": True, "locations": ["Berlin, Germany"],
+         "url": "https://jobs.lever.co/faraway/2"},
+        {"company_name": "Gone", "title": "Analyst", "active": False, "locations": ["Chicago, IL"],
+         "url": "https://jobs.ashbyhq.com/gone/3"},
+        {"company_name": "Own Site", "title": "Analyst", "active": True, "locations": ["Chicago, IL"],
+         "url": "https://careers.ownsite.com/jobs/4"},
+    ]
+    monkeypatch.setattr(newgrad_lists, "fetch", lambda url, s=None: fake)
+    monkeypatch.setattr(run_mod, "verify_board", lambda platform, slug, session=None: 3)
+    store = Store(":memory:")
+    found = run_mod.discover_from_newgrad_lists(store, {"urls": ["x"]}, set(), LocationMatcher(criteria), T1)
+    assert [(c.name, c.platform, c.slug) for c in found] == [("Acme", "greenhouse", "acme")]
+    assert store.conn.execute("SELECT seen FROM link_domains WHERE domain='careers.ownsite.com'").fetchone()[0] == 1

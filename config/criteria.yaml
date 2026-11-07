@@ -69,7 +69,7 @@ salary:
   never_count_as_base: [OTE, on-target earnings, commission, uncapped earnings]
   # When NO salary is posted, these roles are treated as below the floor: they
   # essentially never pay $100K. A posted salary that meets the floor always wins.
-  rarely_meets_floor_titles: [retail associate, retail sales associate, store associate, sales floor associate, cashier, stock associate, stocker, warehouse, picker, packer, material handler, forklift, production associate, assembly associate, assembler, general labor, delivery driver, truck driver, CDL driver, driver helper, delivery associate, delivery helper, courier, restaurant server, food server, banquet server, server assistant, barista, bartender, cook, dishwasher, host / hostess, housekeeper, housekeeping, janitor, custodian, security officer, security guard, caregiver, home health aide, nursing assistant, call center, customer service representative, member service representative, bank teller, teller, receptionist, pharmacy technician, lab technician, laboratory technician, clinical laboratory, crew member, team member, cleaner, landscaper, mover, plant operator, machine operator, equipment operator, production operator]
+  rarely_meets_floor_titles: [retail associate, retail sales associate, store associate, sales floor associate, cashier, stock associate, stocker, warehouse, picker, packer, material handler, forklift, production associate, assembly associate, assembler, general labor, delivery driver, truck driver, CDL driver, driver helper, delivery associate, delivery helper, courier, restaurant server, food server, banquet server, server assistant, barista, bartender, cook, dishwasher, host / hostess, housekeeper, housekeeping, janitor, custodian, security officer, security guard, caregiver, home health aide, nursing assistant, call center, customer service representative, member service representative, bank teller, teller, receptionist, pharmacy technician, lab technician, laboratory technician, clinical laboratory, crew member, team member, cleaner, landscaper, mover, plant operator, machine operator, equipment operator, production operator, teleoperator, robot operator, administrative assistant, office administrator, maintenance technician]
   hourly_without_amount_is_below_floor: true   # pay basis "per hour" stated, no amount
   # shown in the Extra comp column so incentives are easy to judge
   extra_comp_signals: [equity, RSU, restricted stock, stock options, signing bonus, sign-on bonus, annual bonus, performance bonus, commission]
@@ -93,7 +93,7 @@ experience:
 # Representative, Consultant I, Strategist, APM, Rotational, New Grad, Junior,
 # Level I/II) pass; the 3-year rule handles the rest.
 seniority:
-  drop_title_terms: [senior, "sr.", sr, staff, principal, director, "head of", vp, svp, evp, avp, "vice president", chief, "executive director", leader]
+  drop_title_terms: [senior, "sr.", sr, staff, principal, director, "head of", vp, svp, evp, avp, "vice president", chief, "executive director", leader, experienced, lateral, experienced hire]
   senior_title_in_description: true   # "Experience Owner" whose text says "the Sr Experience Owner"
   keep_titles_with: [chief of staff]   # level words inside these phrases don't count (years rule still applies)
   drop_level_numerals: [III, IV, V, "3", "4", "5"]   # "Analyst III", "Consultant 4"
@@ -168,6 +168,7 @@ technical:
 # posting — unless the same line also accepts a bachelor's / his field /
 # "or equivalent", or calls it preferred.
 credentials:
+  drop_title_terms: [PhD, Ph.D., MBA, JD, postdoc, postdoctoral, doctoral]   # the title itself names a degree he doesn't have
   drop_required: [MBA, JD, Juris Doctor, law degree, "Master's degree", "Masters degree", "Master of", PhD, Ph.D., doctorate, CPA, bar admission, admitted to the bar, licensed attorney, registered nurse, RN license, PE license, professional engineer]
   unrelated_degree_fields: [computer science, computer engineering, software engineering, electrical engineering, mechanical engineering, engineering, nursing, medicine, pharmacy, architecture, physics, chemistry, biology, mathematics, statistics, data science]
   softeners: [or equivalent, equivalent experience, or related experience, preferred, a plus, nice to have, any field, any discipline, not required, not necessary, not a requirement, isnt required, is not needed, dont need, do not need, no prior, not expected]
@@ -176,6 +177,7 @@ credentials:
 # 9 ── START DATE ──────────────────────────────────────────────
 timing:
   drop_start_before_graduation: true
+  drop_title_terms: [january start, winter start, spring start, january 2027, spring 2027, winter 2027, december start]   # starts before graduation / not May–Aug
   flag_start_after: "Starts after Aug 1 — check OPT timing"
 
 
@@ -193,7 +195,7 @@ opt_relatedness:
 # search-source postings must be recent (config/sources.yaml max_age_days)
 # and, when we also watch that company's board, must be on it.
 openings:
-  drop_title_terms: [wildcard, wild card, apply anyway, "don't see", dont see, perfect role, right role, former founder, talent community, talent pool, talent network, general application, general interest, future opportunities, future opening, expression of interest, evergreen, open application, resume drop, submit your resume]
+  drop_title_terms: [wildcard, wild card, apply anyway, "don't see", dont see, perfect role, right role, former founder, talent community, talent pool, talent network, general application, general interest, future opportunities, future opening, expression of interest, evergreen, open application, resume drop, submit your resume, interested in future, opportunistic application, future roles]
 
 
 # ── FACTS SHOWN IN THE SHEET (never drop anything) ─────────────

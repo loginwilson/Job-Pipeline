@@ -215,3 +215,16 @@ def test_negated_requirement_does_not_drop(criteria):
     lines = ["## Requirements", "- You don't need a law degree to succeed here."]
     ev = Gates(criteria).evaluate(_p(criteria, "Operations Associate", lines))
     assert "credentials" not in [f.gate for f in ev.failures]
+
+
+def test_title_level_credential_and_start_terms(criteria):
+    from src.pipeline.gates import Gates
+    g = Gates(criteria)
+    fails = lambda t: {f.gate for f in g.evaluate(_p(criteria, t, [])).failures}
+    assert "credentials" in fails("Quantitative Researcher, PhD")
+    assert "seniority" in fails("Experienced/Lateral - Trading Assistant")
+    assert "seniority" in fails("Technician 3, Manufacturing Equipment Maintenance")
+    assert "start_date" in fails("Graduate Leadership Program - Media Marketing (January Start)")
+    assert "not_a_real_opening" in fails("Interested in future People & Culture opportunities?")
+    assert not fails("Graduate Leadership Program - Media Marketing (June Start)")
+    assert not fails("Recent Graduate - Trading Assistant (NYC)")

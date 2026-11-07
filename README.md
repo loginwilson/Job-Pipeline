@@ -12,6 +12,7 @@ to do with each one. Runs on GitHub Actions twice an hour (`.github/workflows/ho
 | **JSearch** (Google for Jobs) | LinkedIn, Indeed, Glassdoor and company sites, searched by keyword group × city | Within the daily request budget (`requests_per_day`; free plan = 6/day). Needs the `JSEARCH_API_KEY` secret |
 | **The Muse** | Entry-level postings in all your cities (≤30 days old) | Daily |
 | **Hacker News "Who is hiring?"** | Discovery only: job-board links in posts that mention your cities | Daily |
+| **New-grad lists on GitHub** (SimplifyJobs) | Discovery only: the company boards behind ~1,000 open new-grad listings in your cities (up to 60 new boards a day) | Daily |
 
 **Auto-discovery.** Every company these sources surface in your cities is checked for its own
 board (apply links first, then name lookups, confirmed by the same job being listed there).

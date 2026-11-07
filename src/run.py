@@ -284,19 +284,52 @@ def discover_from_hn(store: Store, cfg: dict, known: set[str], matcher, ts: str)
                     name = re.sub(r"[-_.]+", " ", slug).strip().title()
                 if normalize(name) not in known:
                     candidates.setdefault(b, name)
-    todo = [(b, c) for b, c in candidates.items() if store.probe_due(f"hn:{b[0]}:{b[1]}", 30, ts)]
+    found = _add_verified_boards(store, candidates, known, ts, "hn", "Hacker News", cfg)
+    log.info("Hacker News: %d board links in posts about your cities, %d new boards", len(candidates), len(found))
+    return found
+
+
+def _add_verified_boards(store: Store, candidates: dict[tuple[str, str], str], known: set[str], ts: str,
+                         probe_prefix: str, via: str, cfg: dict) -> list[Company]:
+    """Check each candidate board with one request and add the live ones to the watch."""
+    todo = [(b, c) for b, c in candidates.items()
+            if normalize(c) not in known and store.probe_due(f"{probe_prefix}:{b[0]}:{b[1]}", 30, ts)]
+    cap = cfg.get("max_new_boards_per_run")
+    if cap:
+        todo = todo[: int(cap)]
     with ThreadPoolExecutor(max_workers=PARALLEL_BOARDS) as pool:
         counts = list(pool.map(lambda bc: verify_board(bc[0][0], bc[0][1], requests.Session()), todo))
     found = []
     for ((platform, slug), company), n in zip(todo, counts):
-        store.record_probe(f"hn:{platform}:{slug}", f"{n} postings", ts)
+        store.record_probe(f"{probe_prefix}:{platform}:{slug}", f"{n} postings", ts)
         if n and normalize(company) not in known:
-            store.add_discovered(company, platform, slug, "Hacker News", "", ts)
+            store.add_discovered(company, platform, slug, via, "", ts)
             known.add(normalize(company))
             found.append(Company(name=company, platform=platform, slug=slug))
-            log.info("Discovered %s board for %s from Hacker News (%d postings)", platform, company, n)
+            log.info("Discovered %s board for %s from %s (%d postings)", platform, company, via, n)
     store.commit()
-    log.info("Hacker News: %d board links in posts about your cities, %d new boards", len(candidates), len(found))
+    return found
+
+
+def discover_from_newgrad_lists(store: Store, cfg: dict, known: set[str], matcher, ts: str) -> list[Company]:
+    """Company boards behind community new-grad lists (listings in your cities only)."""
+    from urllib.parse import urlparse
+    from .sources import newgrad_lists
+    sess = requests.Session()
+    candidates: dict[tuple[str, str], str] = {}
+    local = 0
+    for url in cfg.get("urls", []) or []:
+        for x in newgrad_lists.open_listings(newgrad_lists.fetch(url, sess)):
+            if not matcher.match(x["locations"]).offices:
+                continue
+            local += 1
+            b = board_from_url(x["url"])
+            if b:
+                candidates.setdefault(b, x["company"])
+            else:
+                store.count_link_domain(urlparse(x["url"]).netloc.lower())
+    found = _add_verified_boards(store, candidates, known, ts, "newgrad", "New-grad lists", cfg)
+    log.info("New-grad lists: %d open listings in your cities, %d company boards, %d new", local, len(candidates), len(found))
     return found
 
 
@@ -414,6 +447,13 @@ def main(argv: list[str] | None = None) -> int:
                 store.source_complete("hackernews", ts)
             except Exception as exc:  # never stops the run
                 log.error("Hacker News discovery error: %s", exc)
+        ng_cfg = cfg.get("newgrad_lists") or {}
+        if ng_cfg.get("enabled") and store.source_due("newgrad_lists", ng_cfg.get("every_hours", 24), ts):
+            try:
+                discover_from_newgrad_lists(store, ng_cfg, known, matcher, ts)
+                store.source_complete("newgrad_lists", ts)
+            except Exception as exc:  # never stops the run
+                log.error("New-grad list discovery error: %s", exc)
         watch = {normalize(c.name) for c in companies}
         companies += [Company(name=r["company"], platform=r["platform"], slug=r["slug"])
                       for r in store.discovered_boards() if normalize(r["company"]) not in watch]

@@ -143,7 +143,7 @@ class Gates:
             ev.fail("seniority", f"title term '{hit[0].term}': {title}")
             return
         nums = [re.escape(str(n)) for n in s.get("drop_level_numerals", []) or []]
-        if nums and (re.search(rf"(?:\s|,|-|^)(?:{'|'.join(nums)})\s*$", title)
+        if nums and (re.search(rf"(?:\s|,|-|^)(?:{'|'.join(nums)})\s*(?:$|[,(]|\s-\s)", title)
                      or re.search(rf"\blevel\s*(?:{'|'.join(nums)})\b", title, re.I)):
             ev.fail("seniority", f"level numeral: {title}")
             return
@@ -212,6 +212,9 @@ class Gates:
                     break
         if title_hit:
             ev.fail("technical", f"title contains '{title_hit}': {p.title}")
+        cred = find_terms(p.title, self.c.get("credentials", "drop_title_terms", default=[]) or [], first_only=True)
+        if cred:
+            ev.fail("credentials", f"title asks for '{cred[0].term}': {p.title}")
         for h in qualifications.check(p, self.c):
             ev.fail(h.rule, f"{h.reason}: {h.line}")
 
@@ -220,6 +223,10 @@ class Gates:
         tm = self.c.get("timing", default={}) or {}
         grad = self.c.graduation
         t = p.timing
+        hit = find_terms(p.title, tm.get("drop_title_terms", []) or [], first_only=True)
+        if hit:
+            ev.fail("start_date", f"title says '{hit[0].term}': {p.title}")
+            return
         start = t.earliest_start()
         if tm.get("drop_start_before_graduation") and start and start.start < grad:
             ev.fail("start_date", f"starts before graduation ({grad[0]}-{grad[1]:02d}): {start.text}")

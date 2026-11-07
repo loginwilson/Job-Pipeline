@@ -56,3 +56,10 @@ hackernews:                 # "Ask HN: Who is hiring?" — discovery only (board
   enabled: true
   threads: 3                # this month's thread and the two before
   every_hours: 24
+
+newgrad_lists:              # community new-grad lists on GitHub — discovery only (boards behind listings in your cities)
+  enabled: true
+  every_hours: 24
+  max_new_boards_per_run: 60   # spreads the first big batch over a few days so runs stay short
+  urls:
+    - https://raw.githubusercontent.com/SimplifyJobs/New-Grad-Positions/dev/.github/scripts/listings.json
