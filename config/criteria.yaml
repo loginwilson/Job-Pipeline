@@ -181,3 +181,7 @@ fields:                     # Field column: first match wins (title, then descri
 freshness:
   apply_soon_days: 7
   evergreen_after_days: 60
+
+tracking:                   # how your Status column is followed up
+  follow_up_after_days: 10  # flag "Follow up" when an application hasn't moved this long
+  follow_up_statuses: [Applied, Networking]

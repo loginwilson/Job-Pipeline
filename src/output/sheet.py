@@ -1,18 +1,25 @@
-"""Google Sheet sync — the Sheet is a view of SQLite.
+"""Google Sheet sync — the Sheet is a view of SQLite; your columns are yours.
 
-No scoring: the pipeline applies the must-have rules and records facts; the
-owner decides each posting with the Decision column (Veto / Apply / All-in).
+Triage system (no automatic scoring):
+  Decision   Pending / Apply / Pass       — do I want it?
+  Interest   1–5 (Apply only)              — how much? 4–5 = all-in effort
+  Status     Not started → Drafting → Applied → Networking → Interviewing → Offer,
+             or Rejected / Withdrawn / No response
+  Notes      free text
+The pipeline fills "Applied on" the first time it sees Status = Applied and
+flags "Follow up" when an application hasn't moved for
+criteria.tracking.follow_up_after_days.
 
-Per run: ONE read (values of the tabs) + ONE spreadsheets.batchUpdate (all
-writes and formatting). Tabs are only created on the first run.
+Tabs:
+  To review        Decision = Pending (new postings land here), newest first
+  My applications  Decision = Apply, Interest 5→1, active statuses before ended ones
+  Passed           Decision = Pass — archive, change your mind any time
+  Dropped / Unparsed alerts / Funnel / Board health
+A row moves to its tab on the next run after you change Decision. Owner
+values are read from all three tabs by Posting ID (header names, not column
+letters), saved in the database, and never overwritten.
 
-Pipeline tab rules:
-  * upsert by Posting ID (hidden last column); pipeline columns are rewritten
-    from the DB; owner columns (Decision, Status, Notes) are found by
-    header name and always carried over;
-  * a row the owner touched is never deleted, even if it left the DB view;
-  * sort: undecided first, then All-in, Apply, Veto; closed postings at the
-    bottom; newest first within each group.
+Per run: ONE read + ONE spreadsheets.batchUpdate. Tabs are created on first run.
 """
 from __future__ import annotations
 
@@ -25,17 +32,23 @@ from typing import Any, Protocol
 from ..config import Criteria
 from ..store.db import Store
 
-PIPELINE = "Pipeline"
-HEADERS = ["Decision", "Company", "Role", "Field", "Location", "Salary", "Extra comp",
-           "Experience ask", "Visa", "Flags", "Posted", "First seen", "Source",
-           "Status", "Notes", "Posting ID"]
-OWNER_HEADERS = ("Decision", "Status", "Notes")
-OWNER_COLS = tuple(HEADERS.index(h) for h in OWNER_HEADERS)
+REVIEW, APPLICATIONS, PASSED = "To review", "My applications", "Passed"
+DECISION_TABS = [REVIEW, APPLICATIONS, PASSED]
+HEADERS = ["Decision", "Interest", "Status", "Applied on", "Company", "Role", "Field", "Location",
+           "Salary", "Extra comp", "Experience ask", "Visa", "Flags", "Posted", "First seen", "Source",
+           "Notes", "Posting ID"]
+OWNER_HEADERS = ("Decision", "Interest", "Status", "Notes")
 ID_COL = HEADERS.index("Posting ID")
-DECISION_OPTIONS = ["Veto", "Apply", "All-in"]
-STATUS_OPTIONS = ["Drafting", "Applied", "Networking", "Interviewing", "Offer", "Rejected", "Withdrawn"]
-DECISION_ORDER = {"": 0, "All-in": 1, "Apply": 2, "Veto": 3}
+DECISION_OPTIONS = ["Pending", "Apply", "Pass"]
+INTEREST_OPTIONS = ["1", "2", "3", "4", "5"]
+STATUS_OPTIONS = ["Not started", "Drafting", "Applied", "Networking", "Interviewing", "Offer",
+                  "Rejected", "Withdrawn", "No response"]
+ENDED = {"Rejected", "Withdrawn", "No response"}
+STATUS_ORDER = {"Offer": 0, "Interviewing": 1, "Networking": 2, "Applied": 3, "Drafting": 4,
+                "Not started": 5, "": 5, "Rejected": 7, "Withdrawn": 8, "No response": 9}
+PASS_WORDS = {"pass", "veto"}
 GREEN = {"red": 0.85, "green": 0.94, "blue": 0.83}
+YELLOW = {"red": 1.0, "green": 0.95, "blue": 0.75}
 GRAY = {"red": 0.6, "green": 0.6, "blue": 0.6}
 
 
@@ -77,45 +90,6 @@ def _pad(row: list, n: int) -> list:
     return list(row) + [""] * (n - len(row))
 
 
-# --- row building ---------------------------------------------------------
-def build_pipeline_rows(store: Store, criteria: Criteria, ts: str) -> list[dict]:
-    """Pipeline-owned cells for every posting that passed the drop rules."""
-    fresh = criteria.get("freshness", default={}) or {}
-    apply_days = int(fresh.get("apply_soon_days", 7))
-    now = datetime.fromisoformat(ts)
-    rows = []
-    for r in store.pipeline_rows():
-        d = json.loads(r["display"] or "{}")
-        flags = []
-        if r["is_new"] and fresh.get("flag_new_since_last_check", True):
-            flags.append("New")
-        posted = r["posted_at"] or r["first_seen"]
-        if not r["closed_at"] and posted:
-            try:
-                age = now - datetime.fromisoformat(posted.replace("Z", "+00:00"))
-                if age <= timedelta(days=apply_days):
-                    flags.append("Apply soon")
-            except ValueError:
-                pass
-        flags += json.loads(r["flags"] or "[]")
-        if r["evergreen"]:
-            flags.append("Evergreen")
-        if r["closed_at"]:
-            flags.append("Closed")
-        cells = {
-            "Company": r["company"],
-            "Role": hyperlink(r["url"], r["title"]),
-            "Field": d.get("field", ""), "Location": d.get("location", ""), "Salary": d.get("salary", ""),
-            "Extra comp": d.get("extra_comp", ""), "Experience ask": d.get("experience", ""),
-            "Visa": d.get("visa", ""), "Flags": ", ".join(dict.fromkeys(flags)),
-            "Posted": _date(r["posted_at"]), "First seen": _date(r["first_seen"]),
-            "Source": d.get("source", ""),
-        }
-        rows.append({"posting_id": r["posting_id"], "closed": bool(r["closed_at"]),
-                     "first_seen": r["first_seen"], "cells": cells})
-    return rows
-
-
 def _neg_date(iso: str | None) -> float:
     try:
         return -datetime.fromisoformat((iso or "").replace("Z", "+00:00")).timestamp()
@@ -123,97 +97,168 @@ def _neg_date(iso: str | None) -> float:
         return 0.0
 
 
-# --- sync -----------------------------------------------------------------
-def sync_pipeline(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | None = None) -> dict:
-    """Pipeline tab only (one read + one write)."""
-    ts = ts or datetime.now(timezone.utc).isoformat(timespec="seconds")
-    meta = backend.ensure_tabs([PIPELINE])
-    existing = backend.read([PIPELINE]).get(PIPELINE, [])
-    requests, info = pipeline_requests(meta, existing, store, criteria, ts)
-    backend.batch_update(requests)
-    return info
+def route(owner: dict) -> str:
+    """Which tab a posting belongs in, from your Decision (Interest/Status imply Apply)."""
+    d = (owner.get("Decision") or "").strip().lower()
+    if d in PASS_WORDS:
+        return PASSED
+    if d in ("apply", "all-in") or owner.get("Interest") or (owner.get("Status") or "") not in ("", "Not started"):
+        return APPLICATIONS
+    return REVIEW
 
 
-def _owner_values(existing: list[list[str]]) -> tuple[dict[str, dict], list[dict]]:
-    """Owner cells per Posting ID, located by header name so column moves are safe."""
-    if not existing:
-        return {}, []
-    header = existing[0]
-    idx = {h: i for i, h in enumerate(header)}
-    if "Posting ID" not in idx:
-        return {}, []
-    out, rows = {}, []
-    for raw in existing[1:]:
-        raw = _pad(raw, len(header))
-        pid = raw[idx["Posting ID"]]
-        if not pid:
+def _interest(v: str) -> int:
+    try:
+        return int(float(v))
+    except (TypeError, ValueError):
+        return 0
+
+
+# --- reading your columns ---------------------------------------------------
+def read_owner_values(existing: dict[str, list[list[str]]]) -> tuple[dict[str, dict], dict[str, dict]]:
+    """Owner cells per Posting ID from the decision tabs (+ full rows, for rows to keep)."""
+    owner: dict[str, dict] = {}
+    full: dict[str, dict] = {}
+    for tab in DECISION_TABS:
+        rows = existing.get(tab) or []
+        if not rows:
             continue
-        vals = {h: raw[idx[h]] for h in OWNER_HEADERS if h in idx}
-        full = {h: raw[i] for h, i in idx.items()}
-        out[pid] = vals
-        rows.append({"posting_id": pid, "owner": vals, "full": full})
-    return out, rows
+        idx = {h: i for i, h in enumerate(rows[0])}
+        if "Posting ID" not in idx:
+            continue
+        for raw in rows[1:]:
+            raw = _pad(raw, len(rows[0]))
+            pid = raw[idx["Posting ID"]]
+            if not pid:
+                continue
+            vals = {h: raw[idx[h]].strip() for h in OWNER_HEADERS if h in idx}
+            if pid in owner and not any(vals.values()):
+                continue   # a stale duplicate never wipes real entries
+            owner[pid] = vals
+            full[pid] = {h: raw[i] for h, i in idx.items()}
+    return owner, full
 
 
-def pipeline_requests(meta: dict, existing: list[list[str]], store: Store, criteria: Criteria,
-                      ts: str) -> tuple[list[dict], dict]:
-    owner, old_rows = _owner_values(existing)
-    db_rows = build_pipeline_rows(store, criteria, ts)
-    db_ids = {r["posting_id"] for r in db_rows}
+# --- row building ---------------------------------------------------------
+def build_rows(store: Store, criteria: Criteria, ts: str, owner_states: dict[str, dict]) -> list[dict]:
+    fresh = criteria.get("freshness", default={}) or {}
+    apply_days = int(fresh.get("apply_soon_days", 7))
+    track = criteria.get("tracking", default={}) or {}
+    follow_days = int(track.get("follow_up_after_days", 10))
+    follow_statuses = set(track.get("follow_up_statuses", ["Applied", "Networking"]))
+    now = datetime.fromisoformat(ts)
+    rows = []
+    for r in store.pipeline_rows():
+        d = json.loads(r["display"] or "{}")
+        st = owner_states.get(r["posting_id"], {})
+        flags = []
+        if r["is_new"]:
+            flags.append("New")
+        posted = r["posted_at"] or r["first_seen"]
+        if not r["closed_at"] and posted:
+            try:
+                if now - datetime.fromisoformat(posted.replace("Z", "+00:00")) <= timedelta(days=apply_days):
+                    flags.append("Apply soon")
+            except ValueError:
+                pass
+        if st.get("status") in follow_statuses and st.get("status_changed_at"):
+            if now - datetime.fromisoformat(st["status_changed_at"]) >= timedelta(days=follow_days):
+                flags.append("Follow up")
+        flags += json.loads(r["flags"] or "[]")
+        if r["evergreen"]:
+            flags.append("Evergreen")
+        if r["closed_at"]:
+            flags.append("Closed")
+        cells = {
+            "Decision": st.get("decision") or "Pending", "Interest": st.get("interest") or "",
+            "Status": st.get("status") or "", "Notes": st.get("notes") or "",
+            "Applied on": _date(st.get("applied_on")),
+            "Company": r["company"], "Role": hyperlink(r["url"], r["title"]),
+            "Field": d.get("field", ""), "Location": d.get("location", ""), "Salary": d.get("salary", ""),
+            "Extra comp": d.get("extra_comp", ""), "Experience ask": d.get("experience", ""),
+            "Visa": d.get("visa", ""), "Flags": ", ".join(dict.fromkeys(flags)),
+            "Posted": _date(r["posted_at"]), "First seen": _date(r["first_seen"]),
+            "Source": d.get("source", ""), "Posting ID": r["posting_id"],
+        }
+        rows.append({"posting_id": r["posting_id"], "closed": bool(r["closed_at"]),
+                     "first_seen": r["first_seen"], "cells": cells})
+    return rows
 
-    entries = []
-    for r in db_rows:
-        vals = owner.get(r["posting_id"], {})
-        cells = dict(r["cells"], **vals, **{"Posting ID": r["posting_id"]})
-        entries.append((r["closed"], vals.get("Decision", ""), r["first_seen"], cells))
-    kept = 0
-    for o in old_rows:   # owner touched it but it left the DB view: never delete
-        if o["posting_id"] not in db_ids and any(o["owner"].values()):
-            entries.append((True, o["owner"].get("Decision", ""), "", o["full"]))
-            kept += 1
-    entries.sort(key=lambda e: (e[0], DECISION_ORDER.get(e[1], 4), _neg_date(e[2])))
-    grid = [HEADERS] + [[e[3].get(h, "") for h in HEADERS] for e in entries]
-    total_rows = max(len(grid), len(existing))
-    padded = grid + [[""] * len(HEADERS)] * (total_rows - len(grid))
 
-    sid = meta[PIPELINE]["id"]
-    need_rows = max(meta[PIPELINE].get("rows", 1000), total_rows + 1)
+def _sort_key(tab: str, row: dict):
+    c = row["cells"]
+    if tab == APPLICATIONS:
+        return (c["Status"] in ENDED, -_interest(c["Interest"]), STATUS_ORDER.get(c["Status"], 6),
+                row["closed"], _neg_date(row["first_seen"]))
+    return (row["closed"], _neg_date(row["first_seen"]))
+
+
+# --- sync -----------------------------------------------------------------
+def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Criteria,
+                          ts: str) -> tuple[list[dict], dict]:
+    sheet_owner, full_rows = read_owner_values(existing)
+    for pid, vals in sheet_owner.items():          # the Sheet is the source of truth for your columns
+        store.save_owner_state(pid, vals, ts)
+    store.commit()
+    states = store.owner_states()
+    rows = build_rows(store, criteria, ts, states)
+    db_ids = {r["posting_id"] for r in rows}
+    for pid, vals in sheet_owner.items():          # touched rows that left the DB view are kept
+        if pid not in db_ids and any(v for k, v in vals.items() if k != "Decision" or v != "Pending"):
+            cells = {h: full_rows[pid].get(h, "") for h in HEADERS}
+            rows.append({"posting_id": pid, "closed": True, "first_seen": "", "cells": cells})
+
+    by_tab: dict[str, list[dict]] = {t: [] for t in DECISION_TABS}
+    for r in rows:
+        by_tab[route(r["cells"])].append(r)
+    requests: list[dict] = []
+    counts = {}
+    for tab in DECISION_TABS:
+        tab_rows = sorted(by_tab[tab], key=lambda r: _sort_key(tab, r))
+        counts[tab] = len(tab_rows)
+        grid = [HEADERS] + [[r["cells"].get(h, "") for h in HEADERS] for r in tab_rows]
+        requests += _decision_tab(meta[tab], grid, len(existing.get(tab) or []))
+    return requests, {"rows": len(rows), "tabs": counts}
+
+
+def _decision_tab(m: dict, grid: list[list], existing_len: int) -> list[dict]:
+    sid = m["id"]
+    total = max(len(grid), existing_len)
+    padded = grid + [[""] * len(HEADERS)] * (total - len(grid))
+    need_rows = max(m.get("rows", 1000), total + 1)
     col = {h: i for i, h in enumerate(HEADERS)}
-    requests: list[dict] = [
-        {"updateSheetProperties": {
-            "properties": {"sheetId": sid, "gridProperties": {
-                "rowCount": need_rows, "columnCount": max(meta[PIPELINE].get("cols", 26), len(HEADERS)),
-                "frozenRowCount": 1}},
+    reqs: list[dict] = [
+        {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
+            "rowCount": need_rows, "columnCount": max(m.get("cols", 26), len(HEADERS)), "frozenRowCount": 1}},
             "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
-        {"updateCells": {
-            "start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
-            "rows": [{"values": [_cell(v) for v in row]} for row in padded],
-            "fields": "userEnteredValue"}},
-        {"repeatCell": {
-            "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
-            "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
-            "fields": "userEnteredFormat.textFormat.bold"}},
+        {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
+                         "rows": [{"values": [_cell(v) for v in row]} for row in padded],
+                         "fields": "userEnteredValue"}},
+        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
+                        "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+                        "fields": "userEnteredFormat.textFormat.bold"}},
         _validation(sid, col["Decision"], DECISION_OPTIONS, need_rows),
+        _validation(sid, col["Interest"], INTEREST_OPTIONS, need_rows),
         _validation(sid, col["Status"], STATUS_OPTIONS, need_rows),
-        {"setBasicFilter": {"filter": {"range": {
-            "sheetId": sid, "startRowIndex": 0, "endRowIndex": len(grid),
-            "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}}}},
-        {"updateDimensionProperties": {
-            "range": {"sheetId": sid, "dimension": "COLUMNS", "startIndex": ID_COL, "endIndex": ID_COL + 1},
-            "properties": {"hiddenByUser": True}, "fields": "hiddenByUser"}},
+        {"setBasicFilter": {"filter": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": len(grid),
+                                                 "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}}}},
+        {"updateDimensionProperties": {"range": {"sheetId": sid, "dimension": "COLUMNS",
+                                                 "startIndex": ID_COL, "endIndex": ID_COL + 1},
+                                       "properties": {"hiddenByUser": True}, "fields": "hiddenByUser"}},
     ]
-    if not meta[PIPELINE].get("has_cf"):
+    if not m.get("has_cf"):
         full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}
-        flags, dec = _col_letter(col["Flags"]), _col_letter(col["Decision"])
+        flags, interest = _col_letter(col["Flags"]), _col_letter(col["Interest"])
         rules = [
-            (f'=OR(REGEXMATCH(${flags}2,"Closed"),${dec}2="Veto")', {"textFormat": {"foregroundColor": GRAY}}),
-            (f'=${dec}2="All-in"', {"backgroundColor": GREEN}),
+            (f'=REGEXMATCH(${flags}2,"Closed")', {"textFormat": {"foregroundColor": GRAY}}),
+            (f'=REGEXMATCH(${flags}2,"Follow up")', {"backgroundColor": YELLOW}),
+            (f'=VALUE(0&${interest}2)>=4', {"backgroundColor": GREEN}),
         ]
         for i, (formula, fmt) in enumerate(rules):
-            requests.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [full], "booleanRule": {
+            reqs.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [full], "booleanRule": {
                 "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": formula}]},
                 "format": fmt}}}})
-    return requests, {"rows": len(grid) - 1, "kept_owner_rows": kept, "requests": len(requests)}
+    return reqs
 
 
 def _validation(sid: int, col: int, options: list[str], rows: int) -> dict:
@@ -227,7 +272,7 @@ def _validation(sid: int, col: int, options: list[str], rows: int) -> dict:
 
 # --- the other tabs (rewritten in full each run) ---------------------------
 DROPPED, UNPARSED, FUNNEL, HEALTH = "Dropped", "Unparsed alerts", "Funnel", "Board health"
-ALL_TABS = [PIPELINE, DROPPED, UNPARSED, FUNNEL, HEALTH]
+ALL_TABS = DECISION_TABS + [DROPPED, UNPARSED, FUNNEL, HEALTH]
 
 
 def _simple_tab(meta: dict, tab: str, header: list[str], rows: list[list], existing_len: int) -> list[dict]:
@@ -278,7 +323,7 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     ts = ts or datetime.now(timezone.utc).isoformat(timespec="seconds")
     meta = backend.ensure_tabs(ALL_TABS)
     existing = backend.read(ALL_TABS)
-    requests, info = pipeline_requests(meta, existing.get(PIPELINE, []), store, criteria, ts)
+    requests, info = decision_tab_requests(meta, existing, store, criteria, ts)
     for tab, (header, rows) in other_tab_rows(store, criteria, ts, unparsed).items():
         requests += _simple_tab(meta, tab, header, rows, len(existing.get(tab, [])))
     backend.batch_update(requests)
@@ -311,7 +356,7 @@ class GspreadBackend:
         return out
 
     def read(self, tabs: list[str]) -> dict[str, list[list[str]]]:
-        res = self.ss.values_batch_get([f"'{t}'!A:R" for t in tabs])
+        res = self.ss.values_batch_get([f"'{t}'!A:Z" for t in tabs])
         return {t: vr.get("values", []) for t, vr in zip(tabs, res.get("valueRanges", []))}
 
     def batch_update(self, requests: list[dict]) -> None:

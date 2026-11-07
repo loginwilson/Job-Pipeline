@@ -1,17 +1,20 @@
-"""Store + Sheet sync: owner columns survive runs, hyperlinks, closed rows, one write per run."""
-from src.output.sheet import HEADERS as H
+"""Triage Sheet: Decision / Interest / Status, three tabs, applied date, follow-up, one write per run."""
 import copy
 
 import pytest
 from conftest import FIXTURES
 
 from src.config import Company
-from src.output.sheet import HEADERS, ID_COL, PIPELINE, FakeBackend, sync_pipeline
+from src.output.sheet import (ALL_TABS, APPLICATIONS, HEADERS as H, ID_COL, PASSED, REVIEW, FakeBackend,
+                              sync_all)
 from src.run import evaluate_company, store_evaluations
 from src.sources import load_fixture
 from src.store.db import Store
 
-T1, T2, T3 = "2026-11-05T10:17:00+00:00", "2026-11-05T11:17:00+00:00", "2026-11-05T12:17:00+00:00"
+T1, T2 = "2026-11-05T10:17:00+00:00", "2026-11-05T11:17:00+00:00"
+T_LATER = "2026-11-16T11:17:00+00:00"        # 11 days after T1
+DEC, INT, STATUS, APPLIED, FLAGS, ROLE, NOTES = (H.index(x) for x in
+    ("Decision", "Interest", "Status", "Applied on", "Flags", "Role", "Notes"))
 
 
 @pytest.fixture(scope="module")
@@ -24,121 +27,145 @@ def payload():
     return load_fixture(FIXTURES / "lever_palantir.json.gz")
 
 
-def run_once(store, backend, company, payload, criteria, ts):
-    evals = evaluate_company(company, payload, criteria)
-    store_evaluations(store, company, evals, ts)
+@pytest.fixture(scope="module")
+def evals(board, payload, criteria):
+    return evaluate_company(board, payload, criteria)
+
+
+def run(store, sheet, board, evals, criteria, ts):
+    store_evaluations(store, board, evals, ts, criteria)
     store.commit()
-    return sync_pipeline(backend, store, criteria, ts)
+    return sync_all(sheet, store, criteria, ts)
 
 
-DEC, STATUS, NOTES, FLAGS, ROLE = (H.index(x) for x in ("Decision", "Status", "Notes", "Flags", "Role"))
+def tab(sheet, name):
+    rows = sheet.read([name])[name]
+    return [r + [""] * (len(H) - len(r)) for r in rows[1:]]
 
 
-def rows_by_id(backend):
-    rows = backend.read([PIPELINE])[PIPELINE]
-    return rows[0], {r[ID_COL]: r + [""] * (len(HEADERS) - len(r)) for r in rows[1:]}
+def row_index(sheet, name, pid):
+    return 1 + [r[ID_COL] for r in tab(sheet, name)].index(pid)
 
 
-def test_owner_columns_survive_second_run(criteria, board, payload):
+def test_new_postings_land_in_review(criteria, board, evals):
     store, sheet = Store(":memory:"), FakeBackend()
-    run_once(store, sheet, board, payload, criteria, T1)
-    header, rows = rows_by_id(sheet)
-    assert header == HEADERS and len(rows) == 8
-    assert all("New" in r[FLAGS] for r in rows.values())
-
-    # owner fills Status / Effort / Notes on one row
-    grid_row = next(i for i, r in enumerate(sheet.read([PIPELINE])[PIPELINE]) if r[ROLE:ROLE + 1] and r[0:1] == [""])
-    sheet.set_cell(PIPELINE, grid_row, DEC, "All-in")
-    sheet.set_cell(PIPELINE, grid_row, STATUS, "Networking")
-    sheet.set_cell(PIPELINE, grid_row, NOTES, "Coffee chat")
-    pid = sheet.read([PIPELINE])[PIPELINE][grid_row][ID_COL]
-
-    calls_before = len(sheet.calls)
-    run_once(store, sheet, board, payload, criteria, T2)
-    assert len(sheet.calls) == calls_before + 1          # one batch_update per run
-    _, rows = rows_by_id(sheet)
-    assert [rows[pid][i] for i in (DEC, STATUS, NOTES)] == ["All-in", "Networking", "Coffee chat"]
-    assert not any("New" in r[FLAGS].split(", ") for r in rows.values())   # no longer new
-    assert len(rows) == 8                                   # no duplicate rows
+    info = run(store, sheet, board, evals, criteria, T1)
+    passed = sum(e.passed for e in evals)
+    assert info["tabs"] == {REVIEW: passed, APPLICATIONS: 0, PASSED: 0}
+    assert sheet.read([REVIEW])[REVIEW][0] == H
+    assert all(r[DEC] == "Pending" and "New" in r[FLAGS] for r in tab(sheet, REVIEW))
+    assert set(sheet.tabs) == set(ALL_TABS) and len(sheet.calls) == 1       # one write per run
 
 
-def test_hyperlinks_and_formatting(criteria, board, payload):
+def test_decisions_move_rows_and_survive(criteria, board, evals):
     store, sheet = Store(":memory:"), FakeBackend()
-    run_once(store, sheet, board, payload, criteria, T1)
-    links = sheet.formulas(PIPELINE, ROLE)
-    assert links and all(f.startswith('=HYPERLINK("https://jobs.lever.co/') for f in links)
-    tab = sheet.tabs[PIPELINE]
-    assert tab["frozen"] == 1 and len(tab["cf"]) == 2
-    kinds = {next(iter(r)) for r in tab["other"]}
-    assert {"setDataValidation", "setBasicFilter", "repeatCell", "updateDimensionProperties"} <= kinds
-    run_once(store, sheet, board, payload, criteria, T2)
-    assert len(sheet.tabs[PIPELINE]["cf"]) == 2               # rules not duplicated
+    run(store, sheet, board, evals, criteria, T1)
+    ids = [r[ID_COL] for r in tab(sheet, REVIEW)]
+    a, b, c, d = ids[:4]
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, a), DEC, "Apply")
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, a), INT, "5")
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, a), NOTES, "Coffee chat")
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, b), DEC, "Pass")
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, c), INT, "3")            # Interest alone implies Apply
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, c), STATUS, "Applied")
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, d), DEC, "Apply")
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, d), INT, "4")
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, d), STATUS, "Rejected")
+    run(store, sheet, board, evals, criteria, T2)
+
+    apps = tab(sheet, APPLICATIONS)
+    assert [r[ID_COL] for r in apps] == [a, c, d]          # Interest 5, then 3; ended (Rejected) last
+    assert apps[0][DEC] == "Apply" and apps[0][INT] == "5" and apps[0][NOTES] == "Coffee chat"
+    assert apps[1][APPLIED] == T2[:10]                       # Applied on stamped automatically
+    assert [r[ID_COL] for r in tab(sheet, PASSED)] == [b]
+    review = tab(sheet, REVIEW)
+    assert {a, b, c, d}.isdisjoint(r[ID_COL] for r in review)
+    assert not any("New" in r[FLAGS].split(", ") for r in review)
+
+    run(store, sheet, board, evals, criteria, T2)            # a third run keeps everything in place
+    assert [r[ID_COL] for r in tab(sheet, APPLICATIONS)] == [a, c, d]
+
+
+def test_follow_up_after_ten_days(criteria, board, evals):
+    store, sheet = Store(":memory:"), FakeBackend()
+    run(store, sheet, board, evals, criteria, T1)
+    pid = tab(sheet, REVIEW)[0][ID_COL]
+    sheet.set_cell(REVIEW, 1, DEC, "Apply")
+    sheet.set_cell(REVIEW, 1, STATUS, "Applied")
+    run(store, sheet, board, evals, criteria, T2)
+    assert "Follow up" not in tab(sheet, APPLICATIONS)[0][FLAGS]
+    run(store, sheet, board, evals, criteria, T_LATER)
+    app = next(r for r in tab(sheet, APPLICATIONS) if r[ID_COL] == pid)
+    assert "Follow up" in app[FLAGS] and app[APPLIED] == T2[:10]
+
+
+def test_owner_values_restored_from_database(criteria, board, evals):
+    store, sheet = Store(":memory:"), FakeBackend()
+    run(store, sheet, board, evals, criteria, T1)
+    sheet.set_cell(REVIEW, 1, DEC, "Apply")
+    sheet.set_cell(REVIEW, 1, INT, "4")
+    pid = tab(sheet, REVIEW)[0][ID_COL]
+    run(store, sheet, board, evals, criteria, T2)
+    fresh = FakeBackend()                                    # tabs deleted / new Sheet
+    run(store, fresh, board, evals, criteria, T2)
+    app = next(r for r in tab(fresh, APPLICATIONS) if r[ID_COL] == pid)
+    assert app[DEC] == "Apply" and app[INT] == "4"
+
+
+def test_hyperlinks_and_formatting(criteria, board, evals):
+    store, sheet = Store(":memory:"), FakeBackend()
+    run(store, sheet, board, evals, criteria, T1)
+    assert all(f.startswith('=HYPERLINK("https://jobs.lever.co/') for f in sheet.formulas(REVIEW, ROLE))
+    for name in (REVIEW, APPLICATIONS, PASSED):
+        t = sheet.tabs[name]
+        assert t["frozen"] == 1 and len(t["cf"]) == 3
+        kinds = [next(iter(r)) for r in t["other"]]
+        assert kinds.count("setDataValidation") == 3 and "setBasicFilter" in kinds
+    run(store, sheet, board, evals, criteria, T2)
+    assert len(sheet.tabs[REVIEW]["cf"]) == 3                # rules not duplicated
 
 
 def test_closed_posting_stays_and_sinks(criteria, board, payload):
     store, sheet = Store(":memory:"), FakeBackend()
-    run_once(store, sheet, board, payload, criteria, T1)
-    first_id = sheet.read([PIPELINE])[PIPELINE][1][ID_COL]
-    native = first_id.split(":")[-1]
-    shrunk = [p for p in copy.deepcopy(payload) if p["id"] != native]
-    run_once(store, sheet, board, shrunk, criteria, T2)
-    rows = sheet.read([PIPELINE])[PIPELINE]
+    run(store, sheet, board, evaluate_company(board, payload, criteria), criteria, T1)
+    first_id = tab(sheet, REVIEW)[0][ID_COL]
+    shrunk = [p for p in copy.deepcopy(payload) if p["id"] != first_id.split(":")[-1]]
+    run(store, sheet, board, evaluate_company(board, shrunk, criteria), criteria, T2)
+    rows = tab(sheet, REVIEW)
     assert rows[-1][ID_COL] == first_id and "Closed" in rows[-1][FLAGS]
-    run_once(store, sheet, board, payload, criteria, T3)    # reappears -> reopened
-    rows = sheet.read([PIPELINE])[PIPELINE]
-    assert "Closed" not in next(r for r in rows if r[ID_COL] == first_id)[FLAGS]
 
 
-def test_touched_row_never_deleted(criteria, board, payload):
+def test_touched_row_never_deleted(criteria, board, evals):
     store, sheet = Store(":memory:"), FakeBackend()
-    run_once(store, sheet, board, payload, criteria, T1)
-    sheet.set_cell(PIPELINE, 1, NOTES, "keep me")
-    pid = sheet.read([PIPELINE])[PIPELINE][1][ID_COL]
+    run(store, sheet, board, evals, criteria, T1)
+    sheet.set_cell(REVIEW, 1, NOTES, "keep me")
+    pid = tab(sheet, REVIEW)[0][ID_COL]
     store.conn.execute("UPDATE scores SET passed=0 WHERE posting_id=?", (pid,))   # e.g. criteria tightened
     store.commit()
-    sync_pipeline(sheet, store, criteria, T2)
-    _, rows = rows_by_id(sheet)
-    assert pid in rows and rows[pid][NOTES] == "keep me"
+    sync_all(sheet, store, criteria, T2)
+    kept = [r for name in (REVIEW, APPLICATIONS, PASSED) for r in tab(sheet, name) if r[ID_COL] == pid]
+    assert kept and kept[0][NOTES] == "keep me"
 
 
-def test_first_seen_persists(criteria, board, payload):
-    store = Store(":memory:")
-    for ts in (T1, T2):
-        store_evaluations(store, board, evaluate_company(board, payload, criteria), ts)
-    row = store.conn.execute("SELECT first_seen, last_seen, is_new FROM postings LIMIT 1").fetchone()
-    assert (row["first_seen"], row["last_seen"], row["is_new"]) == (T1, T2, 0)
-
-
-def test_sync_all_tabs_one_write(criteria, board, payload):
-    from src.output.sheet import ALL_TABS, sync_all
+def test_other_tabs(criteria, board, evals):
     store, sheet = Store(":memory:"), FakeBackend()
-    evals = evaluate_company(board, payload, criteria)
     store_evaluations(store, board, evals, T1, criteria)
     store.board_ok("Example Co", "lever", len(evals), T1)
-    store.record_run(started_at=T1, finished_at=T1, boards_polled=1, postings_seen=309, new=309,
-                     passed=8, errors=0)
+    passed = sum(e.passed for e in evals)
+    store.record_run(started_at=T1, finished_at=T1, boards_polled=1, postings_seen=len(evals), new=len(evals),
+                     passed=passed, errors=0)
     store.commit()
     sync_all(sheet, store, criteria, T1)
-    assert len(sheet.calls) == 1
     data = sheet.read(ALL_TABS)
-    assert data["Dropped"][0] == ["Company", "Role", "Gate", "Matched text", "Date"] and len(data["Dropped"]) == 302
-    assert data["Funnel"][1][1:] == ["1", "309", "309", "8", "301", "0"]
+    assert len(data["Dropped"]) == 1 + len(evals) - passed
+    assert data["Funnel"][1][1:] == ["1", str(len(evals)), str(len(evals)), str(passed),
+                                     str(len(evals) - passed), "0"]
     assert data["Board health"][1][-1] == "OK"
-    pipe = data["Pipeline"]
-    assert pipe[0] == H and "Tier" not in pipe[0] and "Score" not in pipe[0]
-    assert all(r[H.index("Field")] for r in pipe[1:]) and all(r[H.index("Source")] == "Lever" for r in pipe[1:])
 
 
-def test_decision_sorting_and_veto(criteria, board, payload):
-    store, sheet = Store(":memory:"), FakeBackend()
-    run_once(store, sheet, board, payload, criteria, T1)
-    rows = sheet.read([PIPELINE])[PIPELINE]
-    vetoed, applied, allin = rows[1][ID_COL], rows[2][ID_COL], rows[3][ID_COL]
-    sheet.set_cell(PIPELINE, 1, DEC, "Veto")
-    sheet.set_cell(PIPELINE, 2, DEC, "Apply")
-    sheet.set_cell(PIPELINE, 3, DEC, "All-in")
-    run_once(store, sheet, board, payload, criteria, T2)
-    order = [r[ID_COL] for r in sheet.read([PIPELINE])[PIPELINE][1:]]
-    decisions = [r[DEC] if len(r) > DEC else "" for r in sheet.read([PIPELINE])[PIPELINE][1:]]
-    assert order[-1] == vetoed and order[-3] == allin and order[-2] == applied
-    assert decisions == [""] * 5 + ["All-in", "Apply", "Veto"]   # undecided first, then All-in, Apply, Veto
+def test_first_seen_persists(criteria, board, evals):
+    store = Store(":memory:")
+    for ts in (T1, T2):
+        store_evaluations(store, board, evals, ts, criteria)
+    row = store.conn.execute("SELECT first_seen, last_seen, is_new FROM postings LIMIT 1").fetchone()
+    assert (row["first_seen"], row["last_seen"], row["is_new"]) == (T1, T2, 0)

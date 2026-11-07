@@ -125,7 +125,8 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Sheet sync skipped: set SHEET_ID and GOOGLE_SERVICE_ACCOUNT_JSON (or --fake-sheet)")
     else:
         res = sync_all(backend, store, criteria, ts)
-        log.info("Sheet: %d rows in Pipeline (%d batch requests in one call)", res["rows"], res["requests"])
+        log.info("Sheet: %s (%d requests in one write)",
+                 ", ".join(f"{t} {n}" for t, n in res["tabs"].items()), res["requests"])
     store.close()
     return 0
 

@@ -32,6 +32,13 @@ CREATE TABLE IF NOT EXISTS scores (       -- rule results (no scoring since v2)
     display TEXT,            -- JSON of Sheet-ready facts (field, visa, salary, ...)
     evaluated_at TEXT
 );
+CREATE TABLE IF NOT EXISTS owner_state (   -- your Sheet columns, mirrored
+    posting_id TEXT PRIMARY KEY,
+    decision TEXT, interest TEXT, status TEXT, notes TEXT,
+    applied_on TEXT,          -- first time Status was seen as Applied
+    status_changed_at TEXT,   -- last time Status changed (follow-up clock)
+    updated_at TEXT
+);
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT, finished_at TEXT,
     boards_polled INTEGER, postings_seen INTEGER, new INTEGER, passed INTEGER, errors INTEGER
@@ -121,6 +128,26 @@ class Store:
             "SELECT p.company, p.title, p.url, s.gate, s.matched, s.dropped_at FROM postings p "
             "JOIN scores s USING(posting_id) WHERE s.passed=0 AND s.dropped_at >= ? "
             "ORDER BY s.dropped_at DESC", (cutoff,)).fetchall()
+
+    # --- your columns -----------------------------------------------------
+    def save_owner_state(self, posting_id: str, vals: dict, ts: str) -> None:
+        """Mirror Decision / Interest / Status / Notes; stamp Applied on and status changes."""
+        prev = self.conn.execute("SELECT * FROM owner_state WHERE posting_id=?", (posting_id,)).fetchone()
+        status = vals.get("Status", "") or ""
+        applied_on = prev["applied_on"] if prev is not None else None
+        changed_at = prev["status_changed_at"] if prev is not None else None
+        if prev is None or (prev["status"] or "") != status:
+            changed_at = ts
+        if status == "Applied" and not applied_on:
+            applied_on = ts
+        self.conn.execute(
+            "INSERT OR REPLACE INTO owner_state(posting_id, decision, interest, status, notes, applied_on, "
+            "status_changed_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+            (posting_id, vals.get("Decision", ""), vals.get("Interest", ""), status, vals.get("Notes", ""),
+             applied_on, changed_at, ts))
+
+    def owner_states(self) -> dict[str, dict]:
+        return {r["posting_id"]: dict(r) for r in self.conn.execute("SELECT * FROM owner_state")}
 
     # --- runs / health --------------------------------------------------
     def record_run(self, **counts: Any) -> None:

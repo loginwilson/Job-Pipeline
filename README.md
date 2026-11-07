@@ -28,13 +28,33 @@ rule and the exact text that triggered it):
 | 8 | a **required** credential you lack (MBA, JD, Master's, PhD, CPA, bar, RN, PE, CS/engineering-type degree) |
 | 9 | starts before you graduate (May 2027); starts after Aug 1, 2027 are flagged for OPT timing |
 
-**You decide** in the Pipeline tab's **Decision** column:
-**Veto** (not for me) · **Apply** (real option) · **All-in** (strong application + networking).
-Undecided postings sort to the top, newest first; then All-in, Apply, Veto; closed at the
-bottom. Facts to decide with: Field, Location, Salary, Extra comp, Experience ask, Visa
-(OPT year 1 · likely TN category later), Flags, Posted, Source. **Status** (Drafting →
-Applied → Networking → Interviewing → Offer / Rejected / Withdrawn) and **Notes** are yours;
-the pipeline never overwrites them or deletes a row you touched.
+**You decide** with three columns, each answering one question:
+
+| Column | Values | Means |
+|---|---|---|
+| **Decision** | Pending (default) · Apply · Pass | Do I want it? |
+| **Interest** | 1–5 (on Apply) | How much? 1–2 backup, 3 solid, 4–5 all-in (tailored application + networking) |
+| **Status** | Not started → Drafting → Applied → Networking → Interviewing → Offer, or Rejected / Withdrawn / No response | Where it stands |
+
+Plus **Notes**. The pipeline stamps **Applied on** the first time it sees Status = Applied,
+and flags **Follow up** when an Applied / Networking application hasn't moved for 10 days
+(`tracking` in `criteria.yaml`).
+
+**Tabs:**
+* **To review** — every new posting that passed the must-haves (Decision = Pending), newest
+  first. Your inbox: clear it.
+* **My applications** — Decision = Apply (setting Interest or Status also counts), sorted by
+  Interest 5 → 1, active statuses before ended ones. All-in (4–5) rows are green; Follow up
+  rows are yellow.
+* **Passed** — your archive; set Decision back to Apply any time.
+* **Dropped** (with the rule + matched text), **Funnel**, **Board health**, **Unparsed alerts**.
+
+A row moves to its tab on the next hourly run after you change Decision. Your columns are
+also saved in the database, so they survive even if a tab is deleted, and the pipeline never
+overwrites them or deletes a row you've touched. Facts on every row: Field, Location, Salary,
+Extra comp, Experience ask, Visa (OPT year 1 · likely TN category later), Flags (New, Apply
+soon, Low base — check incentives, Salary unknown, No H-1B sponsorship, Closed, …), Posted,
+First seen, Source.
 
 ## Your Sheet — one-time setup (≈15 min)
 
@@ -52,8 +72,8 @@ the pipeline never overwrites them or deletes a row you touched.
    - `SHEET_ID` — the ID from step 2
    - `ALERTS_IMAP_USER`, `ALERTS_IMAP_APP_PASSWORD` — later, for job-alert emails (`docs/ALERTS_SETUP.md`)
 4. **First run** — repo → *Actions → hourly pipeline → Run workflow*. When it finishes
-   (≈1–2 min), the Sheet has five tabs: Pipeline, Dropped, Unparsed alerts, Funnel,
-   Board health. After that it runs every hour at :17.
+   (≈1–2 min), the Sheet has its tabs (To review, My applications, Passed, Dropped,
+   Unparsed alerts, Funnel, Board health). After that it runs every hour at :17.
 5. **Add a company** — edit `config/watchlist.yaml`: `name`, `platform`
    (greenhouse / lever / ashby) and `slug` from the board URL
    (`jobs.lever.co/<slug>`, `boards.greenhouse.io/<slug>`, `jobs.ashbyhq.com/<slug>`).
