@@ -260,6 +260,44 @@ def run_jsearch(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> l
     return evals
 
 
+def discover_from_hn(store: Store, cfg: dict, known: set[str], matcher, ts: str) -> list[Company]:
+    """Board links in Hacker News 'Who is hiring?' posts that mention one of your cities."""
+    from .sources import hn
+    sess = requests.Session()
+    names = sorted({n for n, *_ in matcher.names}, key=len, reverse=True)
+    city_rx = re.compile(r"\b(?:" + "|".join(re.escape(n) for n in names) + r")\b", re.I)
+    candidates: dict[tuple[str, str], str] = {}
+    for item_id in hn.recent_threads(int(cfg.get("threads", 3)), sess):
+        for post in hn.posts(hn.thread(item_id, sess)):
+            if not city_rx.search(post["text"]):
+                continue
+            for link in post["links"]:
+                b = board_from_url(link)
+                if not b:
+                    continue
+                name = post["company"]
+                if len(name.split()) > 5 or city_rx.fullmatch(name.strip()) or not name[:1].isupper():
+                    # free-form first line: name the company after its board instead
+                    slug = b[1].split("/")[-1] if b[0] == "workday" else b[1]
+                    name = re.sub(r"[-_.]+", " ", slug).strip().title()
+                if normalize(name) not in known:
+                    candidates.setdefault(b, name)
+    todo = [(b, c) for b, c in candidates.items() if store.probe_due(f"hn:{b[0]}:{b[1]}", 30, ts)]
+    with ThreadPoolExecutor(max_workers=PARALLEL_BOARDS) as pool:
+        counts = list(pool.map(lambda bc: verify_board(bc[0][0], bc[0][1], requests.Session()), todo))
+    found = []
+    for ((platform, slug), company), n in zip(todo, counts):
+        store.record_probe(f"hn:{platform}:{slug}", f"{n} postings", ts)
+        if n and normalize(company) not in known:
+            store.add_discovered(company, platform, slug, "Hacker News", "", ts)
+            known.add(normalize(company))
+            found.append(Company(name=company, platform=platform, slug=slug))
+            log.info("Discovered %s board for %s from Hacker News (%d postings)", platform, company, n)
+    store.commit()
+    log.info("Hacker News: %d board links in posts about your cities, %d new boards", len(candidates), len(found))
+    return found
+
+
 def discover(store: Store, evals: list[Evaluation], cfg: dict, known: set[str], ts: str) -> list[Company]:
     """Probe for the company boards behind search results. Returns newly found boards."""
     if not cfg.get("enabled", True):
@@ -367,6 +405,13 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as exc:  # discovery problems never stop the run
                 log.error("discovery error: %s", exc)
                 totals["errors"] += 1
+        hn_cfg = cfg.get("hackernews") or {}
+        if hn_cfg.get("enabled") and store.source_due("hackernews", hn_cfg.get("every_hours", 24), ts):
+            try:
+                discover_from_hn(store, hn_cfg, known, matcher, ts)
+                store.source_complete("hackernews", ts)
+            except Exception as exc:  # never stops the run
+                log.error("Hacker News discovery error: %s", exc)
         watch = {normalize(c.name) for c in companies}
         companies += [Company(name=r["company"], platform=r["platform"], slug=r["slug"])
                       for r in store.discovered_boards() if normalize(r["company"]) not in watch]

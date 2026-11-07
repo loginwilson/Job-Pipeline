@@ -51,3 +51,8 @@ boards:                     # how often each kind of company board is polled (de
     workday: 6              # large career sites, details fetched only for postings that could pass
   quiet_after_days: 3       # a board with no passing posting for this long...
   quiet_every_hours: 6      # ...is polled this often instead (it speeds up again when one passes)
+
+hackernews:                 # "Ask HN: Who is hiring?" — discovery only (board links in posts about your cities)
+  enabled: true
+  threads: 3                # this month's thread and the two before
+  every_hours: 24

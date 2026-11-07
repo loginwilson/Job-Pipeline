@@ -85,7 +85,9 @@ _TITLE_TYPES = [
     (re.compile(r"\bco[- ]?op\b", re.I), "co_op"),
     (re.compile(r"\bapprentice(?:ship)?s?\b", re.I), "apprenticeship"),
     (re.compile(r"\bcontract[- ]to[- ]hire\b", re.I), "contract_to_hire"),
-    (re.compile(r"\bcontractor\b|\(contract\)|\bcontract (?:role|position)\b|[-–,]\s*contract\s*$", re.I), "contract"),
+    (re.compile(r"\bcontractor\b|\(contract\)|\bcontract (?:role|position)\b|[-–,]\s*contract\s*$"
+                r"|^\s*contract\s+(?!operations|management|manager|administrator|specialist|analyst|negotiat|attorney|counsel)",
+                re.I), "contract"),
     (re.compile(r"\btemporary\b|\(temp\)|\btemp\b|\bfixed[- ]term\b|\bseasonal\b", re.I), "temp"),
 ]
 _DESC_TYPES = re.compile(

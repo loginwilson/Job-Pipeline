@@ -13,7 +13,8 @@ budget (`config/sources.yaml`; needs the `JSEARCH_API_KEY` GitHub secret). → m
 then adapters for the career-site platforms search results point to most (tracked in the
 `link_domains` table).
 
-**Auto-discovery:** every company a search source finds in your cities is checked for a
+**Auto-discovery:** Hacker News "Who is hiring?" posts that mention your cities are read daily
+for job-board links; and every company a search source finds in your cities is checked for a
 Greenhouse / Lever / Ashby / SmartRecruiters / Workday board (apply links first, then name
 lookups); if that board lists the same job, it joins the hourly
 watch (Board health tab). The same job from two sources appears once — the company-board

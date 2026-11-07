@@ -23,6 +23,8 @@ def test_employment_type(evaluate):
     short = evaluate(title="Builders Fellowship", employment=None, lines=[PAY_OK, "The fellowship runs for 12 weeks."])
     assert "employment_type" in gates_of(short)
     assert evaluate(title="Contract Operations", lines=[PAY_OK]).passed   # not a contract job
+    assert evaluate(title="Contract Manager", lines=[PAY_OK]).passed      # manages contracts
+    assert "employment_type" in gates_of(evaluate(title="Contract Recruiter, GTM and Ops", lines=[PAY_OK]))
 
 
 # 2. location
@@ -142,7 +144,8 @@ def test_start_date(evaluate):
 
 # 10. a real opening
 def test_real_opening(evaluate):
-    for title in ("Operations Associate - Join Our Talent Community", "General Application",
+    for title in ("Wildcard", "Wild Card", "Don’t See a Perfect Role? Apply Anyway!", "Former Founder",
+                  "Operations Associate - Join Our Talent Community", "General Application",
                   "Future Opportunities: Analyst", "Expression of Interest - Strategy"):
         assert "not_a_real_opening" in {f.gate for f in evaluate(title=title, lines=[PAY_OK]).failures}, title
     assert evaluate(title="Operations Associate", lines=[PAY_OK]).passed

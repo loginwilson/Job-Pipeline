@@ -140,3 +140,23 @@ def test_quiet_board_detection():
     assert store.board_is_quiet("Acme", 3, "2026-11-11T11:00:00+00:00")
     store.note_board_passes("Acme", 2, "2026-11-11T11:00:00+00:00")
     assert not store.board_is_quiet("Acme", 3, "2026-11-12T11:00:00+00:00")
+
+
+def test_hn_posts_and_discovery(monkeypatch, criteria):
+    import src.run as run_mod
+    from src.sources import hn
+    item = load_fixture(FIXTURES / "hn_whoishiring.json.gz")
+    posts = hn.posts(item)
+    assert len(posts) == 80 and all(p["company"] for p in posts)
+    fake = {"children": [
+        {"text": "Acme Robotics | Operations Associate | NYC | https://jobs.ashbyhq.com/acme-robotics/123"},
+        {"text": "Overjoyed to announce our big round, we are hiring in New York City! https://jobs.lever.co/coolco"},
+        {"text": "Faraway Inc | Analyst | Berlin only | https://boards.greenhouse.io/faraway"},
+    ]}
+    monkeypatch.setattr(hn, "recent_threads", lambda n, s: ["1"])
+    monkeypatch.setattr(hn, "thread", lambda i, s: fake)
+    monkeypatch.setattr(run_mod, "verify_board", lambda platform, slug, session=None: 5)
+    store = Store(":memory:")
+    found = run_mod.discover_from_hn(store, {"threads": 1}, set(), LocationMatcher(criteria), T1)
+    assert sorted((c.name, c.platform, c.slug) for c in found) == [
+        ("Acme Robotics", "ashby", "acme-robotics"), ("Coolco", "lever", "coolco")]   # Berlin-only post skipped
