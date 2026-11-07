@@ -16,12 +16,15 @@ No scoring: the owner decides each posting in the Sheet.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
+import os
 import logging
 import re
 import sys
 import time
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import requests
@@ -42,22 +45,41 @@ from .textmatch import normalize
 log = logging.getLogger("pipeline")
 
 
+DETAIL_PLATFORMS = ("smartrecruiters", "workday")
+PARALLEL_BOARDS = 8
+
+
 def evaluate_company(company, payload=None, criteria=None, gates=None, matcher=None,
-                     store: Store | None = None, ts: str | None = None) -> list[Evaluation]:
+                     store: Store | None = None, ts: str | None = None,
+                     cache: dict | None = None) -> list[Evaluation]:
+    """Fetch + normalize + rules for one board. Thread-safe when `store` is None
+    (pass a preloaded detail `cache` instead)."""
     criteria = criteria or load_criteria()
     matcher = matcher or LocationMatcher(criteria)
     gates = gates or Gates(criteria)
     src = get_source(company.platform)
     if payload is not None:
         raws = src.parse(payload, company.slug)
-    elif company.platform in ("smartrecruiters", "workday"):
-        raws = _fetch_with_details(src, company, criteria, gates, matcher, store, ts)
+    elif company.platform in DETAIL_PLATFORMS:
+        raws = _fetch_with_details(src, company, criteria, gates, matcher, store, ts, cache)
     else:
         raws = src.fetch(company.slug)
-    return [gates.evaluate(normalize_posting(r, company, criteria, matcher)) for r in raws]
+    return [evaluate_one(r, company, criteria, gates, matcher) for r in raws]
 
 
-def _fetch_with_details(src, company, criteria, gates, matcher, store, ts):
+def evaluate_one(raw, company, criteria, gates, matcher) -> Evaluation:
+    """Rules for one posting. Fast path: a posting that already fails on its title,
+    location or job type is not put through the (slow) description parsing."""
+    stub = dataclasses.replace(raw, description_lines=[])
+    quick = gates.evaluate(normalize_posting(stub, company, criteria, matcher))
+    if not quick.passed:
+        quick.posting.raw = raw            # keep the full posting for the snapshot
+        quick.posting.description_lines = raw.description_lines
+        return quick
+    return gates.evaluate(normalize_posting(raw, company, criteria, matcher))
+
+
+def _fetch_with_details(src, company, criteria, gates, matcher, store, ts, cache=None):
     """SmartRecruiters / Workday: list every poll; fetch descriptions only for postings
     that could pass on title + location (cached, so each is fetched once)."""
     from .sources.base import RawPosting
@@ -80,6 +102,8 @@ def _fetch_with_details(src, company, criteria, gates, matcher, store, ts):
         return gates.evaluate(normalize_posting(stub, company, criteria, matcher)).passed
 
     prefix = f"{src.platform}:{company.slug}:"
+    if cache is not None:                      # caller loads and saves the cache (parallel polling)
+        return src.fetch(company.slug, want=want, cache=cache)
     cache = store.details_for(prefix) if store is not None else {}
     before = set(cache)
     raws = src.fetch(company.slug, want=want, cache=cache)
@@ -97,7 +121,7 @@ def evaluate_raws(raws, criteria, gates, matcher, company: Company | None = None
     out = []
     for r in raws:
         comp = company or Company(name=r.company or r.slug, platform=r.platform, slug=r.slug)
-        out.append(gates.evaluate(normalize_posting(r, comp, criteria, matcher)))
+        out.append(evaluate_one(r, comp, criteria, gates, matcher))
     return out
 
 
@@ -201,6 +225,9 @@ def run_jsearch(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> l
     """Spend today's JSearch budget on the least-recently searched keyword x city pairs."""
     if not cfg.get("enabled"):
         return None
+    if not os.environ.get("JSEARCH_API_KEY"):
+        log.info("JSearch: skipped (no JSEARCH_API_KEY)")
+        return None
     budget = store.budget_left("jsearch", int(cfg.get("requests_per_day", 0)), ts)
     if budget <= 0:
         return None
@@ -239,7 +266,7 @@ def discover(store: Store, evals: list[Evaluation], cfg: dict, known: set[str], 
         m = re.search(r"https?://(?:www\.)?([a-z0-9-]+)\.", site.lower())
         entry = by_company.setdefault(p.company, {"titles": [], "hint": hint or (m.group(1) if m else None)})
         entry["titles"].append(p.title)
-    found, probed = [], 0
+    found = []
     sess = requests.Session()
     # 1. apply links that point straight into a company board — no guessing needed
     for ev in evals:
@@ -264,14 +291,25 @@ def discover(store: Store, evals: list[Evaluation], cfg: dict, known: set[str], 
                 found.append(Company(name=p.company, platform=platform, slug=slug))
                 log.info("Discovered %s board for %s from an apply link (%d postings)", platform, p.company, n)
                 break
-    # 2. otherwise try likely board names
+    # 2. otherwise try likely board names (several companies at once)
+    todo = []
     for name, info in sorted(by_company.items()):
         if normalize(name) in known or not store.probe_due(name, int(cfg.get("retry_unfound_after_days", 30)), ts):
             continue
-        if probed >= int(cfg.get("max_new_companies_per_run", 40)):
+        if len(todo) >= int(cfg.get("max_new_companies_per_run", 40)):
             break
-        probed += 1
-        hit = find_board(name, info["titles"], info["hint"], sess)
+        todo.append((name, info))
+
+    def _probe(item):
+        name, info = item
+        try:
+            return find_board(name, info["titles"], info["hint"], requests.Session())
+        except Exception as exc:
+            log.warning("discovery: %s failed (%s)", name, exc)
+            return None
+    with ThreadPoolExecutor(max_workers=PARALLEL_BOARDS) as pool:
+        hits = list(pool.map(_probe, todo))
+    for (name, info), hit in zip(todo, hits):
         store.record_probe(name, f"{hit.platform}:{hit.slug}" if hit else "none", ts)
         if hit:
             store.add_discovered(name, hit.platform, hit.slug, "search", hit.matched_title, ts)
@@ -329,14 +367,34 @@ def main(argv: list[str] | None = None) -> int:
     board_keys: set[str] = set()
     board_companies: set[str] = set()
     every = (load_sources_config().get("boards") or {}).get("every_hours") or {}
+    # a) decide what to poll and load detail caches (database work stays on this thread)
+    jobs = []
     for company in companies:
         payload = load_fixture(args.fixture) if args.fixture else None
         hours = every.get(company.platform)
         if store is not None and payload is None and hours and not store.source_due(f"board:{company.platform}:{company.slug}", hours, ts):
             continue        # large career site polled less often; its postings stay as they were
+        cache = None
+        if store is not None and payload is None and company.platform in DETAIL_PLATFORMS:
+            cache = store.details_for(f"{company.platform}:{company.slug}:")
+        jobs.append((company, payload, hours, cache, set(cache or {})))
+
+    # b) fetch + rules in parallel (network-bound)
+    def _poll(job):
+        company, payload, _, cache, _ = job
         try:
-            evals = evaluate_company(company, payload, criteria, gates, matcher, store, ts)
+            return evaluate_company(company, payload, criteria, gates, matcher, None, ts, cache), None
         except Exception as exc:      # one bad board never stops the run
+            return None, exc
+    with ThreadPoolExecutor(max_workers=PARALLEL_BOARDS) as pool:
+        results = list(pool.map(_poll, jobs))
+
+    # c) store sequentially, in watchlist order
+    for (company, payload, hours, cache, before), (evals, exc) in zip(jobs, results):
+        if cache is not None:
+            store.save_details(f"{company.platform}:{company.slug}:",
+                               {k: v for k, v in cache.items() if k not in before}, ts)
+        if exc is not None:
             log.error("board error: %s:%s %s", company.platform, company.slug, exc)
             totals["errors"] += 1
             if store:

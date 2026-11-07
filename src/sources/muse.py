@@ -16,11 +16,13 @@ import urllib.parse
 from datetime import datetime, timedelta, timezone
 from typing import Any, Iterable
 
+from concurrent.futures import ThreadPoolExecutor
+
 import requests
 
 from ..config import Criteria, load_reference
 from ..pipeline.html_text import html_to_lines
-from .base import RawPosting, Source, SourceError
+from .base import TIMEOUT_S, USER_AGENT, RawPosting, Source, SourceError
 
 API = "https://www.themuse.com/api/public/jobs"
 
@@ -55,21 +57,32 @@ class MuseSource(Source):
         params += [("location", loc) for loc in locations]
         return API + "?" + urllib.parse.urlencode(params)
 
+    def get_page(self, page: int, locations: list[str], session: requests.Session) -> dict:
+        url = self.page_url(page, locations)
+        last = None
+        for attempt in range(3):
+            try:
+                r = session.get(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
+                                timeout=TIMEOUT_S)
+                if r.status_code == 429 or r.status_code >= 500:
+                    raise requests.HTTPError(f"HTTP {r.status_code}")
+                r.raise_for_status()
+                return r.json()
+            except (requests.RequestException, ValueError) as exc:
+                last = exc
+                time.sleep(2 * (attempt + 1))
+        raise SourceError(f"The Muse page {page} failed: {last}")
+
     def sweep(self, locations: list[str], session: requests.Session | None = None,
-              pause_s: float = 0.5) -> tuple[list[dict], bool]:
-        """Read every page. Returns (pages, complete)."""
+              workers: int = 4) -> tuple[list[dict], bool]:
+        """Read every page (4 at a time). Returns (pages, complete)."""
         sess = session or requests.Session()
-        pages, page, total = [], 0, None
-        max_pages = int(self.settings.get("max_pages", 120))
-        while page < max_pages and (total is None or page < total):
-            self._url = self.page_url(page, locations)
-            payload = self.fetch_payload("", sess)
-            pages.append(payload)
-            total = int(payload.get("page_count", 0))
-            page += 1
-            if pause_s:
-                time.sleep(pause_s)
-        return pages, total is not None and page >= total
+        first = self.get_page(0, locations, sess)
+        total = min(int(first.get("page_count", 0)), int(self.settings.get("max_pages", 120)))
+        rest = list(range(1, total))
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            pages = [first] + list(pool.map(lambda p: self.get_page(p, locations, sess), rest))
+        return pages, total == int(first.get("page_count", 0))
 
     def endpoint(self, slug: str) -> str:
         return self._url

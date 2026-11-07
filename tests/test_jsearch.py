@@ -37,6 +37,7 @@ def test_budget_and_rotation(monkeypatch, criteria, payload):
         calls.append((query, country, window))
         return payload
     monkeypatch.setattr(run_mod, "jsearch_search", fake_search)
+    monkeypatch.setenv("JSEARCH_API_KEY", "test-placeholder")
     store, gates, matcher = Store(":memory:"), Gates(criteria), LocationMatcher(criteria)
     evals = run_mod.run_jsearch(store, CFG, criteria, gates, matcher, T1)
     assert len(calls) == 3 and all(w == "month" for *_, w in calls)          # first fill, budget of 3
@@ -102,3 +103,10 @@ def test_verify_workday_board_does_not_crash(monkeypatch):
     pages = load_fixture(FIXTURES / "workday_costar.json.gz")["pages"]
     monkeypatch.setattr(WorkdaySource, "fetch_payload_list", lambda self, slug, session=None: {"pages": pages})
     assert discover.verify_board("workday", "costar.wd1/CoStarCareers") == 20
+
+
+def test_no_key_skips_quietly(monkeypatch, criteria):
+    monkeypatch.delenv("JSEARCH_API_KEY", raising=False)
+    store = Store(":memory:")
+    assert run_mod.run_jsearch(store, CFG, criteria, Gates(criteria), LocationMatcher(criteria), T1) is None
+    assert store.board_health() == []          # not recorded as a board error

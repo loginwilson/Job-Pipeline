@@ -23,6 +23,7 @@ _QUOTES = str.maketrans({"’": "'", "‘": "'", "“": '"', "”": '"',
 _ABBREV = re.compile(r"\b(?:[A-Za-z]\.){2,}")
 
 
+@lru_cache(maxsize=300_000)
 def normalize(text: str, lower: bool = True) -> str:
     """Normalize text for matching. Keeps commas/periods (some terms use them)."""
     if not text:
@@ -72,6 +73,22 @@ def term_regex(term: str) -> re.Pattern:
     return re.compile(left + body + right, flags)
 
 
+@lru_cache(maxsize=4096)
+def _any_term_regex(terms: tuple[str, ...]) -> re.Pattern | None:
+    """One alternation of every term, used to skip lines that match nothing."""
+    parts = [term_regex(t) for t in terms]
+    if not parts:
+        return None
+    sensitive = [p.pattern for p in parts if not p.flags & re.IGNORECASE]
+    insensitive = [p.pattern for p in parts if p.flags & re.IGNORECASE]
+    alts = []
+    if insensitive:
+        alts.append("(?i:" + "|".join(f"(?:{x})" for x in insensitive) + ")")
+    if sensitive:
+        alts.append("|".join(f"(?:{x})" for x in sensitive))
+    return re.compile("|".join(alts))
+
+
 @dataclass
 class TermMatch:
     term: str
@@ -85,11 +102,14 @@ def find_terms(lines: Iterable[str] | str, terms: Iterable[str], first_only: boo
     if isinstance(lines, str):
         lines = lines.split("\n")
     out: list[TermMatch] = []
-    terms = [t for t in terms if t and str(t).strip()]
+    terms = [str(t) for t in terms if t and str(t).strip()]
+    quick = _any_term_regex(tuple(terms))
     for idx, line in enumerate(lines):
         if not line.strip():
             continue
         norm_cased = normalize(line, lower=False)
+        if quick is None or not quick.search(norm_cased):
+            continue
         for term in terms:
             for m in term_regex(str(term)).finditer(norm_cased):
                 if ignore_spans and _inside(m.span(), ignore_spans.get(idx, [])):
