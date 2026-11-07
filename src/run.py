@@ -80,7 +80,8 @@ def display_fields(ev: Evaluation) -> dict:
 
 
 def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, criteria=None,
-                      prefix: str | None = None, board_keys: set[str] | None = None) -> dict:
+                      prefix: str | None = None, board_keys: set[str] | None = None,
+                      board_companies: set[str] | None = None) -> dict:
     """Save one board's (or one search sweep's) postings and close the ones that vanished.
 
     Search-source postings are skipped when the same job is already on a company
@@ -96,7 +97,9 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
         p = ev.posting
         key = dedupe_key(ev)
         if is_search and ((board_keys and key in board_keys) or store.open_board_key(key)):
-            continue
+            continue        # the company-board copy is stored instead
+        if is_search and board_companies and normalize(p.company) in board_companies:
+            continue        # we watch this company's board and the job isn't on it: not active
         info = store.upsert_posting(p.posting_id, p.company, p.title, p.url, p.posted_at,
                                     p.raw.raw if p.raw else {}, ts, dedupe_key=key)
         if not is_search:
@@ -204,6 +207,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # 3. company boards
     board_keys: set[str] = set()
+    board_companies: set[str] = set()
     for company in companies:
         payload = load_fixture(args.fixture) if args.fixture else None
         try:
@@ -223,6 +227,7 @@ def main(argv: list[str] | None = None) -> int:
         if status != "OK":
             log.warning("%s board: %s", company.name, status)
         board_keys |= {dedupe_key(e) for e in evals}
+        board_companies.add(normalize(company.name))
         c = store_evaluations(store, company, evals, ts, criteria)
         totals["postings_seen"] += c["seen"]
         for k in ("new", "passed"):
@@ -233,7 +238,7 @@ def main(argv: list[str] | None = None) -> int:
     if muse_evals is not None:
         c = store_evaluations(store, Company(name="The Muse", platform="muse", slug="search"), muse_evals, ts,
                               criteria, prefix="muse:" if muse_complete else "muse:__none__",
-                              board_keys=board_keys)
+                              board_keys=board_keys, board_companies=board_companies)
         if muse_complete:
             store.source_complete("muse", ts)
         totals["postings_seen"] += c["seen"]

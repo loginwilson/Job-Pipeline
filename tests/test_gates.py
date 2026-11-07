@@ -122,6 +122,14 @@ def test_start_date(evaluate):
     assert "Starts after Aug 1 — check OPT timing" not in evaluate(lines=[PAY_OK, "Start date: June 2027"]).flags
 
 
+# 10. a real opening
+def test_real_opening(evaluate):
+    for title in ("Operations Associate - Join Our Talent Community", "General Application",
+                  "Future Opportunities: Analyst", "Expression of Interest - Strategy"):
+        assert "not_a_real_opening" in {f.gate for f in evaluate(title=title, lines=[PAY_OK]).failures}, title
+    assert evaluate(title="Operations Associate", lines=[PAY_OK]).passed
+
+
 def test_field_column(evaluate):
     assert evaluate(title="Acquisitions Associate, Commercial Real Estate", lines=[PAY_OK]).field == "Real Estate / Proptech"
     assert evaluate(title="Hotel Operations Associate", lines=[PAY_OK]).field == "Hospitality / Travel"

@@ -125,14 +125,20 @@ def test_hyperlinks_and_formatting(criteria, board, evals):
     assert len(sheet.tabs[REVIEW]["cf"]) == 3                # rules not duplicated
 
 
-def test_closed_posting_stays_and_sinks(criteria, board, payload):
+def test_closed_postings_leave_review_but_stay_in_applications(criteria, board, payload):
     store, sheet = Store(":memory:"), FakeBackend()
     run(store, sheet, board, evaluate_company(board, payload, criteria), criteria, T1)
-    first_id = tab(sheet, REVIEW)[0][ID_COL]
-    shrunk = [p for p in copy.deepcopy(payload) if p["id"] != first_id.split(":")[-1]]
-    run(store, sheet, board, evaluate_company(board, shrunk, criteria), criteria, T2)
     rows = tab(sheet, REVIEW)
-    assert rows[-1][ID_COL] == first_id and "Closed" in rows[-1][FLAGS]
+    untouched, applied = rows[0][ID_COL], rows[1][ID_COL]
+    sheet.set_cell(REVIEW, 2, DEC, "Apply")
+    gone = {untouched.split(":")[-1], applied.split(":")[-1]}
+    shrunk = [p for p in copy.deepcopy(payload) if p["id"] not in gone]       # both close on the board
+    run(store, sheet, board, evaluate_company(board, shrunk, criteria), criteria, T2)
+    assert untouched not in [r[ID_COL] for r in tab(sheet, REVIEW)]            # not an option anymore
+    app = next(r for r in tab(sheet, APPLICATIONS) if r[ID_COL] == applied)
+    assert "Closed" in app[FLAGS]                                              # you still see what happened
+    run(store, sheet, board, evaluate_company(board, payload, criteria), criteria, T2)   # reopens
+    assert untouched in [r[ID_COL] for r in tab(sheet, REVIEW)]
 
 
 def test_touched_row_never_deleted(criteria, board, evals):

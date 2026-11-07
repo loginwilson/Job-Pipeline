@@ -6,7 +6,7 @@ muse:                       # The Muse public API (free, no key)
   levels: [Entry Level]     # Muse's own level filter; criteria rules still apply after
   every_hours: 20           # full sweep about once a day (results can't be sorted by date)
   max_pages: 120
-  max_age_days: 60          # skip postings published longer ago than this
+  max_age_days: 30          # skip postings published longer ago than this (stale listings)
 
 discovery:                  # companies found by search → their own job board joins the hourly watch
   enabled: true

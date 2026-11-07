@@ -51,11 +51,17 @@ class Gates:
 
     def evaluate(self, p: Posting) -> Evaluation:
         ev = Evaluation(posting=p)
-        for rule in (self.employment_type, self.location, self.salary, self.experience, self.seniority,
-                     self.work_authorization, self.technical_and_credentials, self.timing):
+        for rule in (self.real_opening, self.employment_type, self.location, self.salary, self.experience,
+                     self.seniority, self.work_authorization, self.technical_and_credentials, self.timing):
             rule(p, ev)
         ev.field = field_of(p, self.c)
         return ev
+
+    # 10. a real opening (not a talent pool / general application) ----------
+    def real_opening(self, p: Posting, ev: Evaluation) -> None:
+        hit = find_terms(p.title, self.c.get("openings", "drop_title_terms", default=[]) or [], first_only=True)
+        if hit:
+            ev.fail("not_a_real_opening", f"'{hit[0].term}': {p.title}")
 
     # 1. employment type --------------------------------------------------
     def employment_type(self, p: Posting, ev: Evaluation) -> None:

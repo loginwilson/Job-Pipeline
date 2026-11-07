@@ -151,6 +151,10 @@ def build_rows(store: Store, criteria: Criteria, ts: str, owner_states: dict[str
     for r in store.pipeline_rows():
         d = json.loads(r["display"] or "{}")
         st = owner_states.get(r["posting_id"], {})
+        touched = any(st.get(k) for k in ("interest", "status", "notes")) or \
+            (st.get("decision") or "Pending") != "Pending"
+        if r["closed_at"] and not touched:
+            continue        # closed and never touched: no longer an option, so it leaves To review
         flags = []
         if r["is_new"]:
             flags.append("New")

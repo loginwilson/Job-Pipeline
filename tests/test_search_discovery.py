@@ -107,3 +107,13 @@ def test_close_missing_only_touches_its_own_board(criteria, tools):
     store_evaluations(store, a, [], T2, criteria)          # A's posting disappears
     closed = dict(store.conn.execute("SELECT posting_id, closed_at FROM postings").fetchall())
     assert closed["lever:aco:1"] == T2 and closed["lever:bco:2"] is None
+
+
+def test_search_copy_dropped_when_watched_board_lacks_it(criteria, tools):
+    gates, matcher = tools
+    store = Store(":memory:")
+    muse_ev = evaluate_raws([raw("muse", "acme", "9", company="Acme", title="Strategy Associate")],
+                            criteria, gates, matcher)
+    c = store_evaluations(store, Company("The Muse", "muse", "search"), muse_ev, T1, criteria, prefix="muse:",
+                          board_keys=set(), board_companies={"acme"})
+    assert store.pipeline_rows() == []          # we watch Acme's board and it doesn't list this job
