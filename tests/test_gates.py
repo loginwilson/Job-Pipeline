@@ -69,7 +69,7 @@ def test_experience(evaluate):
 
 # 5. seniority
 def test_seniority(evaluate):
-    for title in ("Senior Analyst", "Sr. Associate", "Head of Growth", "VP, Partnerships", "Director of Ops",
+    for title in ("Senior Analyst", "Sr. Associate", "Head of Growth", "VP, Partnerships", "Director of Ops", "Site Leader",
                   "Lead Analyst", "Team Lead, Operations", "Analyst III", "Senior Manager, Strategy"):
         assert "seniority" in gates_of(evaluate(title=title, lines=[PAY_OK])), title
     for title in ("Account Executive", "Product Manager, Growth", "Lead Generation Specialist",

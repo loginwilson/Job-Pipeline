@@ -90,7 +90,7 @@ experience:
 # Representative, Consultant I, Strategist, APM, Rotational, New Grad, Junior,
 # Level I/II) pass; the 3-year rule handles the rest.
 seniority:
-  drop_title_terms: [senior, "sr.", sr, staff, principal, director, "head of", vp, svp, evp, avp, "vice president", chief, "executive director"]
+  drop_title_terms: [senior, "sr.", sr, staff, principal, director, "head of", vp, svp, evp, avp, "vice president", chief, "executive director", leader]
   keep_titles_with: [chief of staff]   # level words inside these phrases don't count (years rule still applies)
   drop_level_numerals: [III, IV, V, "3", "4", "5"]   # "Analyst III", "Consultant 4"
   lead:

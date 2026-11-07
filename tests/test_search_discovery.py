@@ -117,3 +117,26 @@ def test_search_copy_dropped_when_watched_board_lacks_it(criteria, tools):
     c = store_evaluations(store, Company("The Muse", "muse", "search"), muse_ev, T1, criteria, prefix="muse:",
                           board_keys=set(), board_companies={"acme"})
     assert store.pipeline_rows() == []          # we watch Acme's board and it doesn't list this job
+
+
+def test_same_board_duplicates_show_once(criteria, tools):
+    gates, matcher = tools
+    store = Store(":memory:")
+    acme = Company("Acme", "greenhouse", "acme")
+    raws = [raw("greenhouse", "acme", str(i), title="Rotational Development Program") for i in (1, 2, 3)]
+    evals = evaluate_raws(raws, criteria, gates, matcher, company=acme)
+    c = store_evaluations(store, acme, evals, T1, criteria)
+    assert [r["posting_id"] for r in store.pipeline_rows()] == ["greenhouse:acme:1"]
+    assert c["reasons"]["duplicate (same board, same title + city)"] == 2
+    store_evaluations(store, acme, evals, T2, criteria)          # still one row, nothing closed
+    assert [r["posting_id"] for r in store.pipeline_rows()] == ["greenhouse:acme:1"]
+
+
+def test_quiet_board_detection():
+    store = Store(":memory:")
+    store.board_ok("Acme", "greenhouse", 10, T1)
+    store.note_board_passes("Acme", 0, T1)
+    assert not store.board_is_quiet("Acme", 3, T2)
+    assert store.board_is_quiet("Acme", 3, "2026-11-11T11:00:00+00:00")
+    store.note_board_passes("Acme", 2, "2026-11-11T11:00:00+00:00")
+    assert not store.board_is_quiet("Acme", 3, "2026-11-12T11:00:00+00:00")

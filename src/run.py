@@ -160,9 +160,17 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
     if not is_search:
         store.upsert_company(company.name, company.platform, company.slug)
     seen = []
+    batch_keys: dict[str, str] = {}
     for ev in evals:
         p = ev.posting
         key = dedupe_key(ev)
+        if not is_search and ev.passed:
+            if key in batch_keys:
+                counts["reasons"]["duplicate (same board, same title + city)"] += 1
+                seen.append(p.posting_id)     # still open on the board — just not shown twice
+                store.merge_into(p.posting_id, batch_keys[key])
+                continue
+            batch_keys[key] = p.posting_id
         if is_search and ((board_keys and key in board_keys) or store.open_board_key(key)):
             counts["reasons"]["duplicate (on company board)"] += 1
             continue        # the company-board copy is stored instead
@@ -366,14 +374,18 @@ def main(argv: list[str] | None = None) -> int:
     # 3. company boards
     board_keys: set[str] = set()
     board_companies: set[str] = set()
-    every = (load_sources_config().get("boards") or {}).get("every_hours") or {}
+    boards_cfg = load_sources_config().get("boards") or {}
+    every = boards_cfg.get("every_hours") or {}
     # a) decide what to poll and load detail caches (database work stays on this thread)
     jobs = []
     for company in companies:
         payload = load_fixture(args.fixture) if args.fixture else None
         hours = every.get(company.platform)
+        if store is not None and payload is None and store.board_is_quiet(
+                company.name, boards_cfg.get("quiet_after_days", 3), ts):
+            hours = max(hours or 0, boards_cfg.get("quiet_every_hours", 6))
         if store is not None and payload is None and hours and not store.source_due(f"board:{company.platform}:{company.slug}", hours, ts):
-            continue        # large career site polled less often; its postings stay as they were
+            continue        # polled less often (large or quiet board); its postings stay as they were
         cache = None
         if store is not None and payload is None and company.platform in DETAIL_PLATFORMS:
             cache = store.details_for(f"{company.platform}:{company.slug}:")
@@ -408,11 +420,12 @@ def main(argv: list[str] | None = None) -> int:
         status = store.board_ok(company.name, company.platform, len(evals), ts)
         if status != "OK":
             log.warning("%s board: %s", company.name, status)
-        if store is not None and hours:
+        if store is not None:
             store.source_complete(f"board:{company.platform}:{company.slug}", ts)
         board_keys |= {dedupe_key(e) for e in evals}
         board_companies.add(normalize(company.name))
         c = store_evaluations(store, company, evals, ts, criteria)
+        store.note_board_passes(company.name, c["passed"], ts)
         add_stats(stats, SOURCE_NAMES.get(company.platform, company.platform), c)
         log.info("%s: %d postings, %d new, %d passed", company.name, c["seen"], c["new"], c["passed"])
 

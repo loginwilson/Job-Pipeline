@@ -77,7 +77,8 @@ CREATE TABLE IF NOT EXISTS run_sources (           -- per-source funnel for each
 );
 CREATE TABLE IF NOT EXISTS board_health (
     company TEXT PRIMARY KEY, platform TEXT, last_success TEXT, last_error TEXT,
-    last_error_at TEXT, count_last INTEGER, count_prev INTEGER, status TEXT
+    last_error_at TEXT, count_last INTEGER, count_prev INTEGER, status TEXT,
+    first_polled TEXT, last_pass_at TEXT
 );
 """
 
@@ -95,6 +96,7 @@ class Store:
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
         for table, cols_needed in (("postings", {"dedupe_key": "TEXT", "merged_into": "TEXT"}),
+                                   ("board_health", {"first_polled": "TEXT", "last_pass_at": "TEXT"}),
                                    ("runs", {"new_passed": "INTEGER", "seconds": "REAL", "coverage": "TEXT"})):
             have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
             for col, typ in cols_needed.items():
@@ -154,6 +156,11 @@ class Store:
                 (board_id, st["decision"], st["interest"], st["status"], st["notes"], st["applied_on"],
                  st["status_changed_at"], ts))
         return row["posting_id"]
+
+    def merge_into(self, posting_id: str, keep_id: str) -> None:
+        """Hide an already-stored duplicate behind the copy we keep."""
+        self.conn.execute("UPDATE postings SET merged_into=? WHERE posting_id=? AND merged_into IS NULL",
+                          (keep_id, posting_id))
 
     def is_merged(self, posting_id: str) -> bool:
         r = self.conn.execute("SELECT merged_into FROM postings WHERE posting_id=?", (posting_id,)).fetchone()
@@ -346,6 +353,20 @@ class Store:
             "count_last=excluded.count_last, status=excluded.status",
             (company, platform, ts, count, prev_count, status))
         return status
+
+    def note_board_passes(self, company: str, passed: int, ts: str) -> None:
+        self.conn.execute("UPDATE board_health SET first_polled=COALESCE(first_polled, ?) WHERE company=?", (ts, company))
+        if passed:
+            self.conn.execute("UPDATE board_health SET last_pass_at=? WHERE company=?", (ts, company))
+
+    def board_is_quiet(self, company: str, days: float, ts: str) -> bool:
+        r = self.conn.execute("SELECT first_polled, last_pass_at FROM board_health WHERE company=?",
+                              (company,)).fetchone()
+        if r is None or not r["first_polled"]:
+            return False
+        cutoff = datetime.fromisoformat(ts) - timedelta(days=days)
+        since = r["last_pass_at"] or r["first_polled"]
+        return datetime.fromisoformat(since) <= cutoff
 
     def board_error(self, company: str, platform: str, error: str, ts: str) -> None:
         self.conn.execute(

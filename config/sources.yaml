@@ -49,3 +49,5 @@ jsearch:                    # Google for Jobs via JSearch (OpenWeb Ninja) — ke
 boards:                     # how often each kind of company board is polled (default: every run, hourly)
   every_hours:
     workday: 6              # large career sites, details fetched only for postings that could pass
+  quiet_after_days: 3       # a board with no passing posting for this long...
+  quiet_every_hours: 6      # ...is polled this often instead (it speeds up again when one passes)
