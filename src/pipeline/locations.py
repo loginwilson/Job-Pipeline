@@ -144,5 +144,6 @@ class LocationMatcher:
                 res.arrangement = "hybrid"
             elif re.search(r"\b(?:on[- ]?site|in[- ]office|in[- ]person)\b", description, re.IGNORECASE):
                 res.arrangement = "in_office"
-        res.fully_remote = res.arrangement == "remote"
+        # "solely remote" = remote with none of the criteria cities listed; "Remote, New York, NY" counts as NYC
+        res.fully_remote = res.arrangement == "remote" and not res.offices
         return res

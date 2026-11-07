@@ -31,7 +31,10 @@ def test_employment_type(evaluate):
 def test_location(evaluate):
     assert "location" in gates_of(evaluate(locations=["Stamford, CT"], lines=[PAY_OK]))
     assert "location" in gates_of(evaluate(locations=["Richmond, VA"], lines=[PAY_OK]))
-    assert "location" in gates_of(evaluate(workplace="remote", lines=[PAY_OK]))
+    assert "location" in gates_of(evaluate(locations=["Remote"], workplace="remote", lines=[PAY_OK]))
+    assert "location" in gates_of(evaluate(locations=["Remote - US"], workplace=None, lines=[PAY_OK]))
+    nyc_remote = evaluate(locations=["Remote, New York City, NY"], workplace="remote", lines=[PAY_OK])
+    assert nyc_remote.passed and "Remote role — lists your city" in nyc_remote.flags   # not solely remote
     multi = evaluate(locations=["NYC, SF, or Remote"], workplace=None, lines=[PAY_OK])
     assert multi.passed and multi.posting.location.best.region == "NYC"
     assert evaluate(locations=["Austin, TX"], lines=[PAY_OK]).passed       # tier 3 still passes

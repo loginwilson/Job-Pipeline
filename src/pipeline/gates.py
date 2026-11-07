@@ -86,6 +86,8 @@ class Gates:
             ev.fail("location", f"fully remote: {', '.join(p.locations) or p.work_arrangement}")
         elif not p.location.offices:
             ev.fail("location", f"no listed city in: {'; '.join(p.locations) or 'none listed'}")
+        elif p.location.arrangement == "remote":
+            ev.flag(loc.get("remote_with_city_flag", "Remote role — lists your city"))
 
     # 3. salary -------------------------------------------------------------
     def salary(self, p: Posting, ev: Evaluation) -> None:

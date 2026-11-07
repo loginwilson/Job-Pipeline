@@ -35,6 +35,7 @@ employment_type:
 # Tiers only order the list; any listed city passes. Anywhere else drops.
 location:
   drop_fully_remote: true        # "NYC or Remote" counts as NYC; solely remote drops
+  remote_with_city_flag: "Remote role — lists your city"   # board says Remote but names one of your cities
   multi_location: use_best_listed_office_tier
   tiers:
     1:
