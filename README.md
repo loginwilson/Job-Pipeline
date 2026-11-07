@@ -38,6 +38,8 @@ rule and the exact text that triggered it):
 | 7 | engineer/developer title (except GTM, Solutions, Sales, Prompt Engineer), or a **required** line demanding coding with no non-coding alternative |
 | 8 | a **required** credential you lack (MBA, JD, Master's, PhD, CPA, bar, RN, PE, CS/engineering-type degree) |
 | 9 | starts before you graduate (May 2027); starts after Aug 1, 2027 are flagged for OPT timing |
+| 10 | not a real opening ("talent community", "general application", …), or no longer active |
+| 11 | a field your degree can't support for OPT (clinical, legal practice, teaching, trades, lab science…) |
 
 **You decide** with three columns, each answering one question:
 
@@ -58,7 +60,11 @@ and flags **Follow up** when an Applied / Networking application hasn't moved fo
   Interest 5 → 1, active statuses before ended ones. All-in (4–5) rows are green; Follow up
   rows are yellow.
 * **Passed** — your archive; set Decision back to Apply any time.
-* **Dropped** (with the rule + matched text), **Funnel**, **Board health**, **Unparsed alerts**.
+* **Dropped** (with the rule + matched text), **Board health**, **Unparsed alerts**.
+* **Funnel** — is it working? Latest run by source (seen → new → passed → new options, top
+  reasons dropped), coverage (boards watched, boards discovered this week, JSearch searches
+  used vs. budget and keyword×city pairs covered, last Muse sweep, career sites we can't read
+  yet), and a history row per run.
 
 A row moves to its tab on the next hourly run after you change Decision. Your columns are
 also saved in the database, so they survive even if a tab is deleted, and the pipeline never

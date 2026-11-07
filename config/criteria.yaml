@@ -174,6 +174,15 @@ timing:
   flag_start_after: "Starts after Aug 1 — check OPT timing"
 
 
+# 11 ── RELATED TO YOUR DEGREE (OPT) ─────────────────────────────
+# OPT year one requires the job to relate to the degree (hospitality, travel &
+# tourism, hotel real estate finance & development; business roles can be
+# justified). Titles from fields the degree can't support are dropped.
+# TN is NOT a filter — it is shown in the Visa column for information.
+opt_relatedness:
+  unrelated_title_terms: [nurse, nursing, physician, doctor, surgeon, clinical, clinician, medical assistant, dental, dentist, hygienist, pharmacist, therapist, psychologist, social worker, phlebotomist, sonographer, radiology, radiologic, veterinarian, veterinary, teacher, tutor, professor, lecturer, attorney, lawyer, counsel, paralegal, legal assistant, electrician, plumber, mechanic, hvac, welder, carpenter, machinist, chemist, biologist, research scientist, lab scientist, pilot]
+
+
 # 10 ── REAL, ACTIVE OPENING ─────────────────────────────────────
 # Company-board postings are active while they're in the board's live feed;
 # search-source postings must be recent (config/sources.yaml max_age_days)

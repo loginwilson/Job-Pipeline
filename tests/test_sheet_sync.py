@@ -153,19 +153,30 @@ def test_touched_row_never_deleted(criteria, board, evals):
     assert kept and kept[0][NOTES] == "keep me"
 
 
-def test_other_tabs(criteria, board, evals):
+def test_other_tabs_and_funnel(criteria, board, evals):
+    from src.run import add_stats
     store, sheet = Store(":memory:"), FakeBackend()
-    store_evaluations(store, board, evals, T1, criteria)
+    c = store_evaluations(store, board, evals, T1, criteria)
+    stats = {}
+    add_stats(stats, "Lever", c)
     store.board_ok("Example Co", "lever", len(evals), T1)
     passed = sum(e.passed for e in evals)
     store.record_run(started_at=T1, finished_at=T1, boards_polled=1, postings_seen=len(evals), new=len(evals),
-                     passed=passed, errors=0)
+                     passed=passed, errors=0, new_passed=passed, seconds=12.5,
+                     coverage='{"boards_polled_by_platform": {"lever": 1}, "jsearch_budget": 6, "open_options": %d}' % passed)
+    store.record_run_sources(T1, stats)
     store.commit()
     sync_all(sheet, store, criteria, T1)
     data = sheet.read(ALL_TABS)
     assert len(data["Dropped"]) == 1 + len(evals) - passed
-    assert data["Funnel"][1][1:] == ["1", str(len(evals)), str(len(evals)), str(passed),
-                                     str(len(evals) - passed), "0"]
+    funnel = data["Funnel"]
+    assert funnel[1][0].startswith("Latest run: 2026-11-05 10:17 UTC") and f"{passed} new options" in funnel[1][0]
+    src = next(r for r in funnel if r and r[0] == "Lever")
+    assert src[1:6] == [str(len(evals)), str(len(evals)), str(passed), str(passed), str(len(evals) - passed)]
+    assert "location" in src[6]                                  # top reasons shown
+    assert any(r and r[0] == "Company boards watched" for r in funnel)
+    hist = funnel[funnel.index(["History"]) + 2]
+    assert hist[0] == "2026-11-05 10:17" and hist[5] == str(passed)
     assert data["Board health"][1][-1] == "OK"
 
 

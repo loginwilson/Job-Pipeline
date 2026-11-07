@@ -16,9 +16,12 @@ No scoring: the owner decides each posting in the Sheet.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import re
 import sys
+import time
+from collections import Counter
 from pathlib import Path
 
 import requests
@@ -128,7 +131,7 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
     board; a company-board posting absorbs any earlier search copy (your
     decisions carry over).
     """
-    counts = {"seen": len(evals), "new": 0, "passed": 0}
+    counts = {"seen": len(evals), "new": 0, "passed": 0, "new_passed": 0, "reasons": Counter()}
     is_search = company.platform in SEARCH_PLATFORMS
     if not is_search:
         store.upsert_company(company.name, company.platform, company.slug)
@@ -137,10 +140,13 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
         p = ev.posting
         key = dedupe_key(ev)
         if is_search and ((board_keys and key in board_keys) or store.open_board_key(key)):
+            counts["reasons"]["duplicate (on company board)"] += 1
             continue        # the company-board copy is stored instead
         if is_search and board_companies and normalize(p.company) in board_companies:
+            counts["reasons"]["stale (not on company board)"] += 1
             continue        # we watch this company's board and the job isn't on it: not active
         if is_search and store.open_key(key, f"{company.platform}:"):
+            counts["reasons"]["duplicate (other search source)"] += 1
             continue        # the same job is already in from another search source
         info = store.upsert_posting(p.posting_id, p.company, p.title, p.url, p.posted_at,
                                     p.raw.raw if p.raw else {}, ts, dedupe_key=key)
@@ -150,11 +156,21 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
         p.first_seen = info["first_seen"]
         counts["new"] += int(info["is_new"])
         counts["passed"] += int(ev.passed)
+        counts["new_passed"] += int(ev.passed and info["is_new"])
+        if not ev.passed:
+            counts["reasons"][ev.failures[0].gate] += 1
         store.save_score(p.posting_id, ev.passed,
                          [{"gate": f.gate, "matched": f.matched} for f in ev.failures],
                          ev.flags, display_fields(ev), ts)
     store.close_missing(prefix or f"{company.platform}:{company.slug}:", seen, ts)
     return counts
+
+
+def add_stats(stats: dict, source: str, c: dict) -> None:
+    s = stats.setdefault(source, {"seen": 0, "new": 0, "passed": 0, "new_passed": 0, "reasons": Counter()})
+    for k in ("seen", "new", "passed", "new_passed"):
+        s[k] += c[k]
+    s["reasons"].update(c["reasons"])
 
 
 def load_sources_config() -> dict:
@@ -289,6 +305,8 @@ def main(argv: list[str] | None = None) -> int:
     ts = now_iso()
     store = None if args.print else Store(args.db)
     totals = {"boards_polled": 0, "postings_seen": 0, "new": 0, "passed": 0, "errors": 0}
+    stats: dict[str, dict] = {}
+    t0 = time.time()
 
     # 1–2. search sources + discovery (full runs only)
     muse_evals, muse_complete, jsearch_evals = (None, False, None)
@@ -333,9 +351,7 @@ def main(argv: list[str] | None = None) -> int:
         board_keys |= {dedupe_key(e) for e in evals}
         board_companies.add(normalize(company.name))
         c = store_evaluations(store, company, evals, ts, criteria)
-        totals["postings_seen"] += c["seen"]
-        for k in ("new", "passed"):
-            totals[k] += c[k]
+        add_stats(stats, SOURCE_NAMES.get(company.platform, company.platform), c)
         log.info("%s: %d postings, %d new, %d passed", company.name, c["seen"], c["new"], c["passed"])
 
     # 4. search postings not already on a company board
@@ -345,17 +361,13 @@ def main(argv: list[str] | None = None) -> int:
                               board_keys=board_keys, board_companies=board_companies)
         if muse_complete:
             store.source_complete("muse", ts)
-        totals["postings_seen"] += c["seen"]
-        for k in ("new", "passed"):
-            totals[k] += c[k]
+        add_stats(stats, "The Muse", c)
         log.info("The Muse: %d postings kept after merging with company boards, %d passed", c["seen"], c["passed"])
     if jsearch_evals is not None:
         c = store_evaluations(store, Company(name="JSearch", platform="jsearch", slug="search"), jsearch_evals, ts,
                               criteria, prefix="jsearch:__none__", board_keys=board_keys,
                               board_companies=board_companies)
-        totals["postings_seen"] += c["seen"]
-        for k in ("new", "passed"):
-            totals[k] += c[k]
+        add_stats(stats, "JSearch", c)
         log.info("JSearch: %d postings stored, %d passed", c["seen"], c["passed"])
     if store is not None and not single:
         js = (load_sources_config().get("jsearch") or {})
@@ -363,7 +375,18 @@ def main(argv: list[str] | None = None) -> int:
     if store is None:
         return 0
     store.mark_evergreen(int(criteria.get("freshness", "evergreen_after_days", default=60)), ts)
-    store.record_run(started_at=ts, finished_at=now_iso(), **totals)
+    for st in stats.values():
+        totals["postings_seen"] += st["seen"]
+        totals["new"] += st["new"]
+        totals["passed"] += st["passed"]
+    js = load_sources_config().get("jsearch") or {}
+    cov = store.coverage_counts(ts)
+    cov.update({"boards_polled_by_platform": dict(Counter(c.platform for c in companies)),
+                "jsearch_budget": js.get("requests_per_day", 0),
+                "jsearch_pairs_total": len(js.get("keywords", [])) * len(js.get("cities", []))})
+    store.record_run(started_at=ts, finished_at=now_iso(), new_passed=sum(s["new_passed"] for s in stats.values()),
+                     seconds=round(time.time() - t0, 1), coverage=json.dumps(cov), **totals)
+    store.record_run_sources(ts, stats)
     store.commit()
     backend = backend_from_env(args.fake_sheet)
     if backend is None:

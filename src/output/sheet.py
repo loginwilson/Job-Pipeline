@@ -298,12 +298,49 @@ def _simple_tab(meta: dict, tab: str, header: list[str], rows: list[list], exist
     ]
 
 
+def funnel_rows(store: Store) -> list[list]:
+    """Three blocks: latest run by source, coverage, run history."""
+    runs = store.runs()
+    if not runs:
+        return [["No runs yet"]]
+    last = runs[-1]
+    cov = json.loads(last["coverage"] or "{}") if "coverage" in last.keys() else {}
+    rows: list[list] = [
+        [f"Latest run: {last['started_at'][:16].replace('T', ' ')} UTC · {last['seconds'] or 0:g}s · "
+         f"{last['new_passed'] or 0} new options · {cov.get('open_options', '')} open options in total"],
+        [],
+        ["Source", "Postings seen", "New", "Passed must-haves", "New options", "Dropped", "Top reasons dropped"],
+    ]
+    for r in store.run_sources(last["started_at"]):
+        reasons = json.loads(r["reasons"] or "{}")
+        top = ", ".join(f"{k} {v}" for k, v in sorted(reasons.items(), key=lambda kv: -kv[1])[:4])
+        rows.append([r["source"], r["seen"], r["new"], r["passed"], r["new_passed"], r["dropped"], top])
+    rows += [[], ["Coverage"]]
+    polled = cov.get("boards_polled_by_platform") or {}
+    rows.append(["Company boards watched", sum(polled.values()),
+                 ", ".join(f"{k} {v}" for k, v in sorted(polled.items(), key=lambda kv: -kv[1]))])
+    disc = cov.get("discovered_by_platform") or {}
+    rows.append(["Boards discovered automatically", sum(disc.values()),
+                 f"{cov.get('discovered_this_week', 0)} this week"])
+    rows.append(["JSearch searches today", f"{cov.get('jsearch_used_today', 0)} / {cov.get('jsearch_budget', 0)}",
+                 f"{cov.get('jsearch_pairs_searched', 0)} of {cov.get('jsearch_pairs_total', 0)} keyword×city pairs covered"])
+    rows.append(["The Muse last full sweep", (cov.get("muse_last_sweep") or "never")[:16].replace("T", " ")])
+    unread = cov.get("unread_sites") or []
+    rows.append(["Career sites we can't read yet (links seen)",
+                 ", ".join(f"{d} {n}" for d, n in unread) or "none yet"])
+    rows += [[], ["History"], ["Run (UTC)", "Boards polled", "Postings seen", "New", "Passed must-haves",
+                               "New options", "Errors"]]
+    for r in reversed(runs[-60:]):
+        rows.append([r["started_at"][:16].replace("T", " "), r["boards_polled"], r["postings_seen"], r["new"],
+                     r["passed"], r["new_passed"] if r["new_passed"] is not None else "", r["errors"]])
+    return rows
+
+
 def other_tab_rows(store: Store, criteria: Criteria, ts: str, unparsed: list[list] | None = None) -> dict:
     days = 7
     dropped = [[r["company"], hyperlink(r["url"], r["title"]), r["gate"], r["matched"], _date(r["dropped_at"])]
                for r in store.dropped_rows(days, ts)]
-    funnel = [[r["started_at"], r["boards_polled"], r["postings_seen"], r["new"], r["passed"],
-               r["postings_seen"] - r["passed"], r["errors"]] for r in reversed(store.runs())]
+    funnel = funnel_rows(store)
     health = []
     for r in store.board_health():
         counts = "" if r["count_last"] is None else (
@@ -314,8 +351,7 @@ def other_tab_rows(store: Store, criteria: Criteria, ts: str, unparsed: list[lis
     return {
         DROPPED: (["Company", "Role", "Gate", "Matched text", "Date"], dropped),
         UNPARSED: (["Sender", "Subject", "Date"], unparsed or []),
-        FUNNEL: (["Timestamp", "Boards polled", "Postings seen", "New", "Passed rules", "Dropped",
-                  "Errors"], funnel),
+        FUNNEL: (["Funnel", "", "", "", "", "", ""], funnel),
         HEALTH: (["Company", "Platform", "Last success", "Last error", "Postings (last vs previous)",
                   "Status"], health),
     }

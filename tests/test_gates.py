@@ -140,6 +140,16 @@ def test_real_opening(evaluate):
     assert evaluate(title="Operations Associate", lines=[PAY_OK]).passed
 
 
+# 11. related to the degree (OPT)
+def test_opt_relatedness(evaluate):
+    for title in ("Registered Nurse", "Corporate Counsel", "Associate Attorney", "Clinical Research Coordinator",
+                  "Math Teacher", "HVAC Technician"):
+        assert "not_related_to_degree" in {f.gate for f in evaluate(title=title, lines=[PAY_OK]).failures}, title
+    for title in ("Hotel Operations Associate", "Real Estate Analyst", "Account Executive", "Deployment Strategist",
+                  "Counselor Recruitment Coordinator, Hospitality"):
+        assert "not_related_to_degree" not in {f.gate for f in evaluate(title=title, lines=[PAY_OK]).failures}, title
+
+
 def test_field_column(evaluate):
     assert evaluate(title="Acquisitions Associate, Commercial Real Estate", lines=[PAY_OK]).field == "Real Estate / Proptech"
     assert evaluate(title="Hotel Operations Associate", lines=[PAY_OK]).field == "Hospitality / Travel"

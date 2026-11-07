@@ -51,7 +51,7 @@ class Gates:
 
     def evaluate(self, p: Posting) -> Evaluation:
         ev = Evaluation(posting=p)
-        for rule in (self.real_opening, self.employment_type, self.location, self.salary, self.experience,
+        for rule in (self.real_opening, self.opt_related, self.employment_type, self.location, self.salary, self.experience,
                      self.seniority, self.work_authorization, self.technical_and_credentials, self.timing):
             rule(p, ev)
         ev.field = field_of(p, self.c)
@@ -62,6 +62,13 @@ class Gates:
         hit = find_terms(p.title, self.c.get("openings", "drop_title_terms", default=[]) or [], first_only=True)
         if hit:
             ev.fail("not_a_real_opening", f"'{hit[0].term}': {p.title}")
+
+    # 11. related to the degree (OPT) -----------------------------------------
+    def opt_related(self, p: Posting, ev: Evaluation) -> None:
+        terms = self.c.get("opt_relatedness", "unrelated_title_terms", default=[]) or []
+        hit = find_terms(p.title, terms, first_only=True)
+        if hit:
+            ev.fail("not_related_to_degree", f"'{hit[0].term}' field isn't supported by your degree (OPT): {p.title}")
 
     # 1. employment type --------------------------------------------------
     def employment_type(self, p: Posting, ev: Evaluation) -> None:

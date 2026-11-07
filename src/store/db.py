@@ -67,7 +67,13 @@ CREATE TABLE IF NOT EXISTS owner_state (   -- your Sheet columns, mirrored
 );
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT, started_at TEXT, finished_at TEXT,
-    boards_polled INTEGER, postings_seen INTEGER, new INTEGER, passed INTEGER, errors INTEGER
+    boards_polled INTEGER, postings_seen INTEGER, new INTEGER, passed INTEGER, errors INTEGER,
+    new_passed INTEGER,       -- new options added this run (new AND passed the must-haves)
+    seconds REAL, coverage TEXT
+);
+CREATE TABLE IF NOT EXISTS run_sources (           -- per-source funnel for each run
+    started_at TEXT, source TEXT, seen INTEGER, new INTEGER, passed INTEGER, new_passed INTEGER,
+    dropped INTEGER, reasons TEXT, PRIMARY KEY (started_at, source)
 );
 CREATE TABLE IF NOT EXISTS board_health (
     company TEXT PRIMARY KEY, platform TEXT, last_success TEXT, last_error TEXT,
@@ -88,10 +94,12 @@ class Store:
         self.conn = sqlite3.connect(str(path))
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
-        cols = {r["name"] for r in self.conn.execute("PRAGMA table_info(postings)")}
-        for col in ("dedupe_key", "merged_into"):
-            if col not in cols:      # databases created before these columns existed
-                self.conn.execute(f"ALTER TABLE postings ADD COLUMN {col} TEXT")
+        for table, cols_needed in (("postings", {"dedupe_key": "TEXT", "merged_into": "TEXT"}),
+                                   ("runs", {"new_passed": "INTEGER", "seconds": "REAL", "coverage": "TEXT"})):
+            have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
+            for col, typ in cols_needed.items():
+                if col not in have:      # databases created before these columns existed
+                    self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
 
     def close(self) -> None:
         self.conn.commit()
@@ -298,6 +306,31 @@ class Store:
         cols = ", ".join(counts)
         self.conn.execute(f"INSERT INTO runs({cols}) VALUES ({','.join('?' * len(counts))})",
                           tuple(counts.values()))
+
+    def record_run_sources(self, started_at: str, stats: dict[str, dict]) -> None:
+        self.conn.executemany(
+            "INSERT OR REPLACE INTO run_sources VALUES (?,?,?,?,?,?,?,?)",
+            [(started_at, src, s["seen"], s["new"], s["passed"], s["new_passed"], s["seen"] - s["passed"],
+              json.dumps(dict(s["reasons"]))) for src, s in stats.items()])
+
+    def run_sources(self, started_at: str) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM run_sources WHERE started_at=? ORDER BY seen DESC",
+                                 (started_at,)).fetchall()
+
+    def coverage_counts(self, ts: str) -> dict:
+        week = (datetime.fromisoformat(ts) - timedelta(days=7)).isoformat(timespec="seconds")
+        q = self.conn.execute
+        return {
+            "discovered_by_platform": {r[0]: r[1] for r in q("SELECT platform, COUNT(*) FROM discovered_boards GROUP BY platform")},
+            "discovered_this_week": q("SELECT COUNT(*) FROM discovered_boards WHERE found_at >= ?", (week,)).fetchone()[0],
+            "jsearch_pairs_searched": q("SELECT COUNT(*) FROM search_pairs WHERE source='jsearch'").fetchone()[0],
+            "jsearch_used_today": (q("SELECT used FROM search_usage WHERE source='jsearch' AND day=?",
+                                     (ts[:10],)).fetchone() or [0])[0],
+            "muse_last_sweep": (q("SELECT last_complete FROM source_runs WHERE source='muse'").fetchone() or [""])[0],
+            "unread_sites": [(r[0], r[1]) for r in q("SELECT domain, seen FROM link_domains ORDER BY seen DESC LIMIT 8")],
+            "open_options": q("SELECT COUNT(*) FROM postings p JOIN scores s USING(posting_id) WHERE s.passed=1 "
+                              "AND p.closed_at IS NULL AND p.merged_into IS NULL").fetchone()[0],
+        }
 
     def runs(self) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM runs ORDER BY id").fetchall()
