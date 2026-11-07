@@ -194,3 +194,21 @@ def test_description_naming_a_senior_title(criteria):
     assert "seniority" in [f.gate for f in ev.failures]
     ok = g.evaluate(_p(criteria, "Financial Analyst", ["You will report to the Senior Financial Analyst."]))
     assert "seniority" not in [f.gate for f in ok.failures]
+
+
+def test_manager_comma_only_at_title_start(criteria):
+    from src.pipeline.gates import Gates
+    g = Gates(criteria)
+    assert "seniority" in [f.gate for f in g.evaluate(_p(criteria, "Manager, Strategy", [])).failures]
+    for t in ("Program Manager, Product", "Growth Marketing Manager, Events"):
+        assert "seniority" not in [f.gate for f in g.evaluate(_p(criteria, t, [])).failures]
+
+
+def test_negated_requirement_does_not_drop(criteria):
+    from src.pipeline.gates import Gates
+    lines = ["## Requirements", "- You should work closely with engineers, but prior software engineering experience is not required."]
+    ev = Gates(criteria).evaluate(_p(criteria, "Product Manager", lines))
+    assert "technical" not in [f.gate for f in ev.failures]
+    lines = ["## Requirements", "- You don't need a law degree to succeed here."]
+    ev = Gates(criteria).evaluate(_p(criteria, "Operations Associate", lines))
+    assert "credentials" not in [f.gate for f in ev.failures]

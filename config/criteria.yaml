@@ -68,7 +68,7 @@ salary:
   never_count_as_base: [OTE, on-target earnings, commission, uncapped earnings]
   # When NO salary is posted, these roles are treated as below the floor: they
   # essentially never pay $100K. A posted salary that meets the floor always wins.
-  rarely_meets_floor_titles: [retail associate, retail sales associate, store associate, sales floor associate, cashier, stock associate, stocker, warehouse, picker, packer, material handler, forklift, production associate, assembly associate, assembler, general labor, driver, delivery, courier, server, barista, bartender, cook, dishwasher, host / hostess, housekeeper, housekeeping, janitor, custodian, security officer, security guard, caregiver, home health aide, nursing assistant, call center, customer service representative, member service representative, bank teller, teller, receptionist, pharmacy technician, lab technician, laboratory technician, clinical laboratory, crew member, team member, cleaner, landscaper, mover, plant operator, machine operator, equipment operator, production operator]
+  rarely_meets_floor_titles: [retail associate, retail sales associate, store associate, sales floor associate, cashier, stock associate, stocker, warehouse, picker, packer, material handler, forklift, production associate, assembly associate, assembler, general labor, delivery driver, truck driver, CDL driver, driver helper, delivery associate, delivery helper, courier, restaurant server, food server, banquet server, server assistant, barista, bartender, cook, dishwasher, host / hostess, housekeeper, housekeeping, janitor, custodian, security officer, security guard, caregiver, home health aide, nursing assistant, call center, customer service representative, member service representative, bank teller, teller, receptionist, pharmacy technician, lab technician, laboratory technician, clinical laboratory, crew member, team member, cleaner, landscaper, mover, plant operator, machine operator, equipment operator, production operator]
   hourly_without_amount_is_below_floor: true   # pay basis "per hour" stated, no amount
   # shown in the Extra comp column so incentives are easy to judge
   extra_comp_signals: [equity, RSU, restricted stock, stock options, signing bonus, sign-on bonus, annual bonus, performance bonus, commission]
@@ -100,9 +100,10 @@ seniority:
     drop_when_level: true          # "Lead Analyst", "Team Lead", "Product Lead"
     keep_phrases: [lead generation, lead gen, onboarding lead]
   manager_titles:
-    keep: [associate product manager, product manager, implementation manager, customer success manager, account manager, partner manager, partnerships manager, product operations manager, assistant manager, manager in training, management trainee]
+    keep: [associate product manager, product manager, program manager, project manager, implementation manager, customer success manager, account manager, partner manager, partnerships manager, product operations manager, assistant manager, manager in training, management trainee]
     drop_when:
-      level_titles: [senior manager, engineering manager, general manager, "manager, "]
+      level_titles: [senior manager, engineering manager, general manager]
+      title_starts_with: ["manager,", "manager -", "manager of", "manager –"]   # "Manager, Strategy" (not "Program Manager, X")
       duties_include: [direct reports, manage a team, lead a team of, people management, hire and develop]
     keep_takes_precedence: true
 
@@ -168,7 +169,7 @@ technical:
 credentials:
   drop_required: [MBA, JD, Juris Doctor, law degree, "Master's degree", "Masters degree", "Master of", PhD, Ph.D., doctorate, CPA, bar admission, admitted to the bar, licensed attorney, registered nurse, RN license, PE license, professional engineer]
   unrelated_degree_fields: [computer science, computer engineering, software engineering, electrical engineering, mechanical engineering, engineering, nursing, medicine, pharmacy, architecture, physics, chemistry, biology, mathematics, statistics, data science]
-  softeners: [or equivalent, equivalent experience, or related experience, preferred, a plus, nice to have, any field, any discipline]
+  softeners: [or equivalent, equivalent experience, or related experience, preferred, a plus, nice to have, any field, any discipline, not required, not necessary, not a requirement, isnt required, is not needed, dont need, do not need, no prior, not expected]
 
 
 # 9 ── START DATE ──────────────────────────────────────────────

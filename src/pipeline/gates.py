@@ -164,6 +164,10 @@ class Gates:
         if mt.get("keep_takes_precedence") and find_terms(title, keep, first_only=True):
             return
         dw = mt.get("drop_when", {}) or {}
+        start = next((t for t in dw.get("title_starts_with", []) or [] if title.lower().startswith(t.lower())), None)
+        if start:
+            ev.fail("seniority", f"manager level title '{start.strip()}': {title}")
+            return
         lvl = find_terms(title, dw.get("level_titles", []), first_only=True)
         if lvl:
             ev.fail("seniority", f"manager level title '{lvl[0].term.strip()}': {title}")
