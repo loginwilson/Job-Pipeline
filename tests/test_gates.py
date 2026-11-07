@@ -67,6 +67,14 @@ def test_experience(evaluate):
     assert "experience" in gates_of(evaluate(lines=["## Requirements", "- At least three years of experience", PAY_OK]))
 
 
+def test_experience_misreads(evaluate):
+    assert evaluate(lines=["## Requirements", "- Must be 18 years of age or older.", PAY_OK]).passed
+    alt = ("- Bachelor's degree and 1+ years of recruiting experience; or associate degree and 2+ years "
+           "of experience; or 3+ years of professional experience")
+    ev = evaluate(lines=["## Requirements", alt, PAY_OK])
+    assert ev.passed and ev.posting.experience.max_years("required") == 1
+
+
 # 5. seniority
 def test_seniority(evaluate):
     for title in ("Senior Analyst", "Sr. Associate", "Head of Growth", "VP, Partnerships", "Director of Ops", "Site Leader",

@@ -22,7 +22,7 @@ _YEARS_RE = re.compile(
     re.IGNORECASE,
 )
 _NOT_EXPERIENCE_NEXT = re.compile(
-    r"^\s*(?:-\s*)?(?:old|round|degree|college|university|bachelor|program|programme|commitment|contract|term|"
+    r"^\s*(?:-\s*)?(?:old|of age|or older|round|degree|college|university|bachelor|program|programme|commitment|contract|term|"
     r"plan|warranty|cliff|vesting|anniversary|history|track record of growth|ago|from now|later)\b",
     re.IGNORECASE,
 )
@@ -78,6 +78,7 @@ def parse_experience(kind_lines: list[tuple[str, str]], title: str, criteria: Cr
     res = ExperienceResult()
     pref_terms = criteria.get("experience", "parse_sections", "preferred", default=[]) or []
     for kind, line in kind_lines:
+        line_asks: list[Ask] = []
         for m in _YEARS_RE.finditer(line):
             lo = _num(m.group(1))
             if lo is None:
@@ -98,7 +99,11 @@ def parse_experience(kind_lines: list[tuple[str, str]], title: str, criteria: Cr
                 ask_kind = "preferred"
             else:
                 ask_kind = "required"
-            res.asks.append(Ask(years, ask_kind, line.lstrip("- ").strip()))
+            line_asks.append(Ask(years, ask_kind, line.lstrip("- ").strip()))
+        if len(line_asks) > 1 and re.search(r"\bor\b", line, re.I):
+            # alternative paths on one line ("1+ years with a bachelor's; or 3+ years") → the easiest one
+            line_asks = [min(line_asks, key=lambda a: a.years)]
+        res.asks.extend(line_asks)
     clean = [t for t in criteria.get("experience", "pass_clean", default=[]) if not str(t).startswith("no_")]
     blob = [title] + [ln for _, ln in kind_lines]
     res.clean_terms = sorted({h.term for h in find_terms(blob, clean)}, key=clean.index)
