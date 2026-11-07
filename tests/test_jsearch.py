@@ -62,7 +62,7 @@ def test_board_from_url():
     assert board_from_url("https://job-boards.greenhouse.io/acme/jobs/1") == ("greenhouse", "acme")
     assert board_from_url("https://jobs.lever.co/acme/abc") == ("lever", "acme")
     assert board_from_url("https://acme.wd5.myworkdayjobs.com/en-US/External/job/X") == \
-        ("workday", "https://acme.wd5.myworkdayjobs.com/External")
+        ("workday", "acme.wd5/External")
     assert board_from_url("https://www.indeed.com/viewjob?jk=1") is None
 
 
@@ -75,5 +75,21 @@ def test_discovery_from_apply_link(monkeypatch, criteria, payload):
     monkeypatch.setattr(run_mod, "verify_board", lambda platform, slug, session=None: 12)
     monkeypatch.setattr(run_mod, "find_board", lambda *a, **k: None)
     found = run_mod.discover(store, evals, {"enabled": True}, set(), T1)
-    assert [(c.platform, c.slug) for c in found] == [("lever", "away")]
-    assert store.conn.execute("SELECT platform FROM ats_links").fetchone()[0] == "workday"
+    assert [(c.platform, c.slug) for c in found] == [("lever", "away"), ("workday", "jsfc.wd1/Careers")]
+
+
+def test_workday_fixture():
+    from src.sources import get_source
+    payload = load_fixture(FIXTURES / "workday_costar.json.gz")
+    raws = get_source("workday").parse(payload, "costar.wd1/CoStarCareers")
+    assert len(raws) == 20
+    r = next(r for r in raws if r.raw["has_detail"])
+    assert r.url.startswith("https://costar.wd1.myworkdayjobs.com/CoStarCareers/job/")
+    assert r.country == "US" and r.employment_type == "Full time" and r.description_lines and r.posted_at
+
+
+def test_workday_skips_closed():
+    from src.sources import get_source
+    item = {"title": "Analyst", "externalPath": "/job/x", "locationsText": "New York, NY", "postedOn": "Posted Today"}
+    payload = {"pages": [{"jobPostings": [item]}], "details": {"/job/x": {"jobPostingInfo": {"canApply": False}}}}
+    assert get_source("workday").parse(payload, "acme.wd1/Careers") == []

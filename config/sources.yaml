@@ -45,3 +45,7 @@ jsearch:                    # Google for Jobs via JSearch (OpenWeb Ninja) — ke
   first_fill_window: month  # date_posted for a pair's first search
   window: 3days             # afterwards, only recent postings
   close_after_days_unseen: 7
+
+boards:                     # how often each kind of company board is polled (default: every run, hourly)
+  every_hours:
+    workday: 6              # large career sites, details fetched only for postings that could pass

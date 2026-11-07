@@ -45,6 +45,9 @@ CREATE TABLE IF NOT EXISTS search_usage (         -- requests spent per day (bud
 CREATE TABLE IF NOT EXISTS ats_links (            -- career-site links seen in search results (e.g. Workday)
     url_root TEXT PRIMARY KEY, platform TEXT, company TEXT, first_seen TEXT
 );
+CREATE TABLE IF NOT EXISTS link_domains (         -- where search results send you to apply (coverage gaps)
+    domain TEXT PRIMARY KEY, seen INTEGER
+);
 CREATE TABLE IF NOT EXISTS source_runs (          -- last full sweep per search source
     source TEXT PRIMARY KEY, last_complete TEXT
 );
@@ -246,6 +249,10 @@ class Store:
 
     def record_ats_link(self, url_root: str, platform: str, company: str, ts: str) -> None:
         self.conn.execute("INSERT OR IGNORE INTO ats_links VALUES (?,?,?,?)", (url_root, platform, company, ts))
+
+    def count_link_domain(self, domain: str) -> None:
+        self.conn.execute("INSERT INTO link_domains VALUES (?, 1) ON CONFLICT(domain) DO UPDATE SET seen = seen + 1",
+                          (domain,))
 
     def source_due(self, source: str, every_hours: float, ts: str) -> bool:
         r = self.conn.execute("SELECT last_complete FROM source_runs WHERE source=?", (source,)).fetchone()

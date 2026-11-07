@@ -84,7 +84,7 @@ _WORKDAY = re.compile(r"https?://([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a
 
 
 def board_from_url(url: str) -> tuple[str, str] | None:
-    """('greenhouse', slug) etc. for a link into a known job board; ('workday', root) for Workday."""
+    """('greenhouse', slug) etc. for a link into a known job board; ('workday', 'tenant.wdN/Site')."""
     if not url:
         return None
     for platform, rx in _LINK_PATTERNS:
@@ -93,7 +93,7 @@ def board_from_url(url: str) -> tuple[str, str] | None:
             return platform, m.group(1)
     m = _WORKDAY.search(url)
     if m:
-        return "workday", f"https://{m.group(1)}.{m.group(2)}.myworkdayjobs.com/{m.group(3)}"
+        return "workday", f"{m.group(1)}.{m.group(2)}/{m.group(3)}"
     return None
 
 
@@ -101,7 +101,7 @@ def verify_board(platform: str, slug: str, session: requests.Session | None = No
     """Number of postings on the board (0 if it doesn't exist)."""
     src = get_source(platform)
     try:
-        payload = (src.fetch_payload_list(slug, session) if platform == "smartrecruiters"
+        payload = (src.fetch_payload_list(slug, session) if platform in ("smartrecruiters", "workday")
                    else src.fetch_payload(slug, session))
     except SourceError:
         return 0

@@ -47,28 +47,36 @@ def evaluate_company(company, payload=None, criteria=None, gates=None, matcher=N
     src = get_source(company.platform)
     if payload is not None:
         raws = src.parse(payload, company.slug)
-    elif company.platform == "smartrecruiters":
-        raws = _fetch_smartrecruiters(src, company, criteria, gates, matcher, store, ts)
+    elif company.platform in ("smartrecruiters", "workday"):
+        raws = _fetch_with_details(src, company, criteria, gates, matcher, store, ts)
     else:
         raws = src.fetch(company.slug)
     return [gates.evaluate(normalize_posting(r, company, criteria, matcher)) for r in raws]
 
 
-def _fetch_smartrecruiters(src, company, criteria, gates, matcher, store, ts):
-    """List every run; fetch descriptions only for new postings that could pass (cached)."""
+def _fetch_with_details(src, company, criteria, gates, matcher, store, ts):
+    """SmartRecruiters / Workday: list every poll; fetch descriptions only for postings
+    that could pass on title + location (cached, so each is fetched once)."""
     from .sources.base import RawPosting
 
     def want(item: dict) -> bool:
-        loc = (item.get("location") or {})
-        stub = RawPosting(platform=src.platform, slug=company.slug, native_id=str(item["id"]),
-                          title=item.get("name") or "", url="",
-                          locations=[loc["fullLocation"]] if loc.get("fullLocation") else [],
-                          country=(loc.get("country") or "").upper() or None,
-                          workplace_type="remote" if loc.get("remote") and not loc.get("hybrid") else None,
-                          employment_type=(item.get("typeOfEmployment") or {}).get("label"))
+        if src.platform == "workday":
+            stub = RawPosting(platform=src.platform, slug=company.slug, native_id="stub",
+                              title=item.get("title") or "", url="",
+                              locations=[item.get("locationsText") or ""])
+            if "location" in (item.get("locationsText") or "").lower():   # "2 Locations": decide after detail
+                stub.locations = ["New York, NY"]
+        else:
+            loc = (item.get("location") or {})
+            stub = RawPosting(platform=src.platform, slug=company.slug, native_id=str(item["id"]),
+                              title=item.get("name") or "", url="",
+                              locations=[loc["fullLocation"]] if loc.get("fullLocation") else [],
+                              country=(loc.get("country") or "").upper() or None,
+                              workplace_type="remote" if loc.get("remote") and not loc.get("hybrid") else None,
+                              employment_type=(item.get("typeOfEmployment") or {}).get("label"))
         return gates.evaluate(normalize_posting(stub, company, criteria, matcher)).passed
 
-    prefix = f"smartrecruiters:{company.slug}:"
+    prefix = f"{src.platform}:{company.slug}:"
     cache = store.details_for(prefix) if store is not None else {}
     before = set(cache)
     raws = src.fetch(company.slug, want=want, cache=cache)
@@ -225,11 +233,13 @@ def discover(store: Store, evals: list[Evaluation], cfg: dict, known: set[str], 
         for link in (p.raw.raw.get("apply_links") if p.raw else None) or []:
             hit = board_from_url(link or "")
             if not hit:
+                dm = re.match(r"https?://(?:www\.)?([^/]+)", link or "")
+                if dm:
+                    store.count_link_domain(dm.group(1).lower())
                 continue
             platform, slug = hit
             if platform == "workday":
                 store.record_ats_link(slug, "workday", p.company, ts)
-                continue
             n = verify_board(platform, slug, sess)
             if n:
                 store.add_discovered(p.company, platform, slug, SOURCE_NAMES.get(p.raw.platform, ""), p.title, ts)
@@ -296,8 +306,12 @@ def main(argv: list[str] | None = None) -> int:
     # 3. company boards
     board_keys: set[str] = set()
     board_companies: set[str] = set()
+    every = (load_sources_config().get("boards") or {}).get("every_hours") or {}
     for company in companies:
         payload = load_fixture(args.fixture) if args.fixture else None
+        hours = every.get(company.platform)
+        if store is not None and payload is None and hours and not store.source_due(f"board:{company.platform}:{company.slug}", hours, ts):
+            continue        # large career site polled less often; its postings stay as they were
         try:
             evals = evaluate_company(company, payload, criteria, gates, matcher, store, ts)
         except SourceError as exc:
@@ -314,6 +328,8 @@ def main(argv: list[str] | None = None) -> int:
         status = store.board_ok(company.name, company.platform, len(evals), ts)
         if status != "OK":
             log.warning("%s board: %s", company.name, status)
+        if store is not None and hours:
+            store.source_complete(f"board:{company.platform}:{company.slug}", ts)
         board_keys |= {dedupe_key(e) for e in evals}
         board_companies.add(normalize(company.name))
         c = store_evaluations(store, company, evals, ts, criteria)

@@ -26,6 +26,7 @@ geo:
       states: [IL, Illinois]
     Florida:
       country: US
+      aliases: [Ft. Lauderdale, Ft Lauderdale]
       states: [FL, Florida]
     California:
       country: US

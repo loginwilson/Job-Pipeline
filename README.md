@@ -4,16 +4,18 @@ Pulls postings from public company job boards (Greenhouse, Lever, Ashby), applie
 `config/criteria.yaml`, and (from step 2 on) keeps a Google Sheet updated.
 Spec: `docs/BUILD_BRIEF.md`, `docs/ARCHITECTURE.md`, `config/criteria.yaml` (criteria wins).
 
-**Status (2026-11-07):** live. Sources: company job boards (Greenhouse, Lever, Ashby, SmartRecruiters —
+**Status (2026-11-07):** live. Sources: company job boards (Greenhouse, Lever, Ashby, SmartRecruiters, Workday —
 `config/watchlist.yaml` plus boards discovered automatically) polled hourly, and The Muse
 (entry-level jobs in all your cities) swept daily, and JSearch (Google for Jobs: LinkedIn,
 Indeed, Glassdoor, company sites) — keyword × city searches rotated within a daily request
 budget (`config/sources.yaml`; needs the `JSEARCH_API_KEY` GitHub secret). → must-have rules
-→ SQLite (`data/pipeline.db`) → Google Sheet, via GitHub Actions. Next: Workday career
-sites, then job-alert emails.
+→ SQLite (`data/pipeline.db`) → Google Sheet, via GitHub Actions. Next: job-alert emails,
+then adapters for the career-site platforms search results point to most (tracked in the
+`link_domains` table).
 
 **Auto-discovery:** every company a search source finds in your cities is checked for a
-Greenhouse / Lever / Ashby / SmartRecruiters board; if that board lists the same job, it joins the hourly
+Greenhouse / Lever / Ashby / SmartRecruiters / Workday board (apply links first, then name
+lookups); if that board lists the same job, it joins the hourly
 watch (Board health tab). The same job from two sources appears once — the company-board
 copy wins and keeps any decision you already made. Settings: `config/sources.yaml`.
 
