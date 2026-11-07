@@ -24,6 +24,7 @@ Per run: ONE read + ONE spreadsheets.batchUpdate. Tabs are created on first run.
 from __future__ import annotations
 
 import json
+import logging
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -32,6 +33,8 @@ from typing import Any, Protocol
 from ..config import Criteria
 from ..store.db import Store
 from ..textmatch import parse_when
+
+log = logging.getLogger(__name__)
 
 REVIEW, APPLICATIONS, PASSED = "To review", "My applications", "Passed"
 DECISION_TABS = [REVIEW, APPLICATIONS, PASSED]
@@ -151,46 +154,57 @@ def build_rows(store: Store, criteria: Criteria, ts: str, owner_states: dict[str
     now = parse_when(ts)
     rows = []
     for r in store.pipeline_rows():
-        d = json.loads(r["display"] or "{}")
-        st = owner_states.get(r["posting_id"], {})
-        touched = any(st.get(k) for k in ("interest", "status", "notes")) or \
-            (st.get("decision") or "Pending") != "Pending"
-        if r["closed_at"] and not touched:
-            continue        # closed and never touched: no longer an option, so it leaves To review
-        flags = []
-        if r["is_new"]:
-            flags.append("New")
-        posted = r["posted_at"] or r["first_seen"]
-        if not r["closed_at"] and posted:
-            try:
-                when = parse_when(posted)
-                if when and now - when <= timedelta(days=apply_days):
-                    flags.append("Apply soon")
-            except ValueError:
-                pass
-        if st.get("status") in follow_statuses and st.get("status_changed_at"):
-            changed = parse_when(st["status_changed_at"])
-            if changed and now - changed >= timedelta(days=follow_days):
-                flags.append("Follow up")
-        flags += json.loads(r["flags"] or "[]")
-        if r["evergreen"]:
-            flags.append("Evergreen")
-        if r["closed_at"]:
-            flags.append("Closed")
-        cells = {
-            "Decision": st.get("decision") or "Pending", "Interest": st.get("interest") or "",
-            "Status": st.get("status") or "", "Notes": st.get("notes") or "",
-            "Applied on": _date(st.get("applied_on")),
-            "Company": r["company"], "Role": hyperlink(r["url"], r["title"]),
-            "Field": d.get("field", ""), "Location": d.get("location", ""), "Salary": d.get("salary", ""),
-            "Extra comp": d.get("extra_comp", ""), "Experience ask": d.get("experience", ""),
-            "Visa": d.get("visa", ""), "Flags": ", ".join(dict.fromkeys(flags)),
-            "Posted": _date(r["posted_at"]), "First seen": _date(r["first_seen"]),
-            "Source": d.get("source", ""), "Posting ID": r["posting_id"],
-        }
-        rows.append({"posting_id": r["posting_id"], "closed": bool(r["closed_at"]),
-                     "first_seen": r["first_seen"], "cells": cells})
+        try:
+            row = _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses)
+        except Exception as exc:     # one malformed posting never blocks the Sheet update
+            log.warning("Sheet: skipped %s (%s)", r["posting_id"], exc)
+            continue
+        if row is not None:
+            rows.append(row)
     return rows
+
+
+def _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses) -> dict | None:
+    """Sheet cells for one stored posting (None when it should not be shown)."""
+    d = json.loads(r["display"] or "{}")
+    st = owner_states.get(r["posting_id"], {})
+    touched = any(st.get(k) for k in ("interest", "status", "notes")) or \
+        (st.get("decision") or "Pending") != "Pending"
+    if r["closed_at"] and not touched:
+        return None     # closed and never touched: no longer an option, so it leaves To review
+    flags = []
+    if r["is_new"]:
+        flags.append("New")
+    posted = r["posted_at"] or r["first_seen"]
+    if not r["closed_at"] and posted:
+        try:
+            when = parse_when(posted)
+            if when and now - when <= timedelta(days=apply_days):
+                flags.append("Apply soon")
+        except ValueError:
+            pass
+    if st.get("status") in follow_statuses and st.get("status_changed_at"):
+        changed = parse_when(st["status_changed_at"])
+        if changed and now - changed >= timedelta(days=follow_days):
+            flags.append("Follow up")
+    flags += json.loads(r["flags"] or "[]")
+    if r["evergreen"]:
+        flags.append("Evergreen")
+    if r["closed_at"]:
+        flags.append("Closed")
+    cells = {
+        "Decision": st.get("decision") or "Pending", "Interest": st.get("interest") or "",
+        "Status": st.get("status") or "", "Notes": st.get("notes") or "",
+        "Applied on": _date(st.get("applied_on")),
+        "Company": r["company"], "Role": hyperlink(r["url"], r["title"]),
+        "Field": d.get("field", ""), "Location": d.get("location", ""), "Salary": d.get("salary", ""),
+        "Extra comp": d.get("extra_comp", ""), "Experience ask": d.get("experience", ""),
+        "Visa": d.get("visa", ""), "Flags": ", ".join(dict.fromkeys(flags)),
+        "Posted": _date(r["posted_at"]), "First seen": _date(r["first_seen"]),
+        "Source": d.get("source", ""), "Posting ID": r["posting_id"],
+    }
+    return {"posting_id": r["posting_id"], "closed": bool(r["closed_at"]),
+            "first_seen": r["first_seen"], "cells": cells}
 
 
 def _sort_key(tab: str, row: dict):

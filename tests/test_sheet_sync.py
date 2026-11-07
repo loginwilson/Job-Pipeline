@@ -199,3 +199,14 @@ def test_dates_without_timezone_do_not_crash(criteria, board, evals):
     store.commit()
     sync_all(sheet, store, criteria, T1)
     assert tab(sheet, REVIEW)
+
+
+def test_one_corrupt_posting_never_blocks_the_sheet(criteria, board, evals):
+    store, sheet = Store(":memory:"), FakeBackend()
+    store_evaluations(store, board, evals, T1, criteria)
+    bad = store.pipeline_rows()[0]["posting_id"]
+    store.conn.execute("UPDATE scores SET display='{not json' WHERE posting_id=?", (bad,))
+    store.commit()
+    sync_all(sheet, store, criteria, T1)
+    ids = [r[ID_COL] for r in tab(sheet, REVIEW)]
+    assert ids and bad not in ids
