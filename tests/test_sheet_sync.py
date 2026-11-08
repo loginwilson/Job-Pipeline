@@ -262,3 +262,19 @@ def test_companies_tab_target_and_not_for_me(criteria, board, evals):
     sheet.set_cell("Companies", i, 1, "Not for me")
     sync_all(sheet, store, criteria, T2)
     assert not any(r[H.index("Company")] == company for r in tab(sheet, REVIEW))
+
+
+def test_company_auto_add_needs_the_company_description(criteria):
+    """One job mentioning a hotel isn't enough; the company's own opening lines must (2+ terms)."""
+    from types import SimpleNamespace
+    from src.run import _note_company_fit
+    store = Store(":memory:")
+    co = SimpleNamespace(name="X", platform="ashby")
+    def ev(company, lines):
+        return SimpleNamespace(posting=SimpleNamespace(company=company, description_lines=lines, url="https://x"),
+                               flags=[])
+    _note_company_fit(store, ev("Pharma", ["We discover medicines.", "## Role", "Book hotels for our events."]), co, T1)
+    _note_company_fit(store, ev("Lease AI", ["Lease AI builds AI agents for property management and multifamily "
+                                             "apartments, helping landlords and renters."]), co, T1)
+    fits = {r["company"]: r["fit"] for r in store.target_companies()}
+    assert fits == {"Lease AI": "AI × real estate"}

@@ -357,6 +357,7 @@ def read_company_owner(existing: dict) -> dict[str, dict]:
 
 
 def company_rows(store: Store, seeds: list[dict], ts: str) -> list[list]:
+    store.clear_auto_companies_v1()
     for c in seeds:                                   # your list / researched companies
         store.note_target_company(c.get("name", ""), c.get("fit", ""), c.get("about", ""),
                                   c.get("source", "your list"), ts, c.get("careers"))

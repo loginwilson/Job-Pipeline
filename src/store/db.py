@@ -360,6 +360,12 @@ class Store:
         if not company:
             return
         row = self.conn.execute("SELECT fit FROM target_companies WHERE company=?", (company,)).fetchone()
+        if row is not None and not source.startswith("found by"):
+            # your list / research is authoritative for fit and description
+            self.conn.execute("UPDATE target_companies SET fit=?, about=?, source=?, "
+                              "careers_url=COALESCE(?, careers_url), last_seen=? WHERE company=?",
+                              (fit, about, source, careers_url, ts, company))
+            return
         if row is None:
             self.conn.execute("INSERT INTO target_companies (company, fit, about, source, careers_url, first_seen, "
                               "last_seen) VALUES (?,?,?,?,?,?,?)", (company, fit, about, source, careers_url, ts, ts))
@@ -368,6 +374,17 @@ class Store:
         self.conn.execute("UPDATE target_companies SET last_seen=?, fit=CASE WHEN ? THEN ? ELSE fit END, "
                           "about=COALESCE(NULLIF(about, ''), ?), careers_url=COALESCE(careers_url, ?) WHERE company=?",
                           (ts, better, fit, about, careers_url, company))
+
+    def clear_auto_companies_v1(self) -> None:
+        """One-time cleanup (Nov 8): companies added by the first, too-loose auto rule are
+        removed unless you filled in their row; the stricter rule re-adds the real ones."""
+        if self.conn.execute("SELECT 1 FROM sheet_tabs WHERE tab='__companies_v2'").fetchone():
+            return
+        self.conn.execute("DELETE FROM target_companies WHERE source='found by the job pipeline' AND company NOT IN "
+                          "(SELECT company FROM company_owner WHERE COALESCE(interest,'')<>'' OR "
+                          "COALESCE(status,'')<>'' OR COALESCE(contact,'')<>'' OR COALESCE(notes,'')<>'')")
+        self.conn.execute("INSERT OR REPLACE INTO sheet_tabs (tab, content_hash, written_at) VALUES "
+                          "('__companies_v2', '', '')")
 
     def target_companies(self) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM target_companies").fetchall()

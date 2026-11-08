@@ -41,7 +41,7 @@ from .sources.workday import Listing
 from .sources import SourceError, get_source, load_fixture
 from .sources.jsearch import JSearchSource, search as jsearch_search
 from .sources.muse import MuseSource, muse_locations
-from .textmatch import normalize
+from .textmatch import find_terms, normalize
 
 log = logging.getLogger("pipeline")
 
@@ -163,22 +163,48 @@ def display_fields(ev: Evaluation) -> dict:
             "source": SOURCE_NAMES.get(p.raw.platform, p.raw.platform) if p.raw else ""}
 
 
+_FIT_CRITERIA = None
+
+
 def _note_company_fit(store: Store, ev: Evaluation, company, ts: str) -> None:
-    """Pipeline 2 feed: a company whose posting shows hospitality / real estate (with or
-    without AI) is suggested on the Companies tab - whether or not this job fits you."""
-    fit = None
-    for f in ev.flags:
-        if f.startswith("Your edge: "):
-            fit = f.split(": ", 1)[1]
-            break
-        if f.startswith("Preferred field: "):
-            fit = fit or f.split(": ", 1)[1]
-    if not fit or not ev.posting.description_lines:
+    """Pipeline 2 feed: a company whose OWN opening description puts it in hospitality or
+    real estate (2+ distinct terms, e.g. 'commercial real estate' + 'construction companies')
+    is suggested on the Companies tab, whether or not this job fits you. One job's title or
+    duties mentioning a hotel or a property is not enough (that added AbbVie, Palantir...)."""
+    global _FIT_CRITERIA
+    lines = ev.posting.description_lines
+    if not lines:
         return
-    about = next((ln for ln in ev.posting.description_lines if not ln.startswith("## ") and len(ln) > 40), "")
+    if _FIT_CRITERIA is None:
+        _FIT_CRITERIA = load_criteria()
+    ff = _FIT_CRITERIA.get("field_fit", default={}) or {}
+    # the company blurb: the text before the first heading, or under an "About ..." heading
+    intro, about_sec, cur = [], [], None
+    for ln in lines:
+        if ln.startswith("## "):
+            cur = ln[3:].lower()
+            continue
+        if cur is None:
+            intro.append(ln)
+        elif cur.startswith("about") and "role" not in cur and "you" not in cur:
+            about_sec.append(ln)
+    intro = (intro or about_sec)[:6]
+    domain = None
+    for d, terms in (ff.get("core_company_terms") or {}).items():
+        if len({h.term.lower().rstrip("s") for h in find_terms(intro, terms)}) >= 2:
+            domain = "hospitality" if d.startswith("hospitality") else "real estate"
+            break
+    if not domain:
+        return
+    ai = bool(find_terms(intro, ff.get("ai_terms") or [], first_only=True))
+    fit = f"AI × {domain}" if ai else domain
+    about = next((ln for ln in intro if len(ln) > 40), "")
     name = ev.posting.company or company.name
     careers = None if company.platform in SEARCH_PLATFORMS else ev.posting.url
-    store.note_target_company(name, fit, about[:220], "found by the job pipeline", ts, careers)
+    store.note_target_company(name, fit, about[:220], AUTO_SOURCE, ts, careers)
+
+
+AUTO_SOURCE = "found by the job pipeline"
 
 
 def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, criteria=None,

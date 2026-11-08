@@ -16,3 +16,491 @@ companies:
     fit: AI-forward
     about: AI-powered app to manage car and home ownership (insurance, repairs, buying/selling); Business Operations & Analytics team.
     source: you applied (Nov 8)
+
+  # Researched Nov 8 (checked via live job-board feeds and web search; you chose to add all 81)
+  - name: EliseAI
+    fit: AI × real estate
+    about: Builds AI assistants that handle leasing, resident communication and maintenance requests for apartment operators; also serves healthcare.
+    careers: https://jobs.ashbyhq.com/eliseai
+    source: research (Nov 8)
+    hq: New York
+  - name: Zuma
+    fit: AI × real estate
+    about: AI leasing agent that answers, qualifies and schedules tours for rental leads on behalf of property managers.
+    careers: https://jobs.lever.co/getzuma
+    source: research (Nov 8)
+    hq: San Francisco
+  - name: Juniper Square
+    fit: AI × real estate
+    about: Fund administration, investor relations and fundraising software for private-markets firms, with a large real estate customer base.
+    careers: https://jobs.ashbyhq.com/juniperSquare
+    source: research (Nov 8)
+    hq: San Francisco
+  - name: Cherre
+    fit: AI × real estate
+    about: Data management platform that connects, standardizes and analyzes property and portfolio data for real estate investors and managers.
+    careers: https://jobs.lever.co/cherre
+    source: research (Nov 8)
+    hq: New York
+  - name: Dealpath
+    fit: AI × real estate
+    about: Deal pipeline and investment management software for commercial real estate investors, including AI-assisted data extraction.
+    careers: https://job-boards.greenhouse.io/dealpath
+    source: research (Nov 8)
+    hq: San Francisco
+  - name: Northspyre
+    fit: AI × real estate
+    about: Development management software that tracks budgets, invoices and project data for real estate developers.
+    careers: https://job-boards.greenhouse.io/northspyre
+    source: research (Nov 8)
+    hq: New York
+  - name: Placer.ai
+    fit: AI × real estate
+    about: Location analytics platform using foot-traffic data to inform retail, commercial real estate and site-selection decisions.
+    careers: https://job-boards.greenhouse.io/placerlabs
+    source: research (Nov 8)
+    hq: Los Altos
+  - name: Valon
+    fit: AI × real estate
+    about: AI-native platform for mortgage servicing, handling loan administration for lenders and servicers.
+    careers: https://jobs.ashbyhq.com/valon
+    source: research (Nov 8)
+    hq: New York
+  - name: Keyway
+    fit: AI × real estate
+    about: Multi-agent AI platform that automates commercial real estate work such as comps, underwriting and lease abstraction.
+    careers: https://builtin.com/company/keyway
+    source: research (Nov 8)
+    hq: New York
+  - name: Mainstay
+    fit: AI × real estate
+    about: AI market-intelligence and transaction platform for single-family rental investors; spun out of Opendoor in 2024.
+    careers: https://jobs.ashbyhq.com/mainstay
+    source: research (Nov 8)
+    hq: San Francisco
+  - name: Bowery Valuation
+    fit: AI × real estate
+    about: Commercial real estate appraisal firm that produces valuations on its own technology platform.
+    careers: https://ats.rippling.com/bowery-valuation/jobs
+    source: research (Nov 8)
+    hq: New York
+  - name: TheGuarantors
+    fit: AI × real estate
+    about: Rent guarantee, deposit alternative and renters insurance products for landlords and renters.
+    careers: https://ats.rippling.com/theguarantors-open-positions/jobs
+    source: research (Nov 8)
+    hq: New York
+  - name: Snappt
+    fit: AI × real estate
+    about: Detects fraudulent documents, income and identity in rental applications for multifamily operators.
+    careers: https://jobs.insightpartners.com/companies/snappt
+    source: research (Nov 8)
+    hq: Los Angeles
+  - name: Funnel
+    fit: AI × real estate
+    about: Leasing CRM and resident-management software for apartment operators, with AI leasing products.
+    careers: https://apply.workable.com/funnel-leasing/
+    source: research (Nov 8)
+    hq: New York
+  - name: HappyCo
+    fit: AI × real estate
+    about: Operations software for multifamily owners covering inspections, maintenance and work orders.
+    careers: https://jobs.lever.co/happyco
+    source: research (Nov 8)
+    hq: Oakland
+  - name: Crexi
+    fit: AI × real estate
+    about: Commercial real estate marketplace for listing, searching and analyzing properties, plus CRE data and intelligence tools.
+    careers: https://job-boards.greenhouse.io/crexi
+    source: research (Nov 8)
+    hq: Los Angeles
+  - name: Built Technologies
+    fit: AI × real estate
+    about: AI-powered platform for construction lending and real estate finance, starting with draw management for lenders.
+    careers: https://job-boards.greenhouse.io/getbuilt
+    source: research (Nov 8)
+    hq: Nashville
+  - name: PermitFlow
+    fit: AI × real estate
+    about: Applied AI company that automates construction permitting research, applications and tracking for builders.
+    careers: https://jobs.ashbyhq.com/permitflow
+    source: research (Nov 8)
+    hq: New York
+  - name: Trunk Tools
+    fit: AI × real estate
+    about: AI agents for general contractors that search project documents and automate jobsite workflows.
+    careers: https://jobs.ashbyhq.com/Trunk%20Tools
+    source: research (Nov 8)
+    hq: New York
+  - name: Togal.AI
+    fit: AI × real estate
+    about: AI-powered takeoff and estimating software that measures construction drawings automatically.
+    careers: https://jobs.ashbyhq.com/togal-ai
+    source: research (Nov 8)
+    hq: Miami
+  - name: Doxel
+    fit: AI × real estate
+    about: Uses computer vision on jobsite scans to track construction progress against plans and schedules.
+    careers: https://jobs.lever.co/doxel
+    source: research (Nov 8)
+    hq: Redwood City
+  - name: OpenSpace
+    fit: AI × real estate
+    about: 360° camera capture with computer vision and AI to document and track construction sites.
+    careers: https://job-boards.greenhouse.io/openspace
+    source: research (Nov 8)
+    hq: San Francisco
+  - name: Buildots
+    fit: AI × real estate
+    about: Uses AI and helmet-mounted cameras to monitor construction progress for general contractors.
+    careers: https://www.comeet.com/jobs/buildots/36.004
+    source: research (Nov 8)
+    hq: Tel Aviv
+  - name: Bedrock Robotics
+    fit: AI × real estate
+    about: Builds autonomy systems that retrofit construction equipment such as excavators to work on job sites.
+    careers: https://jobs.ashbyhq.com/bedrock-robotics
+    source: research (Nov 8)
+    hq: San Francisco
+  - name: Higharc
+    fit: AI × real estate
+    about: Cloud platform homebuilders use to design, configure and sell new homes.
+    careers: https://jobs.ashbyhq.com/higharc
+    source: research (Nov 8)
+    hq: Durham
+  - name: Document Crunch
+    fit: AI × real estate
+    about: AI software that reviews construction contracts and project documents to flag risk provisions.
+    careers: https://apply.workable.com/document-crunch/
+    source: research (Nov 8)
+    hq: Atlanta
+  - name: AppFolio
+    fit: AI × real estate
+    about: Property management software and AI tools for residential and commercial property managers.
+    careers: https://jobs.ashbyhq.com/appfolio
+    source: research (Nov 8)
+    hq: Santa Barbara
+  - name: Entrata
+    fit: AI × real estate
+    about: Property management operating system for multifamily operators, covering leasing, payments and resident services.
+    careers: https://jobs.lever.co/entrata
+    source: research (Nov 8)
+    hq: Lehi
+  - name: Procore
+    fit: AI × real estate
+    about: Construction management software platform for owners, general contractors and specialty contractors, with AI products.
+    careers: https://procore.wd12.myworkdayjobs.com/en-US/Procore_External_Careers
+    source: research (Nov 8)
+    hq: Carpinteria
+  - name: Canary Technologies
+    fit: AI × hospitality
+    about: 'Guest management software for hotels: mobile check-in, guest messaging, upsells, payments and AI voice.'
+    careers: https://jobs.lever.co/canarytechnologies
+    source: research (Nov 8)
+    hq: San Francisco
+  - name: Duetto
+    fit: AI × hospitality
+    about: Revenue management, pricing and analytics software for hotels and casino resorts.
+    careers: https://job-boards.greenhouse.io/duettoresearch
+    source: research (Nov 8)
+    hq: San Francisco
+  - name: Lighthouse
+    fit: AI × hospitality
+    about: Commercial platform giving hotels market data, rate intelligence and AI-driven pricing tools.
+    careers: https://job-boards.greenhouse.io/lighthouse
+    source: research (Nov 8)
+    hq: London
+  - name: Mews
+    fit: AI × hospitality
+    about: Cloud property management system and payments platform for hotels.
+    careers: https://job-boards.greenhouse.io/mewssystems
+    source: research (Nov 8)
+    hq: Amsterdam
+  - name: Cloudbeds
+    fit: AI × hospitality
+    about: All-in-one hotel management platform (PMS, channel manager, booking engine) for independent properties.
+    careers: https://job-boards.greenhouse.io/cloudbeds
+    source: research (Nov 8)
+    hq: San Diego
+  - name: Breezeway
+    fit: AI × hospitality
+    about: 'Property operations software for vacation rentals and hotels: cleaning, inspections, maintenance and guest messaging.'
+    careers: https://job-boards.greenhouse.io/breezeway
+    source: research (Nov 8)
+    hq: Boston
+  - name: Revinate
+    fit: AI × hospitality
+    about: Guest data, CRM, email marketing and AI voice reservations platform for hotels.
+    careers: https://jobs.lever.co/revinate
+    source: research (Nov 8)
+    hq: San Francisco
+  - name: Wheelhouse
+    fit: AI × hospitality
+    about: Dynamic pricing and revenue management software for short-term rental operators.
+    careers: https://job-boards.greenhouse.io/wheelhouse
+    source: research (Nov 8)
+    hq: San Francisco
+  - name: PriceLabs
+    fit: AI × hospitality
+    about: Dynamic pricing and revenue management tools for short-term rentals and small hotels.
+    careers: https://apply.workable.com/pricelabs/
+    source: research (Nov 8)
+    hq: Chicago
+  - name: Enso Connect
+    fit: AI × hospitality
+    about: 'AI guest experience platform for vacation rentals and boutique hotels: messaging, check-in and upsells.'
+    careers: https://jobs.entrepreneurs.utoronto.ca/companies/enso-connect/jobs
+    source: research (Nov 8)
+    hq: Toronto
+  - name: Guesty
+    fit: AI × hospitality
+    about: Property management software for short-term rental and hospitality operators.
+    careers: https://www.comeet.com/jobs/guesty/10.000
+    source: research (Nov 8)
+    hq: Tel Aviv
+  - name: Hospitable
+    fit: AI × hospitality
+    about: Remote-only company making automation software for short-term rental hosts and property managers.
+    careers: https://apply.workable.com/hospitable/
+    source: research (Nov 8)
+    hq: Remote (US/Canada)
+  - name: Spotnana
+    fit: AI × hospitality
+    about: Cloud travel infrastructure platform that corporations and travel agencies use to book and manage trips.
+    careers: https://jobs.gem.com/spotnana
+    source: research (Nov 8)
+    hq: Palo Alto
+  - name: Navan
+    fit: AI × hospitality
+    about: Corporate travel booking and expense management platform.
+    careers: https://job-boards.greenhouse.io/tripactions
+    source: research (Nov 8)
+    hq: Palo Alto
+  - name: Engine
+    fit: AI × hospitality
+    about: Business travel booking platform for lodging, flights and car rentals; describes itself as AI-native.
+    careers: https://job-boards.greenhouse.io/engine
+    source: research (Nov 8)
+    hq: Denver
+  - name: Hopper
+    fit: AI × hospitality
+    about: Travel booking app and B2B travel technology (APIs, white-label products, fintech) for other brands.
+    careers: https://jobs.ashbyhq.com/hopper
+    source: research (Nov 8)
+    hq: Montreal
+  - name: Perk
+    fit: AI × hospitality
+    about: Business travel and spend management platform (formerly TravelPerk).
+    careers: https://jobs.ashbyhq.com/perk
+    source: research (Nov 8)
+    hq: Barcelona
+  - name: Duffel
+    fit: AI × hospitality
+    about: APIs that let companies search, sell and manage flights and accommodation.
+    careers: https://jobs.ashbyhq.com/duffel
+    source: research (Nov 8)
+    hq: London
+  - name: KAYAK
+    fit: AI × hospitality
+    about: Travel search engine for flights, hotels and cars; part of Booking Holdings.
+    careers: https://jobs.ashbyhq.com/kayak
+    source: research (Nov 8)
+    hq: Stamford
+  - name: Airbnb
+    fit: AI × hospitality
+    about: Online marketplace for short-term stays and experiences.
+    careers: https://job-boards.greenhouse.io/airbnb
+    source: research (Nov 8)
+    hq: San Francisco
+  - name: Expedia Group
+    fit: AI × hospitality
+    about: Online travel company operating Expedia, Hotels.com and Vrbo, plus B2B travel services.
+    careers: https://careers.expediagroup.com/jobs/
+    source: research (Nov 8)
+    hq: Seattle
+  - name: Priceline
+    fit: AI × hospitality
+    about: Online travel agency for hotels, flights and rental cars; part of Booking Holdings.
+    careers: https://priceline.wd1.myworkdayjobs.com/Priceline
+    source: research (Nov 8)
+    hq: Norwalk
+  - name: Sabre
+    fit: AI × hospitality
+    about: Travel technology company providing distribution and software to airlines, hotels and travel agencies.
+    careers: https://sabre.wd1.myworkdayjobs.com/en-US/SabreJobs
+    source: research (Nov 8)
+    hq: Southlake
+  - name: SiteMinder
+    fit: hospitality
+    about: 'Hotel commerce platform: channel manager, booking engine and revenue tools for accommodation providers.'
+    careers: https://jobs.ashbyhq.com/siteminder
+    source: research (Nov 8)
+    hq: Sydney
+  - name: AirDNA
+    fit: hospitality
+    about: Data and analytics on short-term rental markets for investors, hosts and property managers.
+    careers: https://jobs.lever.co/airdna
+    source: research (Nov 8)
+    hq: Denver
+  - name: Fora
+    fit: hospitality
+    about: Modern travel agency that gives independent travel advisors booking tools, training and supplier access.
+    careers: https://job-boards.greenhouse.io/foratravel
+    source: research (Nov 8)
+    hq: New York
+  - name: Kasa
+    fit: hospitality
+    about: Tech-enabled operator of hotels and apartment hotels on behalf of property owners.
+    careers: https://job-boards.greenhouse.io/kasa
+    source: research (Nov 8)
+    hq: San Francisco
+  - name: Evolve
+    fit: hospitality
+    about: Vacation rental management company handling marketing, bookings and guest support for homeowners.
+    careers: https://job-boards.greenhouse.io/evolvevacationrental
+    source: research (Nov 8)
+    hq: Denver
+  - name: Placemakr
+    fit: hospitality
+    about: Operates furnished apartment-hotel buildings combining apartment living with hotel services.
+    careers: https://jobs.lever.co/placemakr
+    source: research (Nov 8)
+    hq: Washington
+  - name: Hilton
+    fit: hospitality
+    about: Global hotel company with brands including Hilton, Hampton and Waldorf Astoria.
+    careers: https://jobs.hilton.com/
+    source: research (Nov 8)
+    hq: McLean
+  - name: Marriott International
+    fit: hospitality
+    about: Global hotel company with brands including Marriott, Sheraton, Westin and Ritz-Carlton.
+    careers: https://careers.marriott.com/jobs
+    source: research (Nov 8)
+    hq: Bethesda
+  - name: Hyatt
+    fit: hospitality
+    about: Global hotel company that operates, franchises and owns hotels and resorts.
+    careers: https://careers.hyatt.com/
+    source: research (Nov 8)
+    hq: Chicago
+  - name: IHG Hotels & Resorts
+    fit: hospitality
+    about: Global hotel company with brands including Holiday Inn, InterContinental and Kimpton.
+    careers: https://careers.ihg.com/en/
+    source: research (Nov 8)
+    hq: Windsor
+  - name: Baselane
+    fit: real estate
+    about: Banking, rent collection and bookkeeping platform for independent landlords.
+    careers: https://jobs.lever.co/baselane
+    source: research (Nov 8)
+    hq: New York
+  - name: Bilt
+    fit: real estate
+    about: Rewards program and payments platform that lets renters earn points on rent; partners with property owners.
+    careers: https://jobs.gem.com/bilt
+    source: research (Nov 8)
+    hq: New York
+  - name: RealPage
+    fit: real estate
+    about: Property management, leasing, revenue management and analytics software for rental housing.
+    careers: https://www.realpage.com/careers/
+    source: research (Nov 8)
+    hq: Richardson
+  - name: Zillow
+    fit: real estate
+    about: Online real estate marketplace for buying, selling, renting and financing homes.
+    careers: https://zillow.wd5.myworkdayjobs.com/Zillow_Group_External
+    source: research (Nov 8)
+    hq: Seattle
+  - name: Compass
+    fit: real estate
+    about: Residential real estate brokerage with its own agent technology platform.
+    careers: https://job-boards.greenhouse.io/urbancompass
+    source: research (Nov 8)
+    hq: New York
+  - name: Opendoor
+    fit: real estate
+    about: Online platform that buys and sells homes directly with consumers.
+    careers: https://www.opendoor.com/careers/open-positions
+    source: research (Nov 8)
+    hq: Tempe
+  - name: SmartRent
+    fit: real estate
+    about: Smart-home, access control and operations software for rental housing owners and operators.
+    careers: https://job-boards.greenhouse.io/smartrent
+    source: research (Nov 8)
+    hq: Scottsdale
+  - name: VTS
+    fit: real estate
+    about: Leasing, asset management and tenant experience software for commercial real estate owners.
+    careers: https://job-boards.greenhouse.io/vts
+    source: research (Nov 8)
+    hq: New York
+  - name: Roofstock
+    fit: real estate
+    about: Online investment platform for buying, selling and managing single-family rental homes.
+    careers: https://job-boards.greenhouse.io/roofstock
+    source: research (Nov 8)
+    hq: Oakland
+  - name: Orchard
+    fit: real estate
+    about: Residential brokerage that helps people buy a new home before selling their current one.
+    careers: https://job-boards.greenhouse.io/orchard
+    source: research (Nov 8)
+    hq: New York
+  - name: HomeLight
+    fit: real estate
+    about: Platform that matches home sellers with agents and offers cash-offer and transaction services.
+    careers: https://job-boards.greenhouse.io/homelight
+    source: research (Nov 8)
+    hq: San Francisco
+  - name: Homebound
+    fit: real estate
+    about: Technology-driven homebuilder that designs and builds new homes.
+    careers: https://jobs.ashbyhq.com/homebound
+    source: research (Nov 8)
+    hq: Austin
+  - name: DoorLoop
+    fit: real estate
+    about: Property management software for residential and commercial landlords and managers.
+    careers: https://jobs.ashbyhq.com/doorloop
+    source: research (Nov 8)
+    hq: Miami
+  - name: JLL
+    fit: real estate
+    about: Commercial real estate services and investment management firm.
+    careers: https://jll.wd1.myworkdayjobs.com/jllcareers
+    source: research (Nov 8)
+    hq: Chicago
+  - name: CBRE
+    fit: real estate
+    about: Commercial real estate services and investment firm covering leasing, capital markets and facilities.
+    careers: https://careers.cbre.com/en_US/careers/SearchJobs
+    source: research (Nov 8)
+    hq: Dallas
+  - name: Cushman & Wakefield
+    fit: real estate
+    about: Commercial real estate services firm covering leasing, capital markets, valuation and property management.
+    careers: https://careers.cushmanwakefield.com/en/jobs/
+    source: research (Nov 8)
+    hq: Chicago
+  - name: Tishman Speyer
+    fit: real estate
+    about: Real estate owner, developer, operator and fund manager, including Rockefeller Center.
+    careers: https://ts.wd5.myworkdayjobs.com/tishmanspeyer
+    source: research (Nov 8)
+    hq: New York
+  - name: RXR
+    fit: real estate
+    about: Real estate owner, developer and investment manager focused on the New York area.
+    careers: https://job-boards.greenhouse.io/rxr
+    source: research (Nov 8)
+    hq: New York
+  - name: Greystar
+    fit: real estate
+    about: Rental housing operator, developer and investment manager.
+    careers: https://jobs.greystar.com/corporate-jobs
+    source: research (Nov 8)
+    hq: Charleston
