@@ -17,18 +17,16 @@ jsearch:                    # Google for Jobs via JSearch (OpenWeb Ninja) — ke
   enabled: true
   requests_per_day: 6       # free plan = 200/month. Pro ($25, 10,000/month) → set to 300
   # one search per keyword group × city area; the run rotates through all pairs
-  keywords:                 # the same broad groups as the job-alert setup
-    - associate
-    - strategy OR operations
-    - product
-    - implementation OR deployment OR solutions
-    - consultant OR consulting
+  keywords:                 # your fields (Nov 8): hospitality, real estate, business ops / strategy, AI in those
+    - business operations OR strategy and operations
+    - operations associate OR strategy associate
     - real estate OR proptech
+    - real estate analyst OR acquisitions analyst OR asset management analyst
     - hospitality OR hotel
-    - AI OR automation
+    - revenue management OR hotel operations
     - proptech OR real estate technology OR AI real estate
     - hospitality technology OR travel tech OR AI hospitality
-    - new grad OR recent graduate OR entry level
+    - new grad OR rotational program OR leadership development program
   cities:                   # one per area in criteria location tiers (search radius covers suburbs)
     - {query: "New York, NY", country: us}
     - {query: "Jersey City, NJ", country: us}
