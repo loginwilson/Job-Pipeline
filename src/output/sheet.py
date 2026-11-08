@@ -380,12 +380,46 @@ def _sort_key(tab: str, row: dict):
 
 
 # --- sync -----------------------------------------------------------------
+def restore_picks_once(store: Store, ts: str) -> int:
+    """config/restore_picks.yaml: scores to put back once (matched by company + role, never by
+    the hidden ID). Only jobs you haven't scored since are filled. Returns how many were set."""
+    from ..config import CONFIG_DIR, load_yaml
+    path = CONFIG_DIR / "restore_picks.yaml"
+    if not path.exists():
+        return 0
+    data = load_yaml(path) or {}
+    marker = "__restore_" + hashlib.sha1(json.dumps(data, sort_keys=True).encode()).hexdigest()[:10]
+    if store.conn.execute("SELECT 1 FROM sheet_tabs WHERE tab=?", (marker,)).fetchone():
+        return 0
+    by_name: dict[tuple, list[str]] = {}
+    for r in store.conn.execute("SELECT posting_id, company, title FROM postings WHERE merged_into IS NULL"):
+        by_name.setdefault((_norm(r["company"]), _norm(r["title"])), []).append(r["posting_id"])
+    states = store.owner_states()
+    n = 0
+    for e in data.get("picks") or []:
+        v = str(e.get("interest") or "").strip()
+        for pid in by_name.get((_norm(e.get("company")), _norm(e.get("role"))), []):
+            st = states.get(pid) or {}
+            if (st.get("interest") or "") or (st.get("decision") or "Pending") not in ("", "Pending"):
+                continue                                  # you've scored it since: yours wins
+            dec = "Pass" if v.lower() == "pass" else "Apply"
+            store.save_owner_state(pid, {"Decision": dec, "Interest": "" if dec == "Pass" else v,
+                                         "Status": st.get("status") or "", "Notes": st.get("notes") or "",
+                                         "Next step": st.get("next_step") or "", "Due": st.get("due") or ""}, ts)
+            n += 1
+    store.conn.execute("INSERT OR REPLACE INTO sheet_tabs (tab, content_hash, written_at) VALUES (?, '', ?)",
+                       (marker, ts))
+    log.info("Restored %d scores from config/restore_picks.yaml", n)
+    return n
+
+
 def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Criteria,
                           ts: str) -> tuple[list[dict], dict]:
     resolve = make_row_resolver(store)
     sheet_owner, full_rows = read_owner_values(existing, store.owner_states(), resolve)
     for pid, vals in sheet_owner.items():          # the Sheet is the source of truth for your columns
         store.save_owner_state(pid, vals, ts)
+    restore_picks_once(store, ts)
     store.commit()
     states = store.owner_states()
     rows = build_rows(store, criteria, ts, states)

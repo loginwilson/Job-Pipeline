@@ -468,3 +468,23 @@ def test_reset_backs_up_old_picks_wipes_scores_and_removes_old_tabs(criteria, bo
     assert all(r[INT] == "" for r in tab(sheet, JOBS))                     # fresh start
     sync_all(sheet, store, criteria, T2)                                   # only once
     assert len(sheet.read(["Before reset"])["Before reset"]) == 2
+
+
+def test_restore_list_puts_scores_back_by_company_and_role(criteria, board, evals, tmp_path, monkeypatch):
+    import src.config as cfg
+    store, sheet = Store(":memory:"), FakeBackend()
+    run(store, sheet, board, evals, criteria, T1)
+    rows = tab(sheet, JOBS)
+    a, b = rows[0], rows[1]
+    sheet.set_cell(JOBS, 2, INT, "1")                       # you re-scored b already: kept
+    (tmp_path / "restore_picks.yaml").write_text(
+        "picks:\n"
+        f"  - {{company: \"{a[H.index('Company')]}\", role: \"{a[ROLE]}\", interest: \"5\"}}\n"
+        f"  - {{company: \"{b[H.index('Company')]}\", role: \"{b[ROLE]}\", interest: \"Pass\"}}\n")
+    monkeypatch.setattr(cfg, "CONFIG_DIR", tmp_path)
+    run(store, sheet, board, evals, criteria, T2)
+    jobs = {r[ID_COL]: r for r in tab(sheet, JOBS)}
+    assert jobs[a[ID_COL]][INT] == "5" and jobs[b[ID_COL]][INT] == "1"
+    sheet.set_cell(JOBS, row_index(sheet, JOBS, a[ID_COL]), INT, "")   # later you clear it: stays cleared
+    run(store, sheet, board, evals, criteria, T2)
+    assert {r[ID_COL]: r for r in tab(sheet, JOBS)}[a[ID_COL]][INT] == ""
