@@ -102,6 +102,10 @@ class Store:
             for col, typ in cols_needed.items():
                 if col not in have:      # databases created before these columns existed
                     self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {typ}")
+        # early runs stored Workday's per-source stats as 'workday'
+        self.conn.execute("DELETE FROM run_sources WHERE source='workday' AND EXISTS "
+                          "(SELECT 1 FROM run_sources r2 WHERE r2.source='Workday' AND r2.started_at=run_sources.started_at)")
+        self.conn.execute("UPDATE run_sources SET source='Workday' WHERE source='workday'")
 
     def close(self) -> None:
         self.conn.commit()
