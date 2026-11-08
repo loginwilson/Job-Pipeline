@@ -732,9 +732,11 @@ def home_grid(store: Store, contacts: list[dict], crows: list[list], ts: str) ->
             "SELECT p.company, p.title, p.url, s.passed, s.flags FROM postings p JOIN scores s USING(posting_id) "
             "WHERE p.first_seen >= ? AND p.closed_at IS NULL AND p.merged_into IS NULL", (since,)):
         flags = ", ".join(f for f in json.loads(r["flags"] or "[]") if f.startswith(("Your edge", "Preferred", "Stretch")))
+        if not r["passed"]:
+            continue          # only finds that fit you (everything else is on Company jobs)
         kind = ("Target company" if (r["company"] or "").strip().lower() in targets else
-                "Grad program" if is_program(r["title"]) and r["passed"] else
-                "Your edge" if r["passed"] and "Your edge" in flags else None)
+                "Grad program" if is_program(r["title"]) else
+                "Your edge" if "Your edge" in flags else None)
         if kind:
             new.append((kind, r["company"], hyperlink(r["url"], r["title"]), flags))
     order = {"Target company": 0, "Your edge": 1, "Grad program": 2}
