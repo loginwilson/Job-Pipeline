@@ -51,7 +51,7 @@ class Gates:
 
     def evaluate(self, p: Posting) -> Evaluation:
         ev = Evaluation(posting=p)
-        for rule in (self.real_opening, self.opt_related, self.field_fit, self.employment_type, self.location, self.salary, self.experience,
+        for rule in (self.real_opening, self.opt_related, self.field_fit, self.specialist_text, self.employment_type, self.location, self.salary, self.experience,
                      self.seniority, self.work_authorization, self.technical_and_credentials, self.timing):
             rule(p, ev)
         ev.field = field_of(p, self.c)
@@ -71,6 +71,16 @@ class Gates:
             ev.fail("not_related_to_degree", f"'{hit[0].term}' field isn't supported by your degree (OPT): {p.title}")
 
     # 12. field fit (your fields only) ------------------------------------
+    def specialist_text(self, p: Posting, ev: Evaluation) -> None:
+        """Reads the WHOLE description: a posting packed with quant / engineering / research
+        vocabulary is a specialist job whatever its title says."""
+        st = self.c.get("specialist_text", default=None)
+        if not st or not p.description_lines:
+            return
+        hits = sorted({h.term.lower() for h in find_terms(p.description_lines, st.get("terms") or [])})
+        if len(hits) >= int(st.get("drop_at", 4)):
+            ev.fail("specialist", f"specialist job ({len(hits)} signs: {', '.join(hits[:5])})")
+
     def field_fit(self, p: Posting, ev: Evaluation) -> None:
         ff = self.c.get("field_fit", default=None)
         if not ff:

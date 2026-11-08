@@ -373,3 +373,22 @@ def test_capitals_and_ampersand_headings_are_read(evaluate):
         assert "technical" in {f.gate for f in evaluate(lines=lines + [PAY_OK]).failures}
     # an ordinary all-caps acronym line is not mistaken for a heading
     assert plain_to_lines("USA") == ["USA"]
+
+
+def test_what_you_need_heading_and_unlabelled_requirements(evaluate):
+    from conftest import PAY_OK
+    gates = lambda lines: {f.gate for f in evaluate(lines=lines + [PAY_OK]).failures}
+    assert "experience" in gates(["## What You Need", "- 3+ years in operations"])
+    # no recognised heading at all: bullets outside duties/benefits still count as requirements
+    assert "technical" in gates(["## The Team", "- Fluent programming in Python and C++ required"])
+    # duties under "What You'll Do" are not requirements
+    assert "technical" not in gates(["## What You'll Do", "- Partner with engineers who write Python"])
+
+
+def test_whole_posting_specialist_vocabulary(evaluate):
+    from conftest import PAY_OK
+    quant = ["Conduct quantitative research and implement strategy backtests.",
+             "Apply machine learning and asset pricing models; Matlab a plus."]
+    assert "specialist" in {f.gate for f in evaluate(lines=quant + [PAY_OK]).failures}
+    ops = ["Own vendor operations and build dashboards in Excel and SQL.", "Partner with sales and finance."]
+    assert "specialist" not in {f.gate for f in evaluate(lines=ops + [PAY_OK]).failures}

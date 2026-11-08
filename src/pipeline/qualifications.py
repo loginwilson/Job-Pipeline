@@ -31,6 +31,13 @@ class Hit:
 def required_lines(p: Posting, criteria: Criteria) -> list[str]:
     pref_terms = criteria.get("credentials", "softeners", default=[]) or []
     out = [item_text(ln) for ln in p.sections.lines("required")]
+    if not out:
+        # no recognised requirements heading: read bullets everywhere except duties / perks / about
+        skip = criteria.get("experience", "parse_sections", "not_requirements", default=[]) or []
+        for sec in p.sections.sections:
+            if sec.kind == "preferred" or (sec.heading and find_terms(sec.heading, skip, first_only=True)):
+                continue
+            out += [item_text(ln) for ln in sec.lines if ln.startswith("- ")]
     for kind, ln in p.sections.kind_of_line():
         if kind != "required" and _REQUIRED_CUE.search(ln) and not find_terms(ln, pref_terms, first_only=True):
             out.append(item_text(ln))

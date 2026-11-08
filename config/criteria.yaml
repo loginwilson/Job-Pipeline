@@ -92,8 +92,11 @@ experience:
   pass_clean: [new grad, new graduate, entry level, early career, recent graduate, "0-1 years"]
   # headings that mark requirement sections (also used by rules 7 and 8)
   parse_sections:
-    required: [minimum qualifications, basic qualifications, required qualifications, requirements, qualifications, what you'll need, what we require, what you bring, what you'll bring, what we're looking for, we're looking for, who you are, about you, you have, must have, skills and experience]
-    preferred: [preferred qualifications, nice to have, bonus points, plus, preferred, what we value]
+    required: [minimum qualifications, basic qualifications, required qualifications, requirements, qualifications, what you'll need, what we require, what you bring, what you'll bring, what we're looking for, we're looking for, who you are, about you, you have, must have, skills and experience, what you need, you need, we'd love to hear from you, ideal candidate, your profile, profil recherché, your skills, required skills, key skills, skills required, experience and skills, experience required, required experience, education and experience, education]
+    preferred: [preferred qualifications, nice to have, bonus points, plus, preferred, what we value, sets you apart, stand out, extra credit, bonus]
+    # When a posting has NO recognised requirements heading, bullets under any other heading are
+    # read as requirements, except under these (duties, perks, company blurbs):
+    not_requirements: [what you'll do, what you will do, what you'd do, responsibilities, responsibility, day to day, the role, about the role, your impact, impact, role, duties, mission, benefits, perks, offer, about us, about, life at, our principles, what we do, notices, how you will fulfill, examples, expect to, technologies we use, our stack]
 
 
 # 5 ── SENIORITY ───────────────────────────────────────────────
@@ -258,3 +261,12 @@ field_fit:
     product: [product manager, product management, associate product manager, APM, product owner, product designer, program manager]
     tech: [IT, information technology, help desk, desktop support, security, cybersecurity, network, systems administrator, salesforce administrator, salesforce consultant, servicenow, workday, sap, dynamics 365, crm consultant, technical support, solutions architect, hardware, firmware, manufacturing, production, warehouse, big data]
   data_title_terms: [data analyst, data analytics, data science, data engineer, business intelligence, BI, analytics engineer, data operations, data partnerships, data labeling]   # dropped unless a kept family is also in the title
+
+
+# ── SPECIALIST JOBS (reads the whole description) ──────────────
+# A posting that uses this many DIFFERENT terms below anywhere in its text is a
+# quant / engineering / research job, whatever the title says (e.g. a Goldman
+# "Research Associate" asking for backtests, asset pricing and machine learning).
+specialist_text:
+  drop_at: 4
+  terms: [backtest, backtests, backtesting, asset pricing, stochastic, econometric, econometrics, time series, machine learning, deep learning, neural network, statistical modeling, statistical models, quantitative research, quantitative models, quantitative financial models, systematic strategies, systematic investment, derivatives pricing, monte carlo, optimization techniques, linear algebra, calculus, Matlab, C++, Python, R programming, PyTorch, TensorFlow, Kubernetes, distributed systems, microservices, data structures, algorithms, computer science, software engineering, CI/CD, API development, PhD, peer-reviewed, publications]
