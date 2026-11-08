@@ -18,6 +18,10 @@ _BOLD = {"strong", "b"}
 MAX_HEADING_CHARS = 90
 
 
+# "SKILLS & EXPERIENCE WE'RE LOOKING FOR": a short all-capitals line with no sentence end is a heading
+_CAPS_HEADING = re.compile(r"^(?=(?:.*[A-Z]){4})[A-Z0-9&/,'’()\- ]+$")
+
+
 class _Converter(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
@@ -36,7 +40,7 @@ class _Converter(HTMLParser):
             all_bold = bool(visible) and all(b for _, b in visible)
             if self._li:
                 self.lines.append("- " + text)
-            elif self._heading or (all_bold and len(text) <= MAX_HEADING_CHARS):
+            elif self._heading or ((all_bold or _CAPS_HEADING.match(text)) and len(text) <= MAX_HEADING_CHARS):
                 self.lines.append("## " + text.rstrip(":").strip())
             else:
                 self.lines.append(text)
@@ -101,7 +105,7 @@ def plain_to_lines(text: str | None) -> list[str]:
             continue
         if line[:1] in "•*-•":
             out.append("- " + line.lstrip("•*-• ").strip())
-        elif line.endswith(":") and len(line) <= MAX_HEADING_CHARS:
+        elif (line.endswith(":") or _CAPS_HEADING.match(line)) and len(line) <= MAX_HEADING_CHARS:
             out.append("## " + line.rstrip(":").strip())
         else:
             out.append(line)

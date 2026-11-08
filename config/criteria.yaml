@@ -92,7 +92,7 @@ experience:
   pass_clean: [new grad, new graduate, entry level, early career, recent graduate, "0-1 years"]
   # headings that mark requirement sections (also used by rules 7 and 8)
   parse_sections:
-    required: [minimum qualifications, basic qualifications, required qualifications, requirements, qualifications, what you'll need, what we require, what you bring, what you'll bring, what we're looking for, who you are, about you, you have, must have, skills and experience]
+    required: [minimum qualifications, basic qualifications, required qualifications, requirements, qualifications, what you'll need, what we require, what you bring, what you'll bring, what we're looking for, we're looking for, who you are, about you, you have, must have, skills and experience]
     preferred: [preferred qualifications, nice to have, bonus points, plus, preferred, what we value]
 
 

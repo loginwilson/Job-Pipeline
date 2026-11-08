@@ -79,7 +79,7 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
             unrel = {h.term for h in find_terms(line, cred.get("unrelated_degree_fields", []) or [])}
             if q or len(unrel) >= 2:
                 why = q[0].term if q else ", ".join(sorted(unrel)[:3])
-                hits.append(Hit("credentials", line, f"requires a degree in a {why} field" if q else f"requires a {why} degree"))
+                hits.append(Hit("credentials", line, f"requires a {why} degree" if q else f"requires a {why} degree"))
                 continue
         has_field = bool(find_terms(line, fields, first_only=True))
         c = find_terms(line, cred.get("drop_required", []) or [], first_only=True)

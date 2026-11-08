@@ -359,3 +359,17 @@ def test_quantitative_degree_requirements(evaluate):
                 "- Bachelor's degree in a quantitative field preferred",
                 "- Bachelor's degree in Finance or Economics"):
         assert "credentials" not in gates(req), req
+
+
+def test_capitals_and_ampersand_headings_are_read(evaluate):
+    """Goldman-style postings: 'SKILLS & EXPERIENCE WE'RE LOOKING FOR' in capitals, no colon."""
+    from conftest import PAY_OK
+    from src.pipeline.html_text import html_to_lines, plain_to_lines
+    body = ("YOUR IMPACT\nWe are seeking a strategist.\nSKILLS & EXPERIENCE WE'RE LOOKING FOR\n"
+            "Fluent programming in Python, Matlab, R or a related language\n0-3 years of related work experience")
+    html = "".join(f"<p>{ln}</p>" for ln in body.split("\n"))
+    for lines in (plain_to_lines(body), html_to_lines(html)):
+        assert "## SKILLS & EXPERIENCE WE'RE LOOKING FOR" in lines
+        assert "technical" in {f.gate for f in evaluate(lines=lines + [PAY_OK]).failures}
+    # an ordinary all-caps acronym line is not mistaken for a heading
+    assert plain_to_lines("USA") == ["USA"]

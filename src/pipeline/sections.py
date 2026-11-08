@@ -45,10 +45,11 @@ class SectionSplit:
 
 def classify_heading(heading: str, criteria: Criteria) -> str:
     ps = criteria.get("experience", "parse_sections", default={}) or {}
-    h = stems(heading)
+    # "Skills & Experience" == "Skills and Experience": ignore "and" on both sides
+    h = [w for w in stems(heading) if w != "and"]
     for kind in ("preferred", "required"):
         for phrase in ps.get(kind, []) or []:
-            if contains_sequence(h, stems(str(phrase))):
+            if contains_sequence(h, [w for w in stems(str(phrase)) if w != "and"]):
                 return kind
     return "other"
 
