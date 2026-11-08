@@ -26,6 +26,8 @@ jsearch:                    # Google for Jobs via JSearch (OpenWeb Ninja) — ke
     - real estate OR proptech
     - hospitality OR hotel
     - AI OR automation
+    - proptech OR real estate technology OR AI real estate
+    - hospitality technology OR travel tech OR AI hospitality
     - new grad OR recent graduate OR entry level
   cities:                   # one per area in criteria location tiers (search radius covers suburbs)
     - {query: "New York, NY", country: us}

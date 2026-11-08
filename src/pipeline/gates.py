@@ -51,7 +51,7 @@ class Gates:
 
     def evaluate(self, p: Posting) -> Evaluation:
         ev = Evaluation(posting=p)
-        for rule in (self.real_opening, self.opt_related, self.field_fit, self.has_description, self.specialist_text, self.employment_type, self.location, self.salary, self.experience,
+        for rule in (self.real_opening, self.opt_related, self.field_fit, self.has_description, self.specialist_text, self.edge, self.employment_type, self.location, self.salary, self.experience,
                      self.seniority, self.work_authorization, self.technical_and_credentials, self.timing):
             rule(p, ev)
         ev.field = field_of(p, self.c)
@@ -90,30 +90,60 @@ class Gates:
         if len(hits) >= int(st.get("drop_at", 4)):
             ev.fail("specialist", f"specialist job ({len(hits)} signs: {', '.join(hits[:5])})")
 
+    def _company_domain(self, p: Posting) -> str | None:
+        """Hospitality / real estate from the company's own opening description (the title
+        alone misses 'SDR | Housing' at a property-management AI company)."""
+        ff = self.c.get("field_fit", default={}) or {}
+        intro = p.description_lines[: int(ff.get("core_from_description_lines", 12))]
+        for domain, terms in (ff.get("core_company_terms") or {}).items():
+            if find_terms(intro, terms, first_only=True):
+                return domain
+        return None
+
+    def _title_domain(self, p: Posting) -> str | None:
+        ff = self.c.get("field_fit", default={}) or {}
+        return next((f for f, terms in (ff.get("core_families") or {}).items()
+                     if find_terms(p.title, terms, first_only=True)), None)
+
     def field_fit(self, p: Posting, ev: Evaluation) -> None:
         ff = self.c.get("field_fit", default=None)
         if not ff:
             return
         title = p.title
-        core = next((f for f, terms in (ff.get("core_families") or {}).items()
-                     if find_terms(title, terms, first_only=True)), None)
-        if not core and ff.get("core_description_terms"):
-            intro = p.description_lines[: int(ff.get("core_from_description_lines", 8))]
-            if find_terms(intro, ff["core_description_terms"], first_only=True):
-                core = "hospitality_travel (company)"
-        if core:
-            return                                   # your degree's core fields always stay
+        # your core fields (hospitality / real estate, by title or by the company's description)
+        # keep any role except legal / HR / tech / design / product ones; finance there is your
+        # concentration, so it stays
+        company = self._title_domain(p) or (self._company_domain(p) if p.description_lines else None)
+        allowed = set(ff.get("core_company_allows") or []) if company else set()
         for group, terms in (ff.get("unrelated_title_terms") or {}).items():
+            if group in allowed:
+                continue                             # e.g. finance at a hotel / real-estate company
             hit = find_terms(title, terms, first_only=True)
             if hit:
                 ev.fail("field", f"{group.replace('_', ' ')} ('{hit[0].term}'): {title}")
                 return
+        if company:
+            return                                   # any other role at a hospitality / real-estate company
         kept = next((f for f, terms in (ff.get("families") or {}).items()
                      if find_terms(title, terms, first_only=True)), None)
         if kept:
             return
         data = find_terms(title, ff.get("data_title_terms") or [], first_only=True)
         ev.fail("field", f"{'pure data role' if data else 'not one of your fields'}: {title}")
+
+    def edge(self, p: Posting, ev: Evaluation) -> None:
+        """Your edge: AI applied to hospitality or real estate. Flagged and listed first."""
+        ff = self.c.get("field_fit", default={}) or {}
+        terms = ff.get("ai_terms") or []
+        if not terms:
+            return
+        domain = self._title_domain(p) or (self._company_domain(p) if p.description_lines else None)
+        if not domain:
+            return
+        intro = [p.title] + p.description_lines[: int(ff.get("core_from_description_lines", 12))]
+        if find_terms(intro, terms, first_only=True):
+            label = "hospitality" if domain.startswith("hospitality") else "real estate"
+            ev.flag(f"Your edge: AI × {label}")
 
     # 1. employment type --------------------------------------------------
     def employment_type(self, p: Posting, ev: Evaluation) -> None:

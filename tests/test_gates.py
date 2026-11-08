@@ -420,3 +420,23 @@ def test_audit_nov8_reading_rules(evaluate, full_criteria):
     g = Gates(full_criteria)
     from tests.test_gates import _p
     assert "no_description" in {f.gate for f in g.evaluate(_p(full_criteria, "Founding Sales", ["https://icon.com/careers"], pay="")).failures}
+
+
+def test_edge_ai_in_hospitality_and_real_estate(full_criteria):
+    from src.pipeline.gates import Gates
+    g = Gates(full_criteria)
+    eliseai = ["EliseAI builds AI agents for property management, helping apartment operators and renters.",
+               "## What you'll do", "- Book meetings with leasing teams"] + ["Words about the role."] * 12
+    ev = g.evaluate(_p(full_criteria, "Sales Development Representative", eliseai))
+    assert ev.passed and "Your edge: AI × real estate" in ev.flags, ev.failures
+    hotel = ["We are an AI-powered revenue platform for hotels and resorts."] + ["Words about the role."] * 12
+    ev = g.evaluate(_p(full_criteria, "Analyst", hotel))
+    assert ev.passed and "Your edge: AI × hospitality" in ev.flags, ev.failures
+    # finance at a real-estate company is your concentration; HR / product there still drop
+    reit = ["We are a REIT that owns multifamily apartments."] + ["Words about the role."] * 12
+    assert "field" not in {f.gate for f in g.evaluate(_p(full_criteria, "Financial Analyst", reit)).failures}
+    assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, "Recruiting Coordinator", reit)).failures}
+    assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, "Associate Product Manager | Housing", reit)).failures}
+    # no AI: kept, but no edge flag
+    ev = g.evaluate(_p(full_criteria, "Analyst", reit))
+    assert not any(f.startswith("Your edge") for f in ev.flags)

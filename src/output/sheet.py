@@ -219,8 +219,10 @@ def _sort_key(tab: str, row: dict):
     if tab == APPLICATIONS:
         return (c["Status"] in ENDED, -_interest(c["Interest"]), STATUS_ORDER.get(c["Status"], 6),
                 row["closed"], _neg_date(row["first_seen"]))
-    # newest finds first (by day), then NYC before tier 2 before tier 3, then newest posting
-    return (row["closed"], _neg_date((row["first_seen"] or "")[:10]), row.get("tier", 9),
+    # your edge (AI x hospitality / real estate) first, then newest finds (by day), then NYC
+    # before tier 2 before tier 3, then newest posting
+    return (row["closed"], "Your edge" not in (c.get("Flags") or ""), _neg_date((row["first_seen"] or "")[:10]),
+            row.get("tier", 9),
             _neg_date(str(row.get("posted") or "")[:10]))
 
 
