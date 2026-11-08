@@ -22,7 +22,7 @@ _YEARS_RE = re.compile(
     re.IGNORECASE,
 )
 _NOT_EXPERIENCE_NEXT = re.compile(
-    r"^\s*(?:-\s*)?(?:old|of age|or older|round|degree|college|university|bachelor|program|programme|commitment|contract|term|"
+    r"^\s*(?:-\s*)?(?:in a row|running|straight|consecutive|old|of age|or older|round|degree|college|university|bachelor|program|programme|commitment|contract|term|"
     r"plan|warranty|cliff|vesting|anniversary|history|track record of growth|ago|from now|later)\b",
     re.IGNORECASE,
 )

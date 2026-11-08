@@ -186,6 +186,8 @@ def build_rows(store: Store, criteria: Criteria, ts: str, owner_states: dict[str
             continue
         if row is None:
             continue
+        if is_program(r["title"]):
+            row["cells"]["Flags"] = "Grad program" + (", " + row["cells"]["Flags"] if row["cells"]["Flags"] else "")
         co = companies.get((r["company"] or "").strip().lower()) or {}
         untouched = row["cells"]["Decision"] == "Pending" and not row["cells"]["Interest"] and not row["cells"]["Status"]
         if co.get("status") == "Not for me" and untouched:
@@ -363,8 +365,88 @@ def _validation(sid: int, col: int, options: list[str], rows: int) -> dict:
 
 # --- the other tabs (rewritten in full each run) ---------------------------
 DROPPED, UNPARSED, FUNNEL, HEALTH = "Dropped", "Unparsed alerts", "Funnel", "Board health"
-COMPANIES, COMPANY_JOBS = "Companies", "Company jobs"
-ALL_TABS = DECISION_TABS + [COMPANIES, COMPANY_JOBS, DROPPED, UNPARSED, FUNNEL, HEALTH]
+COMPANIES, COMPANY_JOBS, PROGRAMS = "Companies", "Company jobs", "Grad programs"
+ALL_TABS = DECISION_TABS + [PROGRAMS, COMPANIES, COMPANY_JOBS, DROPPED, UNPARSED, FUNNEL, HEALTH]
+
+# --- grad programs: their own view with lighter rules ---------------------------
+PROGRAM_RX = re.compile(
+    r"\b(?:new grad(?:uate)?s?|graduate (?:program|leadership|scheme|rotational|associate)|grad program|"
+    r"university (?:hire|graduate|grad)|campus (?:hire|full[- ]time)|rotational|rotation program|"
+    r"(?:leadership|career|operations|management|business|analyst|associate) development program|"
+    r"leadership program|early[- ]career|emerging talent|class of 202[6-8]|202[78] (?:start|graduates?|new grad)|"
+    r"wolf graduate|associates? program|analyst program|fellowship)\b", re.I)
+PROGRAM_HEADERS = ["Add", "Company", "Program", "Where it stands", "Location", "Salary", "Experience ask",
+                   "Posting ID"]
+# a program is hidden only for these: things you can't change (skills, degree, citizenship,
+# internship, starting before you graduate); pay, title, location and stated years are notes
+_PROGRAM_BLOCKERS = {"technical", "credentials", "work_authorization", "start_date", "employment_type",
+                     "specialist", "seniority", "not_related_to_degree", "no_description", "not_a_real_opening"}
+_PROGRAM_FIELD_BLOCKERS = ("tech", "design", "product", "banking markets", "legal", "accounting", "hr people",
+                           "pure data", "investment banking")
+
+
+_PROGRAM_HARD_TITLE = re.compile(r"\b(?:full[- ]stack|software|developer|engineer(?:ing)?|technician|data scientist|"
+                                 r"machine learning|quant|trader|designer)\b", re.I)
+_ABROAD = re.compile(r"\b(?:United Kingdom|England|London|Korea|Seoul|Hong Kong|Singapore|India|Germany|France|"
+                     r"Japan|China|Australia|Brazil|Brasil|Mexico|Ireland|Netherlands|Amsterdam|Spain|Israel|Poland|"
+                     r"Dubai|UAE|Switzerland|Sweden|Italy|Philippines|Taiwan)\b", re.I)
+
+
+def is_program(title: str) -> bool:
+    return bool(PROGRAM_RX.search(title or ""))
+
+
+def program_rows(store: Store) -> list[list]:
+    tracked = {r["posting_id"] for r in store.pipeline_rows()}
+    out = []
+    for r in store.conn.execute(
+            "SELECT p.posting_id, p.company, p.title, p.url, s.passed, s.failures, s.display FROM postings p "
+            "JOIN scores s USING(posting_id) WHERE p.closed_at IS NULL AND p.merged_into IS NULL"):
+        if not is_program(r["title"]):
+            continue
+        d = json.loads(r["display"] or "{}")
+        fails = json.loads(r["failures"] or "[]")
+        if r["posting_id"] in tracked:
+            where = "✅ In To review" if r["passed"] else "✅ Your pick (in My applications)"
+            rank = 0
+        else:
+            if any(f.get("gate") in _PROGRAM_BLOCKERS for f in fails):
+                continue
+            if any(f.get("gate") == "field" and str(f.get("matched") or "").startswith(_PROGRAM_FIELD_BLOCKERS)
+                   for f in fails):
+                continue
+            if _PROGRAM_HARD_TITLE.search(r["title"] or ""):
+                continue          # engineering / technician programs
+            if any(f.get("gate") == "location" and _ABROAD.search(str(f.get("matched") or "")) for f in fails):
+                continue          # outside the US and Canada
+            notes = "; ".join(f"{_GATE_WORDS.get(f.get('gate'), f.get('gate'))}: {str(f.get('matched') or '')[:70]}"
+                              for f in fails)
+            where = "Outside your usual rules: " + notes
+            rank = 1
+        out.append((rank, (r["company"] or "").lower(), ["", r["company"], hyperlink(r["url"], r["title"]), where,
+                                                          d.get("location", ""), d.get("salary", ""),
+                                                          d.get("experience", ""), r["posting_id"]]))
+    return [row for _, _, row in sorted(out, key=lambda x: (x[0], x[1], str(x[2][2])))]
+
+
+def _programs_tab(meta: dict, rows: list[list], existing_len: int) -> list[dict]:
+    m = meta[PROGRAMS]
+    sid = m["id"]
+    grid = [PROGRAM_HEADERS] + rows
+    need = len(grid) + 20
+    padded = grid + [[""] * len(PROGRAM_HEADERS)] * (min(existing_len, need) - len(grid))
+    return [
+        {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
+            "rowCount": need, "columnCount": max(m.get("cols", 26), len(PROGRAM_HEADERS)), "frozenRowCount": 1}},
+            "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
+        {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
+                         "rows": [{"values": [_cell(v) for v in _pad(r, len(PROGRAM_HEADERS))]} for r in padded],
+                         "fields": "userEnteredValue"}},
+        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
+                        "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+                        "fields": "userEnteredFormat.textFormat.bold"}},
+        _validation(sid, 0, ["Add"], need),
+    ]
 COMPANY_JOB_HEADERS = ["Add", "Company", "Role", "Passes your rules?", "Location", "Salary", "Experience ask",
                        "Posting ID"]
 _GATE_WORDS = {"field": "not your field", "experience": "experience", "salary": "pay below your minimum",
@@ -376,18 +458,19 @@ _GATE_WORDS = {"field": "not your field", "experience": "experience", "salary": 
 
 
 def read_company_job_adds(existing: dict) -> list[str]:
-    """Posting IDs you marked 'Add' on the Company jobs tab."""
-    rows = existing.get(COMPANY_JOBS) or []
-    if not rows:
-        return []
-    idx = {h: i for i, h in enumerate(rows[0])}
-    if "Add" not in idx or "Posting ID" not in idx:
-        return []
+    """Posting IDs you marked 'Add' on the Company jobs or Grad programs tab."""
     out = []
-    for raw in rows[1:]:
-        raw = _pad(raw, len(rows[0]))
-        if (raw[idx["Add"]] or "").strip().lower() == "add" and raw[idx["Posting ID"]]:
-            out.append(raw[idx["Posting ID"]].strip())
+    for tab in (COMPANY_JOBS, PROGRAMS):
+        rows = existing.get(tab) or []
+        if not rows:
+            continue
+        idx = {h: i for i, h in enumerate(rows[0])}
+        if "Add" not in idx or "Posting ID" not in idx:
+            continue
+        for raw in rows[1:]:
+            raw = _pad(raw, len(rows[0]))
+            if (raw[idx["Add"]] or "").strip().lower() == "add" and raw[idx["Posting ID"]]:
+                out.append(raw[idx["Posting ID"]].strip())
     return out
 
 
@@ -605,6 +688,9 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     crows = company_rows(store, load_target_companies(), ts)
     per_tab[COMPANIES] = _company_tab(meta, crows, len(existing.get(COMPANIES, [])))
     per_tab[COMPANY_JOBS] = _company_jobs_tab(meta, company_job_rows(store), len(existing.get(COMPANY_JOBS, [])))
+    prows = program_rows(store)
+    per_tab[PROGRAMS] = _programs_tab(meta, prows, len(existing.get(PROGRAMS, [])))
+    info["programs"] = len(prows)
     info["companies"] = len(crows)
     # A rewrite makes an open Sheet reload and recalculate (it froze on big tabs), so a tab
     # whose content is the same as last time is left alone.

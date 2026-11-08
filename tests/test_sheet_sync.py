@@ -339,3 +339,29 @@ def test_edit_in_either_copy_of_a_picked_job_wins(criteria, board, evals):
     sheet.set_cell(REVIEW, row_index(sheet, REVIEW, pid), INT, "3")
     run(store, sheet, board, evals, criteria, T2)
     assert tab(sheet, APPLICATIONS)[row_index(sheet, APPLICATIONS, pid) - 1][INT] == "3"
+
+
+def test_grad_programs_tab_lists_programs_with_lighter_rules(criteria):
+    store, sheet = Store(":memory:"), FakeBackend()
+    def put(pid, title, passed, failures):
+        store.upsert_posting(pid, "Co", title, f"https://x/{pid}", None, None, T1)
+        store.save_score(pid, passed, failures, [], {}, T1)
+    put("a:1", "The Wolf Graduate Program (2027)", False, [{"gate": "salary", "matched": "midpoint USD 90,000 below floor"}])
+    put("a:2", "APX (New Grad 2027)", False, [{"gate": "field", "matched": "not one of your fields: APX"}])
+    put("a:3", "Software Engineer, New Grad", False, [{"gate": "technical", "matched": "engineer"}])
+    put("a:4", "Deployment Strategist, New Grad - Commercial", False,
+        [{"gate": "location", "matched": "no listed city in: Seoul, South Korea"}])
+    put("a:5", "Operations Associate (University Hire)", True, [])
+    put("a:6", "Business Operations Associate", True, [])
+    store.commit()
+    sync_all(sheet, store, criteria, T1)
+    rows = [r for r in sheet.read(["Grad programs"])["Grad programs"][1:] if any(r)]
+    ids = [r[7] for r in rows]
+    assert ids == ["a:5", "a:2", "a:1"] or set(ids) == {"a:5", "a:2", "a:1"}
+    assert rows[0][3].startswith("✅")
+    # Add from the Grad programs tab lands in My applications
+    i = 1 + ids.index("a:1")
+    sheet.set_cell("Grad programs", i, 0, "Add")
+    sync_all(sheet, store, criteria, T2)
+    assert "a:1" in [r[ID_COL] for r in tab(sheet, APPLICATIONS)]
+    assert any("Grad program" in r[FLAGS] for r in tab(sheet, REVIEW) if r[ID_COL] == "a:5")
