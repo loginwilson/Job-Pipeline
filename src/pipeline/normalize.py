@@ -81,11 +81,11 @@ _RAW_TYPES = [
 ]
 _TITLE_TYPES = [
     (re.compile(r"\binternships?\b|\binterns?\b|\bsummer (?:analyst|associate|analysts|associates)\b", re.I), "internship"),
-    (re.compile(r"\bpart[\s_-]?time\b", re.I), "part_time"),
+    (re.compile(r"\bpart[\s_-]?time\b|\bper[\s-]diem\b", re.I), "part_time"),
     (re.compile(r"\bco[- ]?op\b", re.I), "co_op"),
     (re.compile(r"\bapprentice(?:ship)?s?\b", re.I), "apprenticeship"),
     (re.compile(r"\bcontract[- ]to[- ]hire\b", re.I), "contract_to_hire"),
-    (re.compile(r"\bcontractor\b|\(contract\)|\bcontract (?:role|position)\b|[-–,]\s*contract\s*$"
+    (re.compile(r"\bcontractor\b|\(contract\)|\b\d+[\s-]?months?[\s-]contract\b|\bcontract (?:role|position)\b|[-–,]\s*contract\s*$"
                 r"|^\s*contract\s+(?!operations|management|manager|administrator|specialist|analyst|negotiat|attorney|counsel)",
                 re.I), "contract"),
     (re.compile(r"\btemporary\b|\(temp\)|\btemp\b|\bfixed[- ]term\b|\bseasonal\b", re.I), "temp"),

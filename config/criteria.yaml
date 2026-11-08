@@ -69,7 +69,7 @@ salary:
   never_count_as_base: [OTE, on-target earnings, commission, uncapped earnings]
   # When NO salary is posted, these roles are treated as below the floor: they
   # essentially never pay $100K. A posted salary that meets the floor always wins.
-  rarely_meets_floor_titles: [retail associate, retail sales associate, store associate, sales floor associate, cashier, stock associate, stocker, warehouse, picker, packer, material handler, forklift, production associate, assembly associate, assembler, general labor, delivery driver, truck driver, CDL driver, driver helper, delivery associate, delivery helper, courier, restaurant server, food server, banquet server, server assistant, barista, bartender, cook, dishwasher, host / hostess, housekeeper, housekeeping, janitor, custodian, security officer, security guard, caregiver, home health aide, nursing assistant, call center, customer service representative, member service representative, bank teller, teller, receptionist, pharmacy technician, lab technician, laboratory technician, clinical laboratory, crew member, team member, cleaner, landscaper, mover, plant operator, machine operator, equipment operator, production operator, teleoperator, robot operator, administrative assistant, office administrator, maintenance technician, processing assistant, loan processor, closer, mortgage processor, technician, installer, foreman, garage, clerk, hospital assistant, guest services, laboratory assistant, lab assistant, screener, cnc operator, painter, blaster, warehouser, inspector, crewperson, crew person, device driver, cajero]
+  rarely_meets_floor_titles: [retail associate, retail sales associate, store associate, sales floor associate, cashier, stock associate, stocker, warehouse, picker, packer, material handler, forklift, production associate, assembly associate, assembler, general labor, delivery driver, truck driver, CDL driver, driver helper, delivery associate, delivery helper, courier, restaurant server, food server, banquet server, server assistant, barista, bartender, cook, dishwasher, host / hostess, housekeeper, housekeeping, janitor, custodian, security officer, security guard, caregiver, home health aide, nursing assistant, call center, customer service representative, member service representative, bank teller, teller, receptionist, pharmacy technician, lab technician, laboratory technician, clinical laboratory, crew member, team member, cleaner, landscaper, mover, plant operator, machine operator, equipment operator, production operator, teleoperator, robot operator, administrative assistant, office administrator, maintenance technician, processing assistant, loan processor, closer, mortgage processor, technician, installer, foreman, garage, clerk, hospital assistant, guest services, laboratory assistant, lab assistant, screener, cnc operator, painter, blaster, warehouser, inspector, crewperson, crew person, device driver, cajero, patient care assistant, patient support assistant, care assistant]
   # Store / branch jobs: a title like these PLUS store wording in the posting (no salary posted)
   # counts as below the floor. "retail" alone is not enough (software sold to retailers).
   store_roles:
@@ -98,7 +98,7 @@ experience:
 # Representative, Consultant I, Strategist, APM, Rotational, New Grad, Junior,
 # Level I/II) pass; the 3-year rule handles the rest.
 seniority:
-  drop_title_terms: [senior, "sr.", sr, staff, principal, director, "head of", vp, svp, evp, avp, "vice president", chief, "executive director", leader, experienced, lateral, experienced hire, FVP, SVP, RVP, first vice president, regional vice president, SMTS, senior member, distinguished, fellow engineer, supervisor, group account, group strategist, group product manager, group creative, group copy, group project manager, supv]
+  drop_title_terms: [senior, "sr.", sr, staff, principal, director, "head of", vp, svp, evp, avp, "vice president", chief, "executive director", leader, experienced, lateral, experienced hire, FVP, SVP, RVP, first vice president, regional vice president, SMTS, senior member, distinguished, fellow engineer, supervisor, group account, group strategist, group product manager, group creative, group copy, group project manager, supv, associate partner, assoc partner, consulting partner, consult partner, dean, vice dean]
   senior_title_in_description: true   # "Experience Owner" whose text says "the Sr Experience Owner"
   keep_titles_with: [chief of staff]   # level words inside these phrases don't count (years rule still applies)
   drop_level_numerals: [III, IV, V, "3", "4", "5"]   # "Analyst III", "Consultant 4"
@@ -159,7 +159,7 @@ work_authorization:
 # AI / no-code tools. Those (and every other posting) then drop only if a
 # REQUIRED line demands coding with no non-coding alternative on that line.
 technical:
-  drop_titles: [engineer, engineering, "eng.", "engr", developer, application development, software development, data scientist, machine learning, ml engineer, architect, devops, sre, programmer]
+  drop_titles: [engineer, engineering, "eng.", "engr", ingénieur, ingenieur, developer, application development, software development, scientist, data scientist, machine learning, ml engineer, architect, devops, sre, programmer]
   keep_titles: [gtm engineer, go to market engineer, solutions engineer, sales engineer, prompt engineer, solutions engineering, sales engineering]
   required_drop:
     languages: [Python, JavaScript, TypeScript, Java, C++, C#, Ruby, Scala, Rust, Kotlin, Swift, Golang, PHP]
@@ -192,7 +192,7 @@ timing:
 # justified). Titles from fields the degree can't support are dropped.
 # TN is NOT a filter — it is shown in the Visa column for information.
 opt_relatedness:
-  unrelated_title_terms: [nurse, nursing, physician, doctor, surgeon, clinical, clinician, medical assistant, dental, dentist, hygienist, pharmacist, therapist, psychologist, social worker, phlebotomist, sonographer, radiology, radiologic, veterinarian, veterinary, teacher, tutor, professor, lecturer, attorney, lawyer, counsel, paralegal, legal assistant, electrician, plumber, mechanic, hvac, welder, carpenter, machinist, chemist, biologist, research scientist, lab scientist, pilot, clin, ther, cytologist, cytotechnologist, occupational therapy]
+  unrelated_title_terms: [nurse, nursing, physician, doctor, surgeon, clinical, clinician, medical assistant, dental, dentist, hygienist, pharmacist, therapist, psychologist, social worker, phlebotomist, sonographer, radiology, radiologic, veterinarian, veterinary, teacher, tutor, professor, lecturer, attorney, lawyer, counsel, paralegal, legal assistant, electrician, plumber, mechanic, hvac, welder, carpenter, machinist, chemist, biologist, research scientist, lab scientist, pilot, clin, ther, cytologist, cytotechnologist, occupational therapy, RN, LPN, EMT, pharm tech, pharmacy tech, patient navigator]
 
 
 # 10 ── REAL, ACTIVE OPENING ─────────────────────────────────────

@@ -282,3 +282,18 @@ def test_low_pay_title_with_posted_pay_is_read_in_full(criteria):
                      description_lines=["Pay: $60.00 - $70.00 per hour"])
     ev = evaluate_one(raw, Company("X", "lever", "x"), criteria, Gates(criteria), LocationMatcher(criteria))
     assert "salary" not in {f.gate for f in ev.failures}          # $60-70/hr ≈ $135K meets the floor
+
+
+def test_audit_round4_titles(criteria):
+    from src.pipeline.gates import Gates
+    g = Gates(criteria)
+    fails = lambda t: {f.gate for f in g.evaluate(_p(criteria, t, [])).failures}
+    assert "seniority" in fails("Assoc Partner, Consult Partner - NY State, Agencies")
+    assert "seniority" in fails("Vice Dean of Finance and Administration")
+    assert "seniority" in fails("Client Service Analyst IV – Bilingual English/Portuguese")
+    assert "employment_type" in fails("Operations Underwriting Associate(12 month contract)")
+    assert "employment_type" in fails("Patient Care Assistant, Per Diem")
+    assert "not_related_to_degree" in fails("RN Case Manager")
+    assert "technical" in fails("Computational Scientist, Structural & Thermal")
+    assert "technical" in fails("Ingénieur(e) mécanique turbine-alternateur")
+    assert not fails("GTM Engineer") and not fails("Graduate Sales Engineer")

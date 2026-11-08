@@ -150,7 +150,7 @@ class Gates:
             ev.fail("seniority", f"title term '{hit[0].term}': {title}")
             return
         nums = [re.escape(str(n)) for n in s.get("drop_level_numerals", []) or []]
-        if nums and (re.search(rf"(?:\s|,|-|^)(?:{'|'.join(nums)})\s*(?:$|[,(]|\s-\s)", title)
+        if nums and (re.search(rf"(?:\s|,|-|^)(?:{'|'.join(nums)})\s*(?:$|[,(]|\s[-–—]\s)", title)
                      or re.search(rf"\blevel\s*(?:{'|'.join(nums)})\b", title, re.I)):
             ev.fail("seniority", f"level numeral: {title}")
             return
