@@ -307,11 +307,10 @@ ALL_TABS = DECISION_TABS + [DROPPED, UNPARSED, FUNNEL, HEALTH]
 def _simple_tab(meta: dict, tab: str, header: list[str], rows: list[list], existing_len: int) -> list[dict]:
     sid = meta[tab]["id"]
     grid = [header] + rows
-    total = max(len(grid), existing_len)
-    padded = grid + [[""] * len(header)] * (total - len(grid))
+    padded = grid            # the grid is resized to fit, so no blank padding is needed
     return [
         {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
-            "rowCount": max(meta[tab].get("rows", 1000), total + 1),
+            "rowCount": len(grid) + 1,       # shrinks too: old rows (and their cells) go away
             "columnCount": max(meta[tab].get("cols", 26), len(header)), "frozenRowCount": 1}},
             "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
         {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
@@ -490,6 +489,7 @@ class FakeBackend:
                 tab = self._tab_by_id(body["properties"]["sheetId"])
                 gp = body["properties"].get("gridProperties", {})
                 tab["rows"] = gp.get("rowCount", tab["rows"])
+                del tab["grid"][tab["rows"]:]          # like Sheets: shrinking the grid deletes rows
                 tab["cols"] = gp.get("columnCount", tab["cols"])
                 if "frozenRowCount" in gp:
                     tab["frozen"] = gp["frozenRowCount"]
