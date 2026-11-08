@@ -592,6 +592,9 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
         store.save_company_owner(name, vals, ts)
     for pid in read_company_job_adds(existing):                # jobs you added from Company jobs
         store.add_forced(pid, ts)
+    for pid in load_picked_jobs():                             # jobs you asked to add directly
+        if store.conn.execute("SELECT 1 FROM postings WHERE posting_id=?", (pid,)).fetchone():
+            store.add_forced(pid, ts)
     store.commit()
     dec_requests, info = decision_tab_requests(meta, existing, store, criteria, ts)
     per_tab: dict[str, list[dict]] = {t: [] for t in ALL_TABS}
@@ -627,6 +630,15 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     info["requests"] = len(requests)
     info["unchanged_tabs"] = skipped
     return info
+
+
+def load_picked_jobs() -> list[str]:
+    """config/picked_jobs.yaml: posting IDs you asked to add straight to My applications."""
+    from ..config import CONFIG_DIR, load_yaml
+    path = CONFIG_DIR / "picked_jobs.yaml"
+    if not path.exists():
+        return []
+    return [str(j.get("id")) for j in ((load_yaml(path) or {}).get("jobs") or []) if j.get("id")]
 
 
 def load_target_companies() -> list[dict]:

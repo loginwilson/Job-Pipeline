@@ -1,0 +1,6 @@
+# Jobs you asked to add to your applications directly (same as choosing "Add" on the
+# Company jobs tab): they land in My applications with Decision = Apply and stay tracked,
+# whatever the rules say. Use the posting ID from the hidden Posting ID column, or ask Claude.
+jobs:
+  - id: greenhouse:foratravel:4249787008
+    note: Fora — The Wolf Graduate Program (2027); $90K + equity is under the pay minimum (you asked, Nov 8)
