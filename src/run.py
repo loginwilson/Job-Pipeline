@@ -629,6 +629,17 @@ def main(argv: list[str] | None = None) -> int:
                 store.source_complete("newgrad_lists", ts)
             except Exception as exc:  # never stops the run
                 log.error("New-grad list discovery error: %s", exc)
+        # pipeline 2: a target company whose careers page is a readable job board is watched
+        try:
+            from .output.sheet import load_target_companies
+            from .resolve.discover import board_from_url
+            for c in load_target_companies():
+                b = board_from_url(c.get("careers") or "")
+                if b and c.get("name"):
+                    store.add_discovered(c["name"], b[0], b[1], "target company list", "", ts)
+            store.commit()
+        except Exception as exc:  # never stops the run
+            log.error("target company boards: %s", exc)
         watch = {normalize(c.name) for c in companies}
         watched_boards = {(c.platform, c.slug.lower()) for c in companies}
         companies += [Company(name=r["company"], platform=r["platform"], slug=r["slug"])
