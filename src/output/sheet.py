@@ -367,8 +367,9 @@ def funnel_rows(store: Store) -> list[list]:
 
 def other_tab_rows(store: Store, criteria: Criteria, ts: str, unparsed: list[list] | None = None) -> dict:
     days = 7
+    cap = int(criteria.get("tracking", "dropped_tab_max_rows", default=10000) or 10000)
     dropped = [[r["company"], hyperlink(r["url"], r["title"]), r["gate"], r["matched"], _date(r["dropped_at"])]
-               for r in store.dropped_rows(days, ts)]
+               for r in store.dropped_rows(days, ts)[:cap]]      # newest first; the database keeps them all
     funnel = funnel_rows(store)
     health = []
     for r in store.board_health():

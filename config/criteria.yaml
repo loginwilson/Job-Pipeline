@@ -192,7 +192,7 @@ timing:
 # justified). Titles from fields the degree can't support are dropped.
 # TN is NOT a filter — it is shown in the Visa column for information.
 opt_relatedness:
-  unrelated_title_terms: [nurse, nursing, physician, doctor, surgeon, clinical, clinician, medical assistant, dental, dentist, hygienist, pharmacist, therapist, psychologist, social worker, phlebotomist, sonographer, radiology, radiologic, veterinarian, veterinary, teacher, tutor, professor, lecturer, attorney, lawyer, counsel, paralegal, legal assistant, electrician, plumber, mechanic, hvac, welder, carpenter, machinist, chemist, biologist, research scientist, lab scientist, pilot, clin, ther, cytologist, cytotechnologist, occupational therapy, RN, LPN, EMT, pharm tech, pharmacy tech, patient navigator]
+  unrelated_title_terms: [nurse, nursing, physician, doctor, surgeon, clinical, clinician, medical assistant, dental, dentist, hygienist, pharmacist, therapist, psychologist, social worker, phlebotomist, sonographer, radiology, radiologic, veterinarian, veterinary, teacher, tutor, professor, lecturer, attorney, lawyer, counsel, paralegal, legal assistant, electrician, plumber, mechanic, hvac, welder, carpenter, machinist, chemist, biologist, research scientist, lab scientist, pilot, clin, ther, cytologist, cytotechnologist, occupational therapy, RN, Rn, LPN, EMT, pharm tech, pharmacy tech, patient navigator]
 
 
 # 10 ── REAL, ACTIVE OPENING ─────────────────────────────────────
@@ -224,3 +224,4 @@ freshness:
 tracking:                   # how your Status column is followed up
   follow_up_after_days: 10  # flag "Follow up" when an application hasn't moved this long
   follow_up_statuses: [Applied, Networking]
+  dropped_tab_max_rows: 10000   # the Dropped tab shows the newest drops (all are kept in the database)
