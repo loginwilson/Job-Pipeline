@@ -55,7 +55,7 @@ def test_new_postings_land_in_review(criteria, board, evals):
     assert sheet.read([REVIEW])[REVIEW][0] == H
     assert all(r[DEC] == "Pending" and "New" in r[FLAGS] for r in tab(sheet, REVIEW))
     assert set(sheet.tabs) == set(ALL_TABS) and len(sheet.calls) == 1       # one write per run
-    assert sheet.tabs[REVIEW]["index"] == 0                                   # To review opens first
+    assert sheet.tabs["Home"]["index"] == 0 and sheet.tabs["Companies"]["index"] == 1   # your hub opens first
 
 
 def test_decisions_move_rows_and_survive(criteria, board, evals):
@@ -121,11 +121,11 @@ def test_hyperlinks_and_formatting(criteria, board, evals):
     assert all(f.startswith('=HYPERLINK("https://jobs.lever.co/') for f in sheet.formulas(REVIEW, ROLE))
     for name in (REVIEW, APPLICATIONS, PASSED):
         t = sheet.tabs[name]
-        assert t["frozen"] == 1 and len(t["cf"]) == 6
+        assert t["frozen"] == 1 and len(t["cf"]) == 7
         kinds = [next(iter(r)) for r in t["other"]]
         assert kinds.count("setDataValidation") == 3 and "setBasicFilter" in kinds
     run(store, sheet, board, evals, criteria, T2)
-    assert len(sheet.tabs[REVIEW]["cf"]) == 6                # rules not duplicated
+    assert len(sheet.tabs[REVIEW]["cf"]) == 7                # rules not duplicated
 
 
 def test_closed_postings_leave_review_but_stay_in_applications(criteria, board, payload):
@@ -377,4 +377,30 @@ def test_a_company_you_type_on_the_companies_tab_is_kept(criteria):
     sync_all(sheet, store, criteria, T2)
     rows = sheet.read(["Companies"])["Companies"]
     hit = [r for r in rows if len(r) > 2 and r[2] == "Palantir Technologies"]
-    assert hit and hit[0][1] == "Target" and hit[0][11] == "you added on the Sheet"
+    from src.output.sheet import COMPANY_HEADERS
+    assert hit and hit[0][1] == "Target" and hit[0][COMPANY_HEADERS.index("Source")] == "you added on the Sheet"
+
+
+def test_home_contacts_and_company_hub(criteria, board, evals):
+    """Contacts are yours (never rewritten); they roll up to Companies and Home's to-do list."""
+    from src.output.sheet import COMPANY_HEADERS, CONTACT_HEADERS
+    store, sheet = Store(":memory:"), FakeBackend()
+    run(store, sheet, board, evals, criteria, T1)
+    assert sheet.read(["Contacts"])["Contacts"][0] == CONTACT_HEADERS
+    crow = 1 + [r[2] for r in sheet.read(["Companies"])["Companies"][1:]].index("Fora")   # on your list
+    for h, v in (("Interest", "5"), ("Status", "Networking"), ("Next step", "Coffee chat ask"), ("Due", "2026-11-09")):
+        sheet.set_cell("Companies", crow, COMPANY_HEADERS.index(h), v)
+    for col, v in enumerate(["Fora", "Sasha", "Product Ops", "NYU alum", "", "Messaged", "2026-10-25",
+                             "Ask about Wolf program", "2026-11-08", ""]):
+        sheet.set_cell("Contacts", 1, col, v)
+    sync_all(sheet, store, criteria, T2)
+    contacts = sheet.read(["Contacts"])["Contacts"]
+    assert contacts[1][1] == "Sasha"                          # your row untouched
+    comp = {r[2]: r for r in sheet.read(["Companies"])["Companies"][1:] if len(r) > 2}
+    fora = comp["Fora"]
+    assert fora[COMPANY_HEADERS.index("Connections")].startswith("1: Sasha (Messaged)")
+    assert fora[COMPANY_HEADERS.index("Last contact")] == "2026-10-25"
+    home = [" | ".join(r) for r in sheet.read(["Home"])["Home"]]
+    text = "\n".join(home)
+    assert "Ask about Wolf program" in text and "Coffee chat ask" in text and "No reply since 2026-10-25" in text
+    assert "STANDOUT COMPANIES" in text and "Fora | Networking | 5" in text

@@ -115,7 +115,9 @@ class Store:
         self.conn.executescript(SCHEMA)
         for table, cols_needed in (("postings", {"dedupe_key": "TEXT", "merged_into": "TEXT"}),
                                    ("board_health", {"first_polled": "TEXT", "last_pass_at": "TEXT"}),
-                                   ("runs", {"new_passed": "INTEGER", "seconds": "REAL", "coverage": "TEXT"})):
+                                   ("runs", {"new_passed": "INTEGER", "seconds": "REAL", "coverage": "TEXT"}),
+                                   ("owner_state", {"next_step": "TEXT", "due": "TEXT"}),
+                                   ("company_owner", {"next_step": "TEXT", "due": "TEXT"})):
             have = {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}
             for col, typ in cols_needed.items():
                 if col not in have:      # databases created before these columns existed
@@ -385,9 +387,9 @@ class Store:
             applied_on = ts
         self.conn.execute(
             "INSERT OR REPLACE INTO owner_state(posting_id, decision, interest, status, notes, applied_on, "
-            "status_changed_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
+            "status_changed_at, updated_at, next_step, due) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (posting_id, vals.get("Decision", ""), vals.get("Interest", ""), status, vals.get("Notes", ""),
-             applied_on, changed_at, ts))
+             applied_on, changed_at, ts, vals.get("Next step", ""), vals.get("Due", "")))
 
     # --- pipeline 2: companies ------------------------------------------
     _FIT_ORDER = {"AI × hospitality": 0, "AI × real estate": 0, "hospitality": 1, "real estate": 1, "AI-forward": 2}
@@ -428,12 +430,13 @@ class Store:
         return self.conn.execute("SELECT * FROM target_companies").fetchall()
 
     def save_company_owner(self, company: str, vals: dict, ts: str) -> None:
-        self.conn.execute("INSERT INTO company_owner (company, interest, status, contact, notes, updated_at) "
-                          "VALUES (?,?,?,?,?,?) ON CONFLICT(company) DO UPDATE SET interest=excluded.interest, "
-                          "status=excluded.status, contact=excluded.contact, notes=excluded.notes, "
-                          "updated_at=excluded.updated_at",
+        self.conn.execute("INSERT INTO company_owner (company, interest, status, contact, notes, updated_at, "
+                          "next_step, due) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(company) DO UPDATE SET "
+                          "interest=excluded.interest, status=excluded.status, contact=excluded.contact, "
+                          "notes=excluded.notes, updated_at=excluded.updated_at, next_step=excluded.next_step, "
+                          "due=excluded.due",
                           (company, vals.get("Interest", ""), vals.get("Status", ""), vals.get("Contact", ""),
-                           vals.get("Notes", ""), ts))
+                           vals.get("Notes", ""), ts, vals.get("Next step", ""), vals.get("Due", "")))
 
     def company_owner(self) -> dict[str, dict]:
         return {r["company"]: dict(r) for r in self.conn.execute("SELECT * FROM company_owner")}

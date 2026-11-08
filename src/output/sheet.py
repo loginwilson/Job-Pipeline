@@ -41,10 +41,10 @@ log = logging.getLogger(__name__)
 
 REVIEW, APPLICATIONS, PASSED = "To review", "My applications", "Passed"
 DECISION_TABS = [REVIEW, APPLICATIONS, PASSED]
-HEADERS = ["Decision", "Interest", "Status", "Applied on", "Company", "Role", "Field", "Location",
+HEADERS = ["Decision", "Interest", "Status", "Applied on", "Next step", "Due", "Company", "Role", "Field", "Location",
            "Salary", "Extra comp", "Experience ask", "Visa", "Flags", "Posted", "First seen", "Source",
            "Notes", "Posting ID"]
-OWNER_HEADERS = ("Decision", "Interest", "Status", "Notes")
+OWNER_HEADERS = ("Decision", "Interest", "Status", "Notes", "Next step", "Due")
 ID_COL = HEADERS.index("Posting ID")
 DECISION_OPTIONS = ["Pending", "Apply", "Pass"]
 INTEREST_OPTIONS = ["1", "2", "3", "4", "5"]
@@ -93,6 +93,32 @@ def _cell(v: Any) -> dict:
     return {"userEnteredValue": {"stringValue": s}}
 
 
+def parse_day(v) -> "date | None":
+    """A date you typed (11/12, 11/12/2026, 2026-11-12, Nov 12...) -> date, else None."""
+    from datetime import date as _d
+    if v is None or str(v).strip() == "":
+        return None
+    sv = str(v).strip()
+    try:
+        from dateutil import parser as dparser
+        default = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+        dt = dparser.parse(sv, default=default, dayfirst=False, fuzzy=True)
+        return _d(dt.year, dt.month, dt.day)
+    except (ValueError, OverflowError, ImportError):
+        return None
+
+
+def due_cell(v) -> str:
+    """Keep a typed date a real date in Sheets (so it sorts and can turn yellow when due)."""
+    d = parse_day(v)
+    return f"=DATE({d.year},{d.month},{d.day})" if d else (v or "")
+
+
+def _due_formula(c: str) -> str:
+    # due today or overdue (works whether the cell holds a date or text)
+    return f'=AND(LEN(${c}2)>0,IFERROR(IF(ISNUMBER(${c}2),${c}2,DATEVALUE(${c}2)),99999)<=TODAY())'
+
+
 def _date(iso: str | None) -> str:
     return (iso or "")[:10]
 
@@ -139,7 +165,8 @@ def read_owner_values(existing: dict[str, list[list[str]]],
     def saved(pid: str) -> dict:
         k = known.get(pid) or {}
         return {"Decision": k.get("decision") or "", "Interest": k.get("interest") or "",
-                "Status": k.get("status") or "", "Notes": k.get("notes") or ""}
+                "Status": k.get("status") or "", "Notes": k.get("notes") or "",
+                "Next step": k.get("next_step") or "", "Due": k.get("due") or ""}
 
     def same(a: dict, b: dict) -> bool:
         return all((a.get(h) or "").strip() == (b.get(h) or "").strip() for h in OWNER_HEADERS
@@ -204,7 +231,7 @@ def _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses,
     """Sheet cells for one stored posting (None when it should not be shown)."""
     d = json.loads(r["display"] or "{}")
     st = owner_states.get(r["posting_id"], {})
-    touched = any(st.get(k) for k in ("interest", "status", "notes")) or \
+    touched = any(st.get(k) for k in ("interest", "status", "notes", "next_step", "due")) or \
         (st.get("decision") or "Pending") != "Pending"
     if r["closed_at"] and not touched:
         return None     # closed and never touched: no longer an option, so it leaves To review
@@ -235,6 +262,7 @@ def _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses,
         "Decision": st.get("decision") or "Pending", "Interest": st.get("interest") or "",
         "Status": st.get("status") or "", "Notes": st.get("notes") or "",
         "Applied on": _date(st.get("applied_on")),
+        "Next step": st.get("next_step") or "", "Due": due_cell(st.get("due")),
         "Company": r["company"], "Role": hyperlink(r["url"], r["title"]),
         "Field": d.get("field", ""), "Location": d.get("location", ""), "Salary": d.get("salary", ""),
         "Extra comp": d.get("extra_comp", ""), "Experience ask": d.get("experience", ""),
@@ -339,6 +367,7 @@ def _decision_tab(m: dict, grid: list[list], existing_len: int) -> list[dict]:
     rules = [
         (f'=REGEXMATCH(${flags}2,"Closed")', {"textFormat": {"foregroundColor": GRAY}}),
         (f'=REGEXMATCH(${flags}2,"Follow up")', {"backgroundColor": YELLOW}),
+        (_due_formula(_col_letter(col["Due"])), {"backgroundColor": YELLOW}),
         (f'=VALUE(0&${interest}2)=5', {"backgroundColor": GREEN_5}),
         (f'=VALUE(0&${interest}2)=4', {"backgroundColor": GREEN_4}),
         (f'=VALUE(0&${interest}2)=3', {"backgroundColor": GREEN_3}),
@@ -366,7 +395,10 @@ def _validation(sid: int, col: int, options: list[str], rows: int) -> dict:
 # --- the other tabs (rewritten in full each run) ---------------------------
 DROPPED, UNPARSED, FUNNEL, HEALTH = "Dropped", "Unparsed alerts", "Funnel", "Board health"
 COMPANIES, COMPANY_JOBS, PROGRAMS = "Companies", "Company jobs", "Grad programs"
-ALL_TABS = DECISION_TABS + [PROGRAMS, COMPANIES, COMPANY_JOBS, DROPPED, UNPARSED, FUNNEL, HEALTH]
+HOME, CONTACTS_TAB = "Home", "Contacts"
+# your hub first, then the inboxes you browse, then the back office
+ALL_TABS = [HOME, COMPANIES, CONTACTS_TAB, APPLICATIONS, REVIEW, PROGRAMS, COMPANY_JOBS, PASSED,
+            DROPPED, UNPARSED, FUNNEL, HEALTH]
 
 # --- grad programs: their own view with lighter rules ---------------------------
 PROGRAM_RX = re.compile(
@@ -513,13 +545,76 @@ def _company_jobs_tab(meta: dict, rows: list[list], existing_len: int) -> list[d
         _validation(sid, 0, ["Add"], need),
     ]
 
-# --- pipeline 2: the Companies tab -------------------------------------------
-COMPANY_HEADERS = ["Interest", "Status", "Company", "Fit", "What they do", "Open roles", "Roles that fit you",
-                   "A role that fits", "Careers page", "Contact", "Notes", "Source", "First seen"]
-COMPANY_OWNER = ("Interest", "Status", "Contact", "Notes")
-COMPANY_STATUS = ["Researching", "Target", "Reached out", "Talking", "Applied", "Watching", "Not for me"]
-TARGET_STATUSES = {"Target", "Reached out", "Talking", "Applied"}
+# --- pipeline 2: the Companies tab (your hub) ---------------------------------
+COMPANY_HEADERS = ["Interest", "Status", "Company", "Fit", "Next step", "Due", "Connections", "Last contact",
+                   "Your picks", "Roles that fit you", "Grad programs", "A role that fits", "Open roles",
+                   "What they do", "Careers page", "Contact", "Notes", "Source", "First seen"]
+COMPANY_OWNER = ("Interest", "Status", "Next step", "Due", "Contact", "Notes")
+# your relationship with the company, from first look to offer
+COMPANY_STATUS = ["Researching", "Target", "Networking", "Coffee chat", "Referred", "Applied", "Interviewing",
+                  "Offer", "Watching", "Not for me"]
+_COMPANY_STAGE = {s: i for i, s in enumerate(["Offer", "Interviewing", "Applied", "Referred", "Coffee chat",
+                                               "Networking", "Talking", "Reached out", "Target"])}
+TARGET_STATUSES = {"Target", "Networking", "Coffee chat", "Referred", "Applied", "Interviewing", "Offer",
+                   "Reached out", "Talking"}       # last two: earlier names, still honoured
 _FIT_RANK = {"AI × hospitality": 0, "AI × real estate": 0, "hospitality": 1, "real estate": 1, "AI-forward": 2}
+
+# --- Contacts tab: yours entirely (the pipeline reads it, never rewrites your rows) ---
+CONTACTS = "Contacts"
+CONTACT_HEADERS = ["Company", "Name", "Role / team", "How you're connected", "LinkedIn", "Status",
+                   "Last contact", "Next step", "Due", "Notes"]
+CONTACT_STATUS = ["To reach out", "Messaged", "Replied", "Coffee chat scheduled", "Coffee chat done",
+                  "Referred", "Thank-you sent", "Keep in touch", "No reply"]
+CONTACT_NUDGE_DAYS = 7      # Messaged with no reply for this long -> follow up
+
+
+def read_contacts(existing: dict) -> list[dict]:
+    rows = existing.get(CONTACTS) or []
+    if not rows:
+        return []
+    idx = {h: i for i, h in enumerate(rows[0])}
+    out = []
+    for raw in rows[1:]:
+        raw = _pad(raw, len(rows[0]))
+        c = {h: (raw[idx[h]] or "").strip() for h in CONTACT_HEADERS if h in idx}
+        if c.get("Company") or c.get("Name"):
+            out.append(c)
+    return out
+
+
+def _contacts_tab(meta: dict, existing_len: int) -> list[dict]:
+    """Header, dropdown and colours only - your rows are never touched."""
+    m = meta[CONTACTS]
+    sid = m["id"]
+    col = {h: i for i, h in enumerate(CONTACT_HEADERS)}
+    reqs = [
+        {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
+            "rowCount": max(m.get("rows", 1000), 500), "columnCount": max(m.get("cols", 26), len(CONTACT_HEADERS)),
+            "frozenRowCount": 1}},
+            "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
+        {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
+                         "rows": [{"values": [_cell(h) for h in CONTACT_HEADERS]}], "fields": "userEnteredValue"}},
+        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
+                        "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+                        "fields": "userEnteredFormat.textFormat.bold"}},
+        _validation(sid, col["Status"], CONTACT_STATUS, max(m.get("rows", 1000), 500)),
+    ]
+    status, last, due = (_col_letter(col[h]) for h in ("Status", "Last contact", "Due"))
+    rules = [
+        (_due_formula(due), {"backgroundColor": YELLOW}),
+        (f'=AND(${status}2="Messaged",LEN(${last}2)>0,TODAY()-IFERROR(IF(ISNUMBER(${last}2),${last}2,'
+         f'DATEVALUE(${last}2)),TODAY())>={CONTACT_NUDGE_DAYS})', {"backgroundColor": YELLOW}),
+        (f'=OR(${status}2="Coffee chat done",${status}2="Referred")', {"backgroundColor": GREEN_4}),
+    ]
+    if m.get("cf_formulas") != [f for f, _ in rules]:
+        full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(CONTACT_HEADERS)}
+        for _ in range(int(m.get("cf_count", 0))):
+            reqs.append({"deleteConditionalFormatRule": {"sheetId": sid, "index": 0}})
+        for i, (formula, fmt) in enumerate(rules):
+            reqs.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [full], "booleanRule": {
+                "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": formula}]},
+                "format": fmt}}}})
+    return reqs
 
 
 def read_company_owner(existing: dict) -> dict[str, dict]:
@@ -538,26 +633,166 @@ def read_company_owner(existing: dict) -> dict[str, dict]:
     return out
 
 
-def company_rows(store: Store, seeds: list[dict], ts: str) -> list[list]:
+def home_grid(store: Store, contacts: list[dict], crows: list[list], ts: str) -> tuple[list, list[list]]:
+    """One screen: what to do, where you stand, the companies that stand out, what's new."""
+    today = parse_when(ts).date()
+    week = today + timedelta(days=7)
+    W = 6
+    rows: list[list] = []
+    def section(title, header=None):
+        rows.append([""] * W)
+        rows.append([title] + [""] * (W - 1))
+        if header:
+            rows.append(header + [""] * (W - len(header)))
+
+    # --- to do ---
+    todo = []           # (sort day, due text, what, where, from)
+    for r in store.conn.execute(
+            "SELECT o.next_step, o.due, o.status, o.status_changed_at, p.company, p.title FROM owner_state o "
+            "JOIN postings p USING(posting_id)"):
+        d = parse_day(r["due"])
+        if r["next_step"] or d:
+            todo.append((d or week, d, r["next_step"] or "(next step)", f"{r['company']} - {r['title']}", "My applications"))
+        if (r["status"] or "") == "Applied" and r["status_changed_at"]:
+            changed = parse_when(r["status_changed_at"]).date()
+            if (today - changed).days >= 10:
+                todo.append((today, None, f"Follow up on your application (applied {changed.isoformat()})",
+                             f"{r['company']} - {r['title']}", "My applications"))
+    for name, o in store.company_owner().items():
+        d = parse_day(o.get("due"))
+        if o.get("next_step") or d:
+            todo.append((d or week, d, o.get("next_step") or "(next step)", name, "Companies"))
+    for c in contacts:
+        d = parse_day(c.get("Due"))
+        who = f"{c.get('Name') or '?'} @ {c.get('Company') or '?'}"
+        if c.get("Next step") or d:
+            todo.append((d or week, d, c.get("Next step") or "(next step)", who, "Contacts"))
+        last = parse_day(c.get("Last contact"))
+        if c.get("Status") == "Messaged" and last and (today - last).days >= CONTACT_NUDGE_DAYS:
+            todo.append((today, None, f"No reply since {last.isoformat()} - nudge or try someone else", who, "Contacts"))
+    todo = sorted([t for t in todo if t[0] <= week], key=lambda t: (t[0], t[2]))[:30]
+    section("TO DO  (overdue and due this week first)", ["Due", "What", "Where", "From"])
+    for day, d, what, where, frm in todo:
+        flag = "OVERDUE " if d and d < today else ("TODAY " if d == today else "")
+        rows.append([flag + (d.isoformat() if d else "now"), what, where, frm, "", ""])
+    if not todo:
+        rows.append(["", "Nothing due. Add a Next step + Due on a job, company or contact to see it here.", "", "", "", ""])
+
+    # --- where you stand ---
+    jobs = {"Shortlisted": 0, "Preparing": 0, "Applied": 0, "Interviewing": 0, "Offer": 0, "Closed": 0}
+    for r in store.conn.execute("SELECT decision, interest, status FROM owner_state"):
+        st, dec = (r["status"] or ""), (r["decision"] or "")
+        if dec.lower() in PASS_WORDS:
+            continue
+        if st in ("Offer",):
+            jobs["Offer"] += 1
+        elif st == "Interviewing":
+            jobs["Interviewing"] += 1
+        elif st == "Applied":
+            jobs["Applied"] += 1
+        elif st in ENDED:
+            jobs["Closed"] += 1
+        elif st in ("Drafting", "Networking"):
+            jobs["Preparing"] += 1
+        elif dec.lower() in ("apply", "all-in") or r["interest"]:
+            jobs["Shortlisted"] += 1
+    comp = {}
+    for o in store.company_owner().values():
+        if o.get("status"):
+            comp[o["status"]] = comp.get(o["status"], 0) + 1
+    ppl = {}
+    for c in contacts:
+        k = c.get("Status") or "To reach out"
+        ppl[k] = ppl.get(k, 0) + 1
+    section("WHERE YOU STAND")
+    rows.append(["Jobs"] + [" · ".join(f"{k} {v}" for k, v in jobs.items())] + [""] * (W - 2))
+    rows.append(["Companies"] + [" · ".join(f"{k} {comp[k]}" for k in COMPANY_STATUS if comp.get(k)) or "none marked yet"]
+                + [""] * (W - 2))
+    rows.append(["Contacts"] + [" · ".join(f"{k} {ppl[k]}" for k in CONTACT_STATUS if ppl.get(k))
+                                or "none yet - add people on the Contacts tab"] + [""] * (W - 2))
+
+    # --- standout companies ---
+    ci = {h: i for i, h in enumerate(COMPANY_HEADERS)}
+    standout = [r for r in crows if r[ci["Status"]] in TARGET_STATUSES or _interest(r[ci["Interest"]]) >= 3][:15]
+    section("STANDOUT COMPANIES", ["Company", "Status", "Interest", "Next step", "Connections",
+                                   "Your picks · roles that fit · programs"])
+    for r in standout:
+        rows.append([r[ci["Company"]], r[ci["Status"]], r[ci["Interest"]], r[ci["Next step"]], r[ci["Connections"]],
+                     f"{r[ci['Your picks']] or 0} · {r[ci['Roles that fit you']] or 0} · {r[ci['Grad programs']] or 0}"])
+    if not standout:
+        rows.append(["", "Mark companies Target (or Interest 3+) on the Companies tab to see them here.", "", "", "", ""])
+
+    # --- new since yesterday ---
+    since = (parse_when(ts) - timedelta(hours=36)).isoformat(timespec="seconds")
+    targets = {c.strip().lower() for c, o in store.company_owner().items()
+               if (o.get("status") or "") in TARGET_STATUSES or _interest(o.get("interest") or "") >= 4}
+    new = []
+    for r in store.conn.execute(
+            "SELECT p.company, p.title, p.url, s.passed, s.flags FROM postings p JOIN scores s USING(posting_id) "
+            "WHERE p.first_seen >= ? AND p.closed_at IS NULL AND p.merged_into IS NULL", (since,)):
+        flags = ", ".join(f for f in json.loads(r["flags"] or "[]") if f.startswith(("Your edge", "Preferred", "Stretch")))
+        kind = ("Target company" if (r["company"] or "").strip().lower() in targets else
+                "Grad program" if is_program(r["title"]) and r["passed"] else
+                "Your edge" if r["passed"] and "Your edge" in flags else None)
+        if kind:
+            new.append((kind, r["company"], hyperlink(r["url"], r["title"]), flags))
+    order = {"Target company": 0, "Your edge": 1, "Grad program": 2}
+    section("NEW SINCE YESTERDAY", ["Kind", "Company", "Role", "Flags"])
+    for k, c, role, f in sorted(new, key=lambda x: (order[x[0]], x[1]))[:25]:
+        rows.append([k, c, role, f, "", ""])
+    if not new:
+        rows.append(["", "Nothing new at your targets, edge or programs in the last day.", "", "", "", ""])
+
+    header = [f"Job hunt - home ({today.isoformat()})", "", "", "", "", ""]
+    return header, rows
+
+
+def _company_rollups(store: Store, contacts: list[dict]) -> dict[str, dict]:
+    """Per company (lower-cased): your connections, last contact, picks and grad programs."""
+    out: dict[str, dict] = {}
+    def get(name):
+        return out.setdefault((name or "").strip().lower(), {"people": [], "last": None, "picks": 0, "programs": 0})
+    for c in contacts:
+        g = get(c.get("Company"))
+        g["people"].append(f"{c.get('Name') or '?'} ({c.get('Status') or 'to reach out'})")
+        d = parse_day(c.get("Last contact"))
+        if d and (g["last"] is None or d > g["last"]):
+            g["last"] = d
+    for r in store.conn.execute(
+            "SELECT p.company FROM postings p JOIN owner_state o USING(posting_id) WHERE "
+            "COALESCE(o.decision,'') NOT IN ('', 'Pending', 'Pass') OR COALESCE(o.interest,'')<>''"):
+        get(r["company"])["picks"] += 1
+    for row in program_rows(store):
+        get(row[1])["programs"] += 1
+    return out
+
+
+def company_rows(store: Store, seeds: list[dict], ts: str, contacts: list[dict] | None = None) -> list[list]:
     store.clear_auto_companies_v1()
     for c in seeds:                                   # your list / researched companies
         store.note_target_company(c.get("name", ""), c.get("fit", ""), c.get("about", ""),
                                   c.get("source", "your list"), ts, c.get("careers"))
     owner = store.company_owner()
     posts = store.company_postings()
+    roll = _company_rollups(store, contacts or [])
     out = []
     for r in store.target_companies():
         o = owner.get(r["company"]) or {}
-        p = posts.get(r["company"].strip().lower()) or {"open": 0, "fitting": 0, "first": None}
+        k = r["company"].strip().lower()
+        p = posts.get(k) or {"open": 0, "fitting": 0, "first": None}
+        g = roll.get(k) or {"people": [], "last": None, "picks": 0, "programs": 0}
         first = hyperlink(p["first"][0], p["first"][1]) if p["first"] else ""
         careers = hyperlink(r["careers_url"], "careers") if r["careers_url"] else ""
-        out.append([o.get("interest") or "", o.get("status") or "", r["company"], r["fit"] or "", r["about"] or "",
-                    p["open"] or "", p["fitting"] or "", first, careers, o.get("contact") or "",
+        people = f"{len(g['people'])}: " + ", ".join(g["people"][:3]) if g["people"] else ""
+        out.append([o.get("interest") or "", o.get("status") or "", r["company"], r["fit"] or "",
+                    o.get("next_step") or "", due_cell(o.get("due")), people,
+                    g["last"].isoformat() if g["last"] else "", g["picks"] or "", p["fitting"] or "",
+                    g["programs"] or "", first, p["open"] or "", r["about"] or "", careers, o.get("contact") or "",
                     o.get("notes") or "", r["source"] or "", _date(r["first_seen"])])
     def key(row):
         status = row[1]
-        return (status == "Not for me", status not in TARGET_STATUSES, -_interest(row[0]),
-                _FIT_RANK.get(row[3], 9), -(row[6] or 0), row[2].lower())
+        return (status == "Not for me", _COMPANY_STAGE.get(status, 99), -_interest(row[0]),
+                -(row[8] or 0), _FIT_RANK.get(row[3], 9), -(row[9] or 0), row[2].lower())
     return sorted(out, key=key)
 
 
@@ -580,7 +815,26 @@ def _company_tab(meta: dict, rows: list[list], existing_len: int) -> list[dict]:
                         "fields": "userEnteredFormat.textFormat.bold"}},
         _validation(sid, col["Interest"], INTEREST_OPTIONS, need),
         _validation(sid, col["Status"], COMPANY_STATUS, need),
+    ] + _company_colours(m, sid, col)
+
+
+def _company_colours(m: dict, sid: int, col: dict) -> list[dict]:
+    st, it, due = _col_letter(col["Status"]), _col_letter(col["Interest"]), _col_letter(col["Due"])
+    rules = [
+        (f'=${st}2="Not for me"', {"textFormat": {"foregroundColor": GRAY}}),
+        (_due_formula(due), {"backgroundColor": YELLOW}),
+        (f'=OR(${st}2="Offer",${st}2="Interviewing",${st}2="Referred",VALUE(0&${it}2)=5)', {"backgroundColor": GREEN_5}),
+        (f'=OR(${st}2="Coffee chat",${st}2="Applied",VALUE(0&${it}2)=4)', {"backgroundColor": GREEN_4}),
+        (f'=OR(${st}2="Networking",${st}2="Target",VALUE(0&${it}2)=3)', {"backgroundColor": GREEN_3}),
     ]
+    if m.get("cf_formulas") == [f for f, _ in rules]:
+        return []
+    full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(COMPANY_HEADERS)}
+    reqs = [{"deleteConditionalFormatRule": {"sheetId": sid, "index": 0}} for _ in range(int(m.get("cf_count", 0)))]
+    for i, (formula, fmt) in enumerate(rules):
+        reqs.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [full], "booleanRule": {
+            "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": formula}]}, "format": fmt}}}})
+    return reqs
 
 
 def _simple_tab(meta: dict, tab: str, header: list[str], rows: list[list], existing_len: int) -> list[dict]:
@@ -688,7 +942,10 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
         per_tab[_tab_of(r, meta)].append(r)
     for tab, (header, rows) in other_tab_rows(store, criteria, ts, unparsed).items():
         per_tab[tab] = _simple_tab(meta, tab, header, rows, len(existing.get(tab, [])))
-    crows = company_rows(store, load_target_companies(), ts)
+    contacts = read_contacts(existing)
+    crows = company_rows(store, load_target_companies(), ts, contacts)
+    per_tab[CONTACTS] = _contacts_tab(meta, len(existing.get(CONTACTS, [])))
+    per_tab[HOME] = _simple_tab(meta, HOME, *home_grid(store, contacts, crows, ts), 0)
     per_tab[COMPANIES] = _company_tab(meta, crows, len(existing.get(COMPANIES, [])))
     per_tab[COMPANY_JOBS] = _company_jobs_tab(meta, company_job_rows(store), len(existing.get(COMPANY_JOBS, [])))
     prows = program_rows(store)
