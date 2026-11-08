@@ -280,10 +280,45 @@ def run_jsearch(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> l
     return evals
 
 
+def _refetch_old_search_copies(store: Store, ts: str) -> None:
+    """Results stored before full copies were kept: fetch them once (20 per request, from the
+    daily JSearch budget) so they can be re-checked too."""
+    from .sources.jsearch import job_details
+    if not os.environ.get("JSEARCH_API_KEY"):
+        return
+    rows = store.conn.execute(
+        "SELECT p.posting_id, p.snapshot FROM postings p JOIN scores s USING(posting_id) "
+        "WHERE p.posting_id LIKE 'jsearch:%' AND p.closed_at IS NULL AND p.merged_into IS NULL AND s.passed = 1 "
+        "AND p.snapshot IS NOT NULL").fetchall()
+    old = {r["posting_id"].split(":", 2)[2]: r for r in rows if "job" not in (json.loads(r["snapshot"]) or {})}
+    per_day = int((load_sources_config().get("jsearch") or {}).get("requests_per_day", 0))
+    if not old or store.budget_left("jsearch", per_day, ts) <= 0:
+        return
+    ids = list(old)[:20]
+    try:
+        data = job_details(ids)
+    except SourceError as exc:
+        log.warning("JSearch re-fetch: %s", exc)
+        return
+    store.spend("jsearch", 1, ts)
+    got = {str(j.get("job_id")): j for j in data.get("data") or []}
+    for jid in ids:
+        r = old[jid]
+        snap = json.loads(r["snapshot"]) or {}
+        if jid in got:
+            snap["job"] = got[jid]
+            store.conn.execute("UPDATE postings SET snapshot=? WHERE posting_id=?", (json.dumps(snap), r["posting_id"]))
+        else:       # Google no longer lists it: treat as closed
+            store.conn.execute("UPDATE postings SET closed_at=? WHERE posting_id=?", (ts, r["posting_id"]))
+    store.commit()
+    log.info("JSearch re-fetch: %d stored results refreshed, %d no longer listed", len(got), len(ids) - len(got))
+
+
 def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> int:
     """Open JSearch results are only fetched once; re-apply today's rules to them every run
     (from the stored copy) so a rule fix also removes search results that no longer qualify."""
     src, changed = JSearchSource(), 0
+    _refetch_old_search_copies(store, ts)
     rows = store.conn.execute(
         "SELECT p.posting_id, p.company, p.snapshot FROM postings p JOIN scores s USING(posting_id) "
         "WHERE p.posting_id LIKE 'jsearch:%' AND p.closed_at IS NULL AND p.merged_into IS NULL "
@@ -511,8 +546,8 @@ def main(argv: list[str] | None = None) -> int:
     if store is not None and not single:
         cfg = load_sources_config()
         muse_evals, muse_complete = run_muse(store, cfg.get("muse") or {}, criteria, gates, matcher, ts)
+        recheck_search_postings(store, criteria, gates, matcher, ts)     # before today's searches use the budget
         jsearch_evals = run_jsearch(store, cfg.get("jsearch") or {}, criteria, gates, matcher, ts)
-        recheck_search_postings(store, criteria, gates, matcher, ts)
         known = {normalize(c.name) for c in companies} | {normalize(r["company"]) for r in store.discovered_boards()}
         if muse_evals or jsearch_evals:
             try:

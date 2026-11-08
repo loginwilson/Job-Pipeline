@@ -55,6 +55,25 @@ def search(query: str, country: str, date_posted: str, session: requests.Session
     raise SourceError("unreachable")
 
 
+DETAILS_API = "https://api.openwebninja.com/jsearch/job-details"
+
+
+def job_details(job_ids: list[str], country: str = "us", session: requests.Session | None = None,
+                key: str | None = None) -> dict:
+    """Full postings for up to 20 job ids in one request (same shape as a search response)."""
+    key = key or os.environ.get("JSEARCH_API_KEY")
+    if not key:
+        raise SourceError("JSEARCH_API_KEY is not set")
+    try:
+        r = (session or requests.Session()).get(
+            DETAILS_API, params={"job_id": ",".join(job_ids[:20]), "country": country},
+            headers={"x-api-key": key, "User-Agent": USER_AGENT}, timeout=TIMEOUT_S * 2)
+        r.raise_for_status()
+        return r.json()
+    except (requests.RequestException, ValueError) as exc:
+        raise SourceError(f"JSearch job-details failed: {exc}") from exc
+
+
 class JSearchSource(Source):
     platform = "jsearch"
 
