@@ -163,6 +163,24 @@ def display_fields(ev: Evaluation) -> dict:
             "source": SOURCE_NAMES.get(p.raw.platform, p.raw.platform) if p.raw else ""}
 
 
+def _note_company_fit(store: Store, ev: Evaluation, company, ts: str) -> None:
+    """Pipeline 2 feed: a company whose posting shows hospitality / real estate (with or
+    without AI) is suggested on the Companies tab - whether or not this job fits you."""
+    fit = None
+    for f in ev.flags:
+        if f.startswith("Your edge: "):
+            fit = f.split(": ", 1)[1]
+            break
+        if f.startswith("Preferred field: "):
+            fit = fit or f.split(": ", 1)[1]
+    if not fit or not ev.posting.description_lines:
+        return
+    about = next((ln for ln in ev.posting.description_lines if not ln.startswith("## ") and len(ln) > 40), "")
+    name = ev.posting.company or company.name
+    careers = None if company.platform in SEARCH_PLATFORMS else ev.posting.url
+    store.note_target_company(name, fit, about[:220], "found by the job pipeline", ts, careers)
+
+
 def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, criteria=None,
                       prefix: str | None = None, board_keys: set[str] | None = None,
                       board_companies: set[str] | None = None, close: bool = True) -> dict:
@@ -180,6 +198,7 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
     batch_keys: dict[str, str] = {}
     for ev in evals:
         p = ev.posting
+        _note_company_fit(store, ev, company, ts)
         key = dedupe_key(ev)
         if not is_search and ev.passed:
             if key in batch_keys:

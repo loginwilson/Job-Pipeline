@@ -82,6 +82,15 @@ CREATE TABLE IF NOT EXISTS board_health (
     first_polled TEXT, last_pass_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS target_companies (  -- pipeline 2: companies that fit you
+    company TEXT PRIMARY KEY, fit TEXT, about TEXT, source TEXT, careers_url TEXT,
+    first_seen TEXT, last_seen TEXT
+);
+
+CREATE TABLE IF NOT EXISTS company_owner (     -- your Companies-tab columns, mirrored
+    company TEXT PRIMARY KEY, interest TEXT, status TEXT, contact TEXT, notes TEXT, updated_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS sheet_tabs (      -- what was last written to each Sheet tab (skip unchanged)
     tab TEXT PRIMARY KEY, content_hash TEXT, written_at TEXT
 );
@@ -341,6 +350,52 @@ class Store:
             "status_changed_at, updated_at) VALUES (?,?,?,?,?,?,?,?)",
             (posting_id, vals.get("Decision", ""), vals.get("Interest", ""), status, vals.get("Notes", ""),
              applied_on, changed_at, ts))
+
+    # --- pipeline 2: companies ------------------------------------------
+    _FIT_ORDER = {"AI × hospitality": 0, "AI × real estate": 0, "hospitality": 1, "real estate": 1, "AI-forward": 2}
+
+    def note_target_company(self, company: str, fit: str, about: str, source: str, ts: str,
+                            careers_url: str | None = None) -> None:
+        """Add or refresh a company that fits you; a better fit replaces a weaker one."""
+        if not company:
+            return
+        row = self.conn.execute("SELECT fit FROM target_companies WHERE company=?", (company,)).fetchone()
+        if row is None:
+            self.conn.execute("INSERT INTO target_companies (company, fit, about, source, careers_url, first_seen, "
+                              "last_seen) VALUES (?,?,?,?,?,?,?)", (company, fit, about, source, careers_url, ts, ts))
+            return
+        better = self._FIT_ORDER.get(fit, 9) < self._FIT_ORDER.get(row["fit"], 9)
+        self.conn.execute("UPDATE target_companies SET last_seen=?, fit=CASE WHEN ? THEN ? ELSE fit END, "
+                          "about=COALESCE(NULLIF(about, ''), ?), careers_url=COALESCE(careers_url, ?) WHERE company=?",
+                          (ts, better, fit, about, careers_url, company))
+
+    def target_companies(self) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM target_companies").fetchall()
+
+    def save_company_owner(self, company: str, vals: dict, ts: str) -> None:
+        self.conn.execute("INSERT INTO company_owner (company, interest, status, contact, notes, updated_at) "
+                          "VALUES (?,?,?,?,?,?) ON CONFLICT(company) DO UPDATE SET interest=excluded.interest, "
+                          "status=excluded.status, contact=excluded.contact, notes=excluded.notes, "
+                          "updated_at=excluded.updated_at",
+                          (company, vals.get("Interest", ""), vals.get("Status", ""), vals.get("Contact", ""),
+                           vals.get("Notes", ""), ts))
+
+    def company_owner(self) -> dict[str, dict]:
+        return {r["company"]: dict(r) for r in self.conn.execute("SELECT * FROM company_owner")}
+
+    def company_postings(self) -> dict[str, dict]:
+        """Open postings per company (normalised name): total, fitting, first fitting link."""
+        out: dict[str, dict] = {}
+        for r in self.conn.execute(
+                "SELECT p.company, p.title, p.url, s.passed FROM postings p LEFT JOIN scores s USING(posting_id) "
+                "WHERE p.closed_at IS NULL AND p.merged_into IS NULL"):
+            k = (r["company"] or "").strip().lower()
+            d = out.setdefault(k, {"open": 0, "fitting": 0, "first": None})
+            d["open"] += 1
+            if r["passed"]:
+                d["fitting"] += 1
+                d["first"] = d["first"] or (r["url"], r["title"])
+        return out
 
     def owner_states(self) -> dict[str, dict]:
         return {r["posting_id"]: dict(r) for r in self.conn.execute("SELECT * FROM owner_state")}

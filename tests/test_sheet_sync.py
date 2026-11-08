@@ -241,3 +241,24 @@ def test_preference_rank_orders_your_fields_first():
     from src.output.sheet import _preference_rank
     flags = ["New", "AI-forward company", "Preferred field: real estate", "Your edge: AI × hospitality, New"]
     assert sorted(flags, key=_preference_rank) == [flags[3], flags[2], flags[1], flags[0]]
+
+
+def test_companies_tab_target_and_not_for_me(criteria, board, evals):
+    """Pipeline 2: your Companies-tab Status steers To review."""
+    store, sheet = Store(":memory:"), FakeBackend()
+    run(store, sheet, board, evals, criteria, T1)
+    company = tab(sheet, REVIEW)[0][H.index("Company")]
+    store.note_target_company(company, "AI × real estate", "About", "test", T1)
+    store.commit()
+    sync_all(sheet, store, criteria, T1)
+    rows = sheet.read(["Companies"])["Companies"]
+    assert rows[0][:3] == ["Interest", "Status", "Company"] and any(r[2] == company for r in rows[1:])
+    i = 1 + [r[2] for r in rows[1:]].index(company)
+    sheet.set_cell("Companies", i, 1, "Target")
+    sync_all(sheet, store, criteria, T2)
+    assert all("Target company" in r[H.index("Flags")] for r in tab(sheet, REVIEW) if r[H.index("Company")] == company)
+    rows = sheet.read(["Companies"])["Companies"]
+    i = 1 + [r[2] for r in rows[1:]].index(company)
+    sheet.set_cell("Companies", i, 1, "Not for me")
+    sync_all(sheet, store, criteria, T2)
+    assert not any(r[H.index("Company")] == company for r in tab(sheet, REVIEW))

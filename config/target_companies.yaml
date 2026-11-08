@@ -1,0 +1,18 @@
+# Pipeline 2 — companies you want to work for, whether or not they have a posting that fits.
+# They appear on the Companies tab with the ones the job pipeline finds by itself
+# (any company whose postings show hospitality / real estate, with or without AI).
+# On the Companies tab:
+#   Status "Target" / "Reached out" / "Talking" / "Applied" (or Interest 4–5) puts the
+#   company's fitting jobs at the top of To review, flagged "Target company".
+#   Status "Not for me" hides its jobs from To review.
+# fit: "AI × hospitality", "AI × real estate", "hospitality", "real estate" or "AI-forward".
+companies:
+  - name: The Voleon Group
+    fit: AI-forward
+    about: Machine-learning quant investment firm (Berkeley / NYC); early-career Operations Associate rotational program.
+    careers: https://jobs.ashbyhq.com/voleon
+    source: you (Nov 8)
+  - name: Jerry
+    fit: AI-forward
+    about: AI-powered app to manage car and home ownership (insurance, repairs, buying/selling); Business Operations & Analytics team.
+    source: you applied (Nov 8)

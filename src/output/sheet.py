@@ -155,6 +155,7 @@ def build_rows(store: Store, criteria: Criteria, ts: str, owner_states: dict[str
     follow_days = int(track.get("follow_up_after_days", 10))
     follow_statuses = set(track.get("follow_up_statuses", ["Applied", "Networking"]))
     now = parse_when(ts)
+    companies = {k.strip().lower(): v for k, v in store.company_owner().items()}
     rows = []
     for r in store.pipeline_rows():
         try:
@@ -163,8 +164,16 @@ def build_rows(store: Store, criteria: Criteria, ts: str, owner_states: dict[str
         except Exception as exc:     # one malformed posting never blocks the Sheet update
             log.warning("Sheet: skipped %s (%s)", r["posting_id"], exc)
             continue
-        if row is not None:
-            rows.append(row)
+        if row is None:
+            continue
+        co = companies.get((r["company"] or "").strip().lower()) or {}
+        untouched = row["cells"]["Decision"] == "Pending" and not row["cells"]["Interest"] and not row["cells"]["Status"]
+        if co.get("status") == "Not for me" and untouched:
+            continue                 # you ruled the company out on the Companies tab
+        if co.get("status") in TARGET_STATUSES or _interest(co.get("interest") or "") >= 4:
+            flags = row["cells"]["Flags"]
+            row["cells"]["Flags"] = "Target company" + (", " + flags if flags else "")
+        rows.append(row)
     return rows
 
 
@@ -215,14 +224,16 @@ def _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses,
 
 
 def _preference_rank(flags: str) -> int:
-    """Your ranking (Nov 8): AI x hospitality / real estate, then hospitality / real estate,
-    then an AI-forward company, then the rest."""
+    """Your ranking (Nov 8): target companies, AI x hospitality / real estate, hospitality /
+    real estate, an AI-forward company, the rest, then stretches."""
+    if "Target company" in flags:
+        return 0                   # a company you picked on the Companies tab
     if "Stretch" in flags:
-        return 4                   # reaches last, after every realistic fit
-    for rank, mark in enumerate(("Your edge", "Preferred field", "AI-forward company")):
+        return 5                   # reaches last, after every realistic fit
+    for rank, mark in enumerate(("Your edge", "Preferred field", "AI-forward company"), start=1):
         if mark in flags:
             return rank
-    return 3
+    return 4
 
 
 def _sort_key(tab: str, row: dict):
@@ -317,7 +328,76 @@ def _validation(sid: int, col: int, options: list[str], rows: int) -> dict:
 
 # --- the other tabs (rewritten in full each run) ---------------------------
 DROPPED, UNPARSED, FUNNEL, HEALTH = "Dropped", "Unparsed alerts", "Funnel", "Board health"
-ALL_TABS = DECISION_TABS + [DROPPED, UNPARSED, FUNNEL, HEALTH]
+COMPANIES = "Companies"
+ALL_TABS = DECISION_TABS + [COMPANIES, DROPPED, UNPARSED, FUNNEL, HEALTH]
+
+# --- pipeline 2: the Companies tab -------------------------------------------
+COMPANY_HEADERS = ["Interest", "Status", "Company", "Fit", "What they do", "Open roles", "Roles that fit you",
+                   "A role that fits", "Careers page", "Contact", "Notes", "Source", "First seen"]
+COMPANY_OWNER = ("Interest", "Status", "Contact", "Notes")
+COMPANY_STATUS = ["Researching", "Target", "Reached out", "Talking", "Applied", "Watching", "Not for me"]
+TARGET_STATUSES = {"Target", "Reached out", "Talking", "Applied"}
+_FIT_RANK = {"AI × hospitality": 0, "AI × real estate": 0, "hospitality": 1, "real estate": 1, "AI-forward": 2}
+
+
+def read_company_owner(existing: dict) -> dict[str, dict]:
+    rows = existing.get(COMPANIES) or []
+    if not rows:
+        return {}
+    idx = {h: i for i, h in enumerate(rows[0])}
+    if "Company" not in idx:
+        return {}
+    out = {}
+    for raw in rows[1:]:
+        raw = _pad(raw, len(rows[0]))
+        name = (raw[idx["Company"]] or "").strip()
+        if name:
+            out[name] = {h: (raw[idx[h]] or "").strip() for h in COMPANY_OWNER if h in idx}
+    return out
+
+
+def company_rows(store: Store, seeds: list[dict], ts: str) -> list[list]:
+    for c in seeds:                                   # your list / researched companies
+        store.note_target_company(c.get("name", ""), c.get("fit", ""), c.get("about", ""),
+                                  c.get("source", "your list"), ts, c.get("careers"))
+    owner = store.company_owner()
+    posts = store.company_postings()
+    out = []
+    for r in store.target_companies():
+        o = owner.get(r["company"]) or {}
+        p = posts.get(r["company"].strip().lower()) or {"open": 0, "fitting": 0, "first": None}
+        first = hyperlink(p["first"][0], p["first"][1]) if p["first"] else ""
+        careers = hyperlink(r["careers_url"], "careers") if r["careers_url"] else ""
+        out.append([o.get("interest") or "", o.get("status") or "", r["company"], r["fit"] or "", r["about"] or "",
+                    p["open"] or "", p["fitting"] or "", first, careers, o.get("contact") or "",
+                    o.get("notes") or "", r["source"] or "", _date(r["first_seen"])])
+    def key(row):
+        status = row[1]
+        return (status == "Not for me", status not in TARGET_STATUSES, -_interest(row[0]),
+                _FIT_RANK.get(row[3], 9), -(row[6] or 0), row[2].lower())
+    return sorted(out, key=key)
+
+
+def _company_tab(meta: dict, rows: list[list], existing_len: int) -> list[dict]:
+    m = meta[COMPANIES]
+    sid = m["id"]
+    grid = [COMPANY_HEADERS] + rows
+    need = len(grid) + 20
+    padded = grid + [[""] * len(COMPANY_HEADERS)] * (min(existing_len, need) - len(grid))
+    col = {h: i for i, h in enumerate(COMPANY_HEADERS)}
+    return [
+        {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
+            "rowCount": need, "columnCount": max(m.get("cols", 26), len(COMPANY_HEADERS)), "frozenRowCount": 1}},
+            "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
+        {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
+                         "rows": [{"values": [_cell(v) for v in _pad(r, len(COMPANY_HEADERS))]} for r in padded],
+                         "fields": "userEnteredValue"}},
+        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
+                        "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+                        "fields": "userEnteredFormat.textFormat.bold"}},
+        _validation(sid, col["Interest"], INTEREST_OPTIONS, need),
+        _validation(sid, col["Status"], COMPANY_STATUS, need),
+    ]
 
 
 def _simple_tab(meta: dict, tab: str, header: list[str], rows: list[list], existing_len: int) -> list[dict]:
@@ -408,12 +488,18 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     ts = ts or datetime.now(timezone.utc).isoformat(timespec="seconds")
     meta = backend.ensure_tabs(ALL_TABS)
     existing = backend.read(ALL_TABS)
+    for name, vals in read_company_owner(existing).items():   # your Companies-tab columns first
+        store.save_company_owner(name, vals, ts)
+    store.commit()
     dec_requests, info = decision_tab_requests(meta, existing, store, criteria, ts)
     per_tab: dict[str, list[dict]] = {t: [] for t in ALL_TABS}
     for r in dec_requests:                       # group by tab so unchanged tabs can be skipped
         per_tab[_tab_of(r, meta)].append(r)
     for tab, (header, rows) in other_tab_rows(store, criteria, ts, unparsed).items():
         per_tab[tab] = _simple_tab(meta, tab, header, rows, len(existing.get(tab, [])))
+    crows = company_rows(store, load_target_companies(), ts)
+    per_tab[COMPANIES] = _company_tab(meta, crows, len(existing.get(COMPANIES, [])))
+    info["companies"] = len(crows)
     # A rewrite makes an open Sheet reload and recalculate (it froze on big tabs), so a tab
     # whose content is the same as last time is left alone.
     last = dict(store.conn.execute("SELECT tab, content_hash FROM sheet_tabs").fetchall())
@@ -438,6 +524,15 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     info["requests"] = len(requests)
     info["unchanged_tabs"] = skipped
     return info
+
+
+def load_target_companies() -> list[dict]:
+    """config/target_companies.yaml: companies you or research added (pipeline 2 seeds)."""
+    from ..config import CONFIG_DIR, load_yaml
+    path = CONFIG_DIR / "target_companies.yaml"
+    if not path.exists():
+        return []
+    return list((load_yaml(path) or {}).get("companies") or [])
 
 
 def _tab_of(req: dict, meta: dict) -> str:
