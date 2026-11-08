@@ -119,7 +119,8 @@ class Gates:
         # your core fields (hospitality / real estate, by title or by the company's description)
         # keep any role except legal / HR / tech / design / product ones; finance there is your
         # concentration, so it stays
-        company = self._title_domain(p) or (self._company_domain(p) if p.description_lines else None)
+        title_domain = self._title_domain(p)
+        company = title_domain or (self._company_domain(p) if p.description_lines else None)
         allowed = set(ff.get("core_company_allows") or []) if company else set()
         for group, terms in (ff.get("unrelated_title_terms") or {}).items():
             if group in allowed:
@@ -130,8 +131,11 @@ class Gates:
                     return
                 ev.fail("field", f"{group.replace('_', ' ')} ('{hit[0].term}'): {title}")
                 return
-        if company:
-            return                                   # any other role at a hospitality / real-estate company
+        if title_domain:
+            return                                   # the title itself names hospitality / real estate
+        if company and find_terms(title, ff.get("core_company_generic_titles") or [], first_only=True) \
+                and not any(find_terms(title, t, first_only=True) for t in (ff.get("families_off") or {}).values()):
+            return                                   # a general role (Analyst, Associate...) at such a company
         kept = next((f for f, terms in (ff.get("families") or {}).items()
                      if find_terms(title, terms, first_only=True)), None)
         if kept:
@@ -162,12 +166,17 @@ class Gates:
         if not terms:
             return
         domain = self._title_domain(p) or (self._company_domain(p) if p.description_lines else None)
-        if not domain:
-            return
         intro = [p.title] + p.description_lines[: int(ff.get("core_from_description_lines", 12))]
-        if find_terms(intro, terms, first_only=True):
-            label = "hospitality" if domain.startswith("hospitality") else "real estate"
+        ai = bool(find_terms(intro, terms, first_only=True))
+        label = ("hospitality" if domain.startswith("hospitality") else "real estate") if domain else ""
+        # ranking (your words, Nov 8): hospitality / real estate preferred, an AI-forward
+        # company preferred; both together first
+        if domain and ai:
             ev.flag(f"Your edge: AI × {label}")
+        elif domain:
+            ev.flag(f"Preferred field: {label}")
+        elif ai:
+            ev.flag("AI-forward company")
 
     # 1. employment type --------------------------------------------------
     def employment_type(self, p: Posting, ev: Evaluation) -> None:

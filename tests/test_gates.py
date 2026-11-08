@@ -335,8 +335,11 @@ def test_field_fit_keeps_your_fields_only(full_criteria):
     # real-estate company); "Business Development Associate" is sales, not real estate development
     for t in ("Sales Development Representative", "Marketing Coordinator", "Business Development Associate"):
         assert "field" in fails(t), t
-    assert "field" not in fails("Sales Development Representative",
-                                ["We build AI agents for property management and apartment operators."])
+    # at a real-estate company a general / ops title counts, a sales title doesn't (Nov 8)
+    re_co = ["We build AI agents for property management and apartment operators."]
+    assert "field" not in fails("Operations Associate", re_co)
+    assert "field" not in fails("Analyst", re_co)
+    assert "field" in fails("Sales Development Representative", re_co)
     for t in ("Investment Banking Analyst", "Compliance Operations Analyst", "Sales Trader", "Tax Associate",
               "Financial Analyst", "Associate Product Manager", "Data Analyst", "Recruiting Coordinator",
               "Underwriting Associate", "Trade Support Associate"):
@@ -435,8 +438,11 @@ def test_edge_ai_in_hospitality_and_real_estate(full_criteria):
     g = Gates(full_criteria)
     eliseai = ["EliseAI builds AI agents for property management, helping apartment operators and renters.",
                "## What you'll do", "- Book meetings with leasing teams"] + ["Words about the role."] * 12
-    ev = g.evaluate(_p(full_criteria, "Sales Development Representative", eliseai))
+    ev = g.evaluate(_p(full_criteria, "Business Operations Associate", eliseai))
     assert ev.passed and "Your edge: AI × real estate" in ev.flags, ev.failures
+    # ranking flags: field only / AI only
+    ai_co = ["We are an AI-native logistics platform."] + ["Words about the role."] * 12
+    assert "AI-forward company" in g.evaluate(_p(full_criteria, "Business Operations Associate", ai_co)).flags
     hotel = ["We are an AI-powered revenue platform for hotels and resorts."] + ["Words about the role."] * 12
     ev = g.evaluate(_p(full_criteria, "Analyst", hotel))
     assert ev.passed and "Your edge: AI × hospitality" in ev.flags, ev.failures

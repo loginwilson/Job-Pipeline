@@ -235,3 +235,9 @@ def test_unchanged_tabs_are_not_rewritten_and_tabs_shrink(criteria, board, evals
     assert REVIEW in info["unchanged_tabs"]
     n = len(tab(sheet, REVIEW))
     assert sheet.tabs[REVIEW]["rows"] <= n + 1 + 20           # sized to fit, not to its largest ever
+
+
+def test_preference_rank_orders_your_fields_first():
+    from src.output.sheet import _preference_rank
+    flags = ["New", "AI-forward company", "Preferred field: real estate", "Your edge: AI × hospitality, New"]
+    assert sorted(flags, key=_preference_rank) == [flags[3], flags[2], flags[1], flags[0]]

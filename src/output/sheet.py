@@ -214,6 +214,15 @@ def _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses,
             "tier": int(tier.group(1)) if tier else 9, "posted": r["posted_at"] or ""}
 
 
+def _preference_rank(flags: str) -> int:
+    """Your ranking (Nov 8): AI x hospitality / real estate, then hospitality / real estate,
+    then an AI-forward company, then the rest."""
+    for rank, mark in enumerate(("Your edge", "Preferred field", "AI-forward company")):
+        if mark in flags:
+            return rank
+    return 3
+
+
 def _sort_key(tab: str, row: dict):
     c = row["cells"]
     if tab == APPLICATIONS:
@@ -221,7 +230,7 @@ def _sort_key(tab: str, row: dict):
                 row["closed"], _neg_date(row["first_seen"]))
     # your edge (AI x hospitality / real estate) first, then newest finds (by day), then NYC
     # before tier 2 before tier 3, then newest posting
-    return (row["closed"], "Your edge" not in (c.get("Flags") or ""), _neg_date((row["first_seen"] or "")[:10]),
+    return (row["closed"], _preference_rank(c.get("Flags") or ""), _neg_date((row["first_seen"] or "")[:10]),
             row.get("tier", 9),
             _neg_date(str(row.get("posted") or "")[:10]))
 
