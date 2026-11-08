@@ -32,12 +32,11 @@ def passed(evals):
 
 
 def test_boards_produce_options(evals):
-    # tech-company boards: only the few roles in your fields (sales, ops, strategy, events) pass
-    assert len(evals) > 700 and len(passed(evals)) >= 10
+    # tech-company boards: only a handful of ops / strategy roles (0–1 years) pass
+    assert len(evals) > 700 and len(passed(evals)) >= 5
     titles = {e.posting.title for e in passed(evals)}
-    # roles in your fields survive the field filter ...
-    assert {"Deployment Strategist", "Revenue Operations Associate", "Marketing Ops Associate",
-            "Sales Development Representative | Housing"} <= titles
+    # roles in your fields survive the field filter (EliseAI is a housing company: its SDR stays)
+    assert {"Deployment Strategist", "Sales Development Representative | Housing"} <= titles, titles
     # ... and none of the passes are product, design, finance, HR or pure engineering titles
     assert not [t for t in titles if re.search(
         r"\b(product manager|product designer|program manager|financial analyst|recruit\w*|engineer)\b", t, re.I)]

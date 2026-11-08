@@ -85,7 +85,7 @@ salary:
 # 4 ── EXPERIENCE ──────────────────────────────────────────────
 # Lower bound of a range counts ("2–4 years" → 2). Required OR preferred.
 experience:
-  drop_at_or_above: 3
+  drop_at_or_above: 2   # 0–1 years only (your choice, Nov 8): a required 2+ years drops
   # Experience asks with no number that still mean "several years" (drop; the line is shown in Dropped)
   unstated_senior_terms: [extensive experience, significant experience, deep experience, many years of experience, several years of experience, multiple years of experience, several years experience, spent years, seasoned professional, mentor junior, mentor less experienced, mentoring junior, mentor and develop junior, train and mentor less experienced]
   # With NO years stated, these mid-level titles drop unless the title also has an entry cue (your choice, Nov 8)
@@ -245,19 +245,24 @@ tracking:                   # how your Status column is followed up
 field_fit:
   core_families:          # always kept
     hospitality_travel: [hotel, hotels, hospitality, resort, resorts, travel, tourism, guest experience, guest relations, revenue management, revenue manager, rooms division, front office, food and beverage, F&B, lodging, airline, airlines, cruise, concierge, catering, venue, venues, restaurant group, timeshare, vacation ownership]
-    real_estate: [real estate, property, properties, housing, leasing, multifamily, CRE, REIT, acquisitions, development associate, development analyst, land development, construction management, asset management analyst, investment sales, proptech]
+    real_estate: [real estate, property, properties, housing, leasing, multifamily, CRE, REIT, acquisitions, real estate development, land development, construction management, asset management analyst, investment sales, proptech]
   families:               # kept unless an unrelated-field term is also in the title
-    ops_strategy: [operations, business operations, bizops, strategy, strategic, chief of staff, founders office, founder's office, rotational, leadership program, leadership development, development program, management trainee, generalist, project manager, project coordinator, project associate, implementation, special projects, founder associate, founders associate, facilities, workplace operations]
-    sales_client: [sales, business development, BDR, SDR, account executive, account manager, account representative, account coordinator, customer success, client success, client service, client services, client relations, client experience, customer experience, relationship manager, partnerships, partner, GTM, go to market, revenue operations, AE, success manager]
+    # your fields (Nov 8): business operations / strategy, including AI deployment roles
+    ops_strategy: [operations, business operations, bizops, strategy, strategic, chief of staff, founders office, founder's office, rotational, leadership program, leadership development, development program, management trainee, generalist, project manager, project coordinator, project associate, implementation, special projects, founder associate, founders associate, facilities, workplace operations, revenue operations, sales operations, deployment strategist, forward deployed, strategist, agent development, deal operations]
+  # Turned off Nov 8 ("most things of interest are hospitality, real estate, business ops"):
+  # these titles now pass only at a hospitality / real-estate company. Move a line back
+  # under families: to keep that field everywhere again.
+  families_off:
+    sales_client: [sales, business development, BDR, SDR, account executive, account manager, account representative, account coordinator, customer success, client success, client service, client services, client relations, client experience, customer experience, relationship manager, partnerships, partner, GTM, go to market, AE, success manager]
     marketing_events: [marketing, brand, content, events, event, conferences, social media, growth, communications, public relations, PR, community, media planning, media buyer, media buying, advertising, creative, influencer, sponsorship, merchandising]
-    consulting: [consultant, consulting, advisory, deployment strategist, forward deployed, strategist, agent development]
+    consulting: [consultant, consulting, advisory]
   # a hospitality/travel company counts even for a generic title, when the posting's opening says so
   core_from_description_lines: 12
   # the company's own opening description puts it in your core fields: any role there counts
   # (legal / HR / tech / design / product titles still drop; finance there is your concentration)
   core_company_terms:
     hospitality_travel: [hotel, hotels, hospitality, resort, resorts, travel company, travel platform, travel industry, airline, airlines, cruise, vacation rental, vacation rentals, short-term rental, short-term rentals, guest experience, restaurants, restaurant industry]
-    real_estate: [real estate, property management, property managers, multifamily, apartment communities, apartments, renters, landlords, leasing teams, proptech, commercial real estate, homebuyers, homebuilders, real estate development, REIT, construction industry, housing providers, housing operators]
+    real_estate: [real estate, property management, property managers, multifamily, apartment communities, apartments, renters, landlords, leasing teams, proptech, commercial real estate, homebuyers, homebuilders, real estate development, REIT, construction industry, construction technology, construction tech, future of construction, revolutionizing construction, construction companies, construction teams, general contractors, the nation's builders, housing providers, housing operators]
   core_company_allows: [corporate_finance, banking_markets]
   # "Your edge" flag (listed first): one of the above plus AI in the title or opening description
   ai_terms: [AI, A.I., artificial intelligence, machine learning, LLM, LLMs, agentic, AI agents, AI agent, generative AI, GenAI, conversational AI, AI-native, AI-powered]

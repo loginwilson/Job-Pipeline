@@ -68,7 +68,9 @@ def test_salary_rarely_meets_floor(evaluate):
 def test_experience(evaluate):
     assert "experience" in gates_of(evaluate(lines=["## Requirements", "- 3+ years of experience in sales", PAY_OK]))
     assert "experience" in gates_of(evaluate(lines=["## Nice to have", "- 3-5 years of experience", PAY_OK]))
-    assert evaluate(lines=["## Requirements", "- 2–4 years of experience in operations", PAY_OK]).passed
+    # 0–1 years only since Nov 8: a required 2 drops, a "1–2 years" range (minimum 1) passes
+    assert "experience" in gates_of(evaluate(lines=["## Requirements", "- 2–4 years of experience in operations", PAY_OK]))
+    assert evaluate(lines=["## Requirements", "- 1–2 years of experience in operations", PAY_OK]).passed
     assert "experience" in gates_of(evaluate(lines=["## Requirements", "- At least three years of experience", PAY_OK]))
 
 
@@ -326,9 +328,15 @@ def test_field_fit_keeps_your_fields_only(full_criteria):
     g = Gates(full_criteria)
     fails = lambda t, lines=(): {f.gate for f in g.evaluate(_p(full_criteria, t, list(lines))).failures}
     for t in ("Hotel Revenue Management Analyst", "Real Estate Acquisitions Analyst", "Business Operations Associate",
-              "Sales Development Representative", "Marketing Coordinator", "Strategy Consulting Analyst",
-              "CMBS and Real Estate Finance Analyst", "Marketing Data Analyst", "Chief of Staff"):
+              "Strategy Consulting Analyst", "CMBS and Real Estate Finance Analyst", "Chief of Staff",
+              "Deployment Strategist", "Revenue Operations Associate"):
         assert "field" not in fails(t), t
+    # sales / marketing / consulting titles were turned off Nov 8 (still kept at a hospitality or
+    # real-estate company); "Business Development Associate" is sales, not real estate development
+    for t in ("Sales Development Representative", "Marketing Coordinator", "Business Development Associate"):
+        assert "field" in fails(t), t
+    assert "field" not in fails("Sales Development Representative",
+                                ["We build AI agents for property management and apartment operators."])
     for t in ("Investment Banking Analyst", "Compliance Operations Analyst", "Sales Trader", "Tax Associate",
               "Financial Analyst", "Associate Product Manager", "Data Analyst", "Recruiting Coordinator",
               "Underwriting Associate", "Trade Support Associate"):
