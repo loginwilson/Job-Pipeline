@@ -5,8 +5,12 @@ import pytest
 from conftest import FIXTURES
 
 from src.config import Company
-from src.output.sheet import (ALL_TABS, APPLICATIONS, HEADERS as H, ID_COL, PASSED, REVIEW, FakeBackend,
-                              sync_all)
+from src.output.sheet import ALL_TABS, HEADERS as H, ID_COL, JOBS, FakeBackend, sync_all
+
+# One table since Nov 8: every job is one row on Jobs; "My picks" and "Passed" are live
+# formula views of it. Tests compute those views from the Jobs rows, as the formulas do.
+REVIEW = JOBS
+APPLICATIONS, PASSED = "__view: my picks", "__view: passed"
 from src.run import evaluate_company, store_evaluations
 from src.sources import load_fixture
 from src.store.db import Store
@@ -40,6 +44,12 @@ def run(store, sheet, board, evals, criteria, ts):
 
 
 def tab(sheet, name):
+    if name in (APPLICATIONS, PASSED):
+        jobs = tab(sheet, JOBS)
+        if name == PASSED:
+            return [r for r in jobs if r[INT] == "Pass"]
+        picks = [r for r in jobs if r[INT].isdigit() and int(r[INT]) >= 1]
+        return sorted(picks, key=lambda r: -int(r[INT]))         # SORT(..., 1, FALSE), stable
     rows = sheet.read([name])[name]
     return [r + [""] * (len(H) - len(r)) for r in rows[1:]]
 
@@ -52,11 +62,12 @@ def test_new_postings_land_in_review(criteria, board, evals):
     store, sheet = Store(":memory:"), FakeBackend()
     info = run(store, sheet, board, evals, criteria, T1)
     passed = sum(e.passed for e in evals)
-    assert info["tabs"] == {REVIEW: passed, APPLICATIONS: 0, PASSED: 0}
+    assert info["tabs"] == {"Jobs": passed, "My picks": 0, "Passed": 0}
     assert sheet.read([REVIEW])[REVIEW][0] == H
     assert all(r[DEC] == "" and "New" in r[FLAGS] for r in tab(sheet, REVIEW))
     assert set(sheet.tabs) == set(ALL_TABS) and len(sheet.calls) == 1       # one write per run
-    assert sheet.tabs["Home"]["index"] == 0 and sheet.tabs["Companies"]["index"] == 1   # your hub opens first
+    assert sheet.tabs["Home"]["index"] == 0 and sheet.tabs["Jobs"]["index"] == 1        # home, then your jobs
+    assert sheet.tabs["My picks"]["grid"][0][0]["formulaValue"].startswith("={Jobs!A1:")   # a live view
 
 
 def test_decisions_move_rows_and_survive(criteria, board, evals):
@@ -76,18 +87,17 @@ def test_decisions_move_rows_and_survive(criteria, board, evals):
     run(store, sheet, board, evals, criteria, T2)
 
     apps = tab(sheet, APPLICATIONS)
-    assert [r[ID_COL] for r in apps] == [a, c, d]          # Interest 5, then 3; ended (Rejected) last
+    assert [r[ID_COL] for r in apps] == [a, d, c]          # highest Interest first
     assert apps[0][INT] == "5" and apps[0][NOTES] == "Coffee chat"
-    assert apps[1][APPLIED] == T2[:10]                       # Applied on stamped automatically
+    assert apps[2][APPLIED] == T2[:10]                       # Applied on stamped automatically
     assert [r[ID_COL] for r in tab(sheet, PASSED)] == [b]
     review = tab(sheet, REVIEW)
-    # picks stay in To review too (shaded by Interest); only Pass leaves it
-    in_review = {r[ID_COL] for r in review}
-    assert {a, c, d} <= in_review and b not in in_review
+    # one row per job: picks and passes stay on Jobs (the views just show them)
+    assert {a, b, c, d} <= {r[ID_COL] for r in review} and len(review) == len({r[ID_COL] for r in review})
     assert not any("New" in r[FLAGS].split(", ") for r in review)
 
     run(store, sheet, board, evals, criteria, T2)            # a third run keeps everything in place
-    assert [r[ID_COL] for r in tab(sheet, APPLICATIONS)] == [a, c, d]
+    assert [r[ID_COL] for r in tab(sheet, APPLICATIONS)] == [a, d, c]
 
 
 def test_follow_up_after_ten_days(criteria, board, evals):
@@ -120,11 +130,11 @@ def test_hyperlinks_and_formatting(criteria, board, evals):
     store, sheet = Store(":memory:"), FakeBackend()
     run(store, sheet, board, evals, criteria, T1)
     assert all(f.startswith('=HYPERLINK("https://jobs.lever.co/') for f in sheet.formulas(REVIEW, ROLE))
-    for name in (REVIEW, APPLICATIONS, PASSED):
-        t = sheet.tabs[name]
-        assert t["frozen"] == 1 and len(t["cf"]) == 7
-        kinds = [next(iter(r)) for r in t["other"]]
-        assert kinds.count("setDataValidation") == 3 and "setBasicFilter" in kinds
+    t = sheet.tabs[JOBS]
+    assert t["frozen"] == 1 and len(t["cf"]) == 7
+    kinds = [next(iter(r)) for r in t["other"]]
+    assert kinds.count("setDataValidation") == 3 and "setBasicFilter" in kinds
+    assert len(sheet.tabs["My picks"]["cf"]) == 4 and sheet.tabs["Passed"]["frozen"] == 1
     run(store, sheet, board, evals, criteria, T2)
     assert len(sheet.tabs[REVIEW]["cf"]) == 7                # rules not duplicated
 
@@ -314,7 +324,7 @@ def test_a_job_you_marked_keeps_its_link_when_rules_change(criteria):
     store.save_score("ashby:meow:1", False, [{"gate": "field", "matched": "not one of your fields"}], [], {}, T2)
     store.commit()
     sync_all(sheet, store, criteria, T2)
-    raw = sheet.tabs[APPLICATIONS]["grid"][1]
+    raw = next(g for g in sheet.tabs[JOBS]["grid"][1:] if g and g[ID_COL].get("stringValue") == "ashby:meow:1")
     role = raw[H.index("Role")]
     assert "formulaValue" in role and "jobs.example/meow/1" in role["formulaValue"]
     flags = tab(sheet, APPLICATIONS)[0][H.index("Flags")]
@@ -323,23 +333,23 @@ def test_a_job_you_marked_keeps_its_link_when_rules_change(criteria):
 
 
 
-def test_edit_in_either_copy_of_a_picked_job_wins(criteria, board, evals):
-    """A pick shows in To review and My applications; whichever copy you edit is kept."""
+def test_one_row_per_job_your_edits_and_order_stay(criteria, board, evals):
+    """One table: a job is one row; your edits stick and your sort order is kept between runs."""
     store, sheet = Store(":memory:"), FakeBackend()
     run(store, sheet, board, evals, criteria, T1)
-    pid = tab(sheet, REVIEW)[0][ID_COL]
-    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, pid), DEC, "Apply")
+    ids = [r[ID_COL] for r in tab(sheet, REVIEW)]
+    pid = ids[-1]
     sheet.set_cell(REVIEW, row_index(sheet, REVIEW, pid), INT, "5")
-    run(store, sheet, board, evals, criteria, T1)
-    assert pid in [r[ID_COL] for r in tab(sheet, APPLICATIONS)] and pid in [r[ID_COL] for r in tab(sheet, REVIEW)]
-    # edit the My applications copy
-    sheet.set_cell(APPLICATIONS, row_index(sheet, APPLICATIONS, pid), STATUS, "Applied")
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, pid), STATUS, "Applied")
+    # you sort the whole table (every column, ID included): reverse it
+    grid = sheet.tabs[REVIEW]["grid"]
+    grid[1:len(ids) + 1] = list(reversed(grid[1:len(ids) + 1]))
     run(store, sheet, board, evals, criteria, T2)
-    assert tab(sheet, REVIEW)[row_index(sheet, REVIEW, pid) - 1][STATUS] == "Applied"
-    # now edit the To review copy
-    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, pid), INT, "3")
-    run(store, sheet, board, evals, criteria, T2)
-    assert tab(sheet, APPLICATIONS)[row_index(sheet, APPLICATIONS, pid) - 1][INT] == "3"
+    after = tab(sheet, REVIEW)
+    assert [r[ID_COL] for r in after] == list(reversed(ids))      # your order kept
+    row = after[0]
+    assert row[ID_COL] == pid and row[INT] == "5" and row[STATUS] == "Applied"
+    assert [r[ID_COL] for r in tab(sheet, APPLICATIONS)] == [pid]
 
 
 def test_grad_programs_tab_lists_programs_with_lighter_rules(criteria):
@@ -417,7 +427,7 @@ def test_one_pick_column_pass_and_numbers(criteria, board, evals):
     sheet.set_cell(REVIEW, row_index(sheet, REVIEW, c), INT, "Apply")
     run(store, sheet, board, evals, criteria, T2)
     review = {r[ID_COL]: r for r in tab(sheet, REVIEW)}
-    assert review[a][INT] == "5" and b not in review and review[c][INT] == "3"
+    assert review[a][INT] == "5" and review[b][INT] == "Pass" and review[c][INT] == "3"
     assert {a, c} <= {r[ID_COL] for r in tab(sheet, APPLICATIONS)}
     assert [r[ID_COL] for r in tab(sheet, PASSED)] == [b]
     assert sheet.read([REVIEW])[REVIEW][0][:4] == ["Interest", "Status", "Next step", "Due"]
@@ -441,3 +451,20 @@ def test_sorting_without_the_hidden_id_column_keeps_picks_on_the_right_jobs(crit
     run(store, sheet, board, evals, criteria, T2)
     apps = tab(sheet, APPLICATIONS)
     assert len(apps) == 1 and apps[0][ROLE] == first_role and apps[0][INT] == "5"
+
+
+def test_reset_backs_up_old_picks_wipes_scores_and_removes_old_tabs(criteria, board, evals):
+    store, sheet = Store(":memory:"), FakeBackend()
+    store_evaluations(store, board, evals, T1, criteria)
+    pid = store.conn.execute("SELECT posting_id FROM postings LIMIT 1").fetchone()[0]
+    store.save_owner_state(pid, {"Decision": "Apply", "Interest": "4", "Status": "", "Notes": "liked"}, T1)
+    store.commit()
+    sheet.ensure_tabs(["To review", "My applications", "Passed"])          # the old layout
+    sync_all(sheet, store, criteria, T1)
+    assert "To review" not in sheet.tabs and "My applications" not in sheet.tabs
+    assert store.conn.execute("SELECT COUNT(*) FROM owner_state").fetchone()[0] == 0
+    backup = sheet.read(["Before reset"])["Before reset"]
+    assert backup[0][:3] == ["Your pick", "Status", "Company"] and backup[1][0] == "4" and backup[1][4] == "liked"
+    assert all(r[INT] == "" for r in tab(sheet, JOBS))                     # fresh start
+    sync_all(sheet, store, criteria, T2)                                   # only once
+    assert len(sheet.read(["Before reset"])["Before reset"]) == 2

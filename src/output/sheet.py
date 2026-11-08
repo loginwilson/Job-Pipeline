@@ -39,12 +39,16 @@ from ..textmatch import parse_when
 
 log = logging.getLogger(__name__)
 
-REVIEW, APPLICATIONS, PASSED = "To review", "My applications", "Passed"
-DECISION_TABS = [REVIEW, APPLICATIONS, PASSED]
+# One table (Nov 8 rebuild): every job lives ONCE, on Jobs; My picks and Passed are live
+# formula views of it, so they update the moment you type - no copies to keep in sync.
+JOBS, PICKS, PASSED = "Jobs", "My picks", "Passed"
+OLD_JOB_TABS = ["To review", "My applications", "Passed"]      # the copy-based layout, removed once
+REVIEW = APPLICATIONS = JOBS                                   # older names some code still uses
+DECISION_TABS = [JOBS]
 # one pick column: Pass / 1-5 (your Nov 8 choice); what you scan first, the rest to the right
 HEADERS = ["Interest", "Status", "Next step", "Due", "Applied on", "Company", "Role", "Location", "Salary",
            "Experience ask", "Flags", "Notes", "Field", "Extra comp", "Visa", "Posted", "First seen", "Source",
-           "Posting ID"]
+           "Link", "Posting ID"]
 OWNER_HEADERS = ("Decision", "Interest", "Status", "Notes", "Next step", "Due")
 ID_COL = HEADERS.index("Posting ID")
 DECISION_OPTIONS = ["Pending", "Apply", "Pass"]
@@ -342,7 +346,7 @@ def _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses,
         "Extra comp": d.get("extra_comp", ""), "Experience ask": d.get("experience", ""),
         "Visa": d.get("visa", ""), "Flags": ", ".join(dict.fromkeys(flags)),
         "Posted": _date(r["posted_at"]), "First seen": _date(r["first_seen"]),
-        "Source": d.get("source", ""), "Posting ID": r["posting_id"],
+        "Source": d.get("source", ""), "Link": r["url"] or "", "Posting ID": r["posting_id"],
     }
     tier = re.search(r"tier (\d)", cells.get("Location") or "")
     return {"posting_id": r["posting_id"], "closed": bool(r["closed_at"]),
@@ -378,7 +382,8 @@ def _sort_key(tab: str, row: dict):
 # --- sync -----------------------------------------------------------------
 def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Criteria,
                           ts: str) -> tuple[list[dict], dict]:
-    sheet_owner, full_rows = read_owner_values(existing, store.owner_states(), make_row_resolver(store))
+    resolve = make_row_resolver(store)
+    sheet_owner, full_rows = read_owner_values(existing, store.owner_states(), resolve)
     for pid, vals in sheet_owner.items():          # the Sheet is the source of truth for your columns
         store.save_owner_state(pid, vals, ts)
     store.commit()
@@ -391,22 +396,104 @@ def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Cr
             known = store.conn.execute("SELECT title, url FROM postings WHERE posting_id=?", (pid,)).fetchone()
             if known and known["url"]:
                 cells["Role"] = hyperlink(known["url"], known["title"] or cells.get("Role", ""))
+                cells["Link"] = known["url"]
             rows.append({"posting_id": pid, "closed": True, "first_seen": "", "cells": cells})
 
-    by_tab: dict[str, list[dict]] = {t: [] for t in DECISION_TABS}
-    for r in rows:
-        tab = route(r["cells"])
-        by_tab[tab].append(r)
-        if tab == APPLICATIONS:
-            by_tab[REVIEW].append(r)      # your picks also stay in To review, shaded by Interest
-    requests: list[dict] = []
-    counts = {}
-    for tab in DECISION_TABS:
-        tab_rows = sorted(by_tab[tab], key=lambda r: _sort_key(tab, r))
-        counts[tab] = len(tab_rows)
-        grid = [HEADERS] + [[r["cells"].get(h, "") for h in HEADERS] for r in tab_rows]
-        requests += _decision_tab(meta[tab], grid, len(existing.get(tab) or []))
-    return requests, {"rows": len(rows), "tabs": counts}
+    # keep YOUR row order (however you sorted); new finds go on top, best first
+    order: list[str] = []
+    jr = existing.get(JOBS) or []
+    if jr:
+        idx = {h: i for i, h in enumerate(jr[0])}
+        if "Posting ID" in idx:
+            for raw in jr[1:]:
+                raw = _pad(raw, len(jr[0]))
+                pid = resolve(raw[idx["Posting ID"]], {h: (raw[i] or "") for h, i in idx.items()})
+                if pid and pid not in order:
+                    order.append(pid)
+    pos = {pid: i for i, pid in enumerate(order)}
+    new = sorted([r for r in rows if r["posting_id"] not in pos], key=lambda r: _sort_key("new finds", r))
+    kept = sorted([r for r in rows if r["posting_id"] in pos], key=lambda r: pos[r["posting_id"]])
+    tab_rows = new + kept
+    grid = [HEADERS] + [[r["cells"].get(h, "") for h in HEADERS] for r in tab_rows]
+    requests = _decision_tab(meta[JOBS], grid, len(existing.get(JOBS) or []))
+    picks = sum(1 for r in tab_rows if _interest(r["cells"].get("Interest") or "") > 0)
+    passed = sum(1 for r in tab_rows if (r["cells"].get("Interest") or "") == "Pass")
+    return requests, {"rows": len(rows), "tabs": {JOBS: len(tab_rows), PICKS: picks, PASSED: passed},
+                      "new": len(new)}
+
+
+def _view_tab(meta: dict, tab: str, condition: str, sort_desc: bool) -> list[dict]:
+    """My picks / Passed: one formula that shows matching Jobs rows live."""
+    sid = meta[tab]["id"]
+    last = _col_letter(len(HEADERS) - 1)
+    rows = f"Jobs!A2:{last}"
+    body = f"FILTER({rows}, {condition})"
+    if sort_desc:
+        body = f"SORT({body}, 1, FALSE)"
+    formula = f'={{Jobs!A1:{last}1; IFERROR({body}, "")}}'
+    col = {h: i for i, h in enumerate(HEADERS)}
+    reqs = [
+        {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
+            "rowCount": 2000, "columnCount": max(meta[tab].get("cols", 26), len(HEADERS)), "frozenRowCount": 1}},
+            "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
+        {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
+                         "rows": [{"values": [_cell(formula)]}], "fields": "userEnteredValue"}},
+        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
+                        "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+                        "fields": "userEnteredFormat.textFormat.bold"}},
+        {"updateDimensionProperties": {"range": {"sheetId": sid, "dimension": "COLUMNS",
+                                                 "startIndex": ID_COL, "endIndex": ID_COL + 1},
+                                       "properties": {"hiddenByUser": True}, "fields": "hiddenByUser"}},
+    ]
+    if tab == PICKS:
+        interest = _col_letter(col["Interest"])
+        full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}
+        rules = [(f'=VALUE(0&${interest}2)=5', GREEN_5), (f'=VALUE(0&${interest}2)=4', GREEN_4),
+                 (f'=VALUE(0&${interest}2)=3', GREEN_3), (f'=IFERROR(VALUE(0&${interest}2)>=1,FALSE)', GREEN_1)]
+        if meta[tab].get("cf_formulas") != [f for f, _ in rules]:
+            reqs += [{"deleteConditionalFormatRule": {"sheetId": sid, "index": 0}}
+                     for _ in range(int(meta[tab].get("cf_count", 0)))]
+            for i, (f, colour) in enumerate(rules):
+                reqs.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [full], "booleanRule": {
+                    "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": f}]},
+                    "format": {"backgroundColor": colour}}}}})
+    return reqs
+
+
+BACKUP = "Before reset"
+
+
+def reset_scores_once(backend, store: Store, ts: str) -> None:
+    """Nov 8: you asked to wipe the scoring and start fresh in the one-table layout. Your old
+    picks / passes are kept on a 'Before reset' tab; the old copy-based tabs are removed."""
+    if store.conn.execute("SELECT 1 FROM sheet_tabs WHERE tab='__one_table_v1'").fetchone():
+        return
+    store.conn.execute("CREATE TABLE IF NOT EXISTS reset_backup (company TEXT, title TEXT, url TEXT, "
+                       "pick TEXT, status TEXT, notes TEXT)")
+    store.conn.execute("DELETE FROM reset_backup")
+    for r in store.conn.execute(
+            "SELECT p.company, p.title, p.url, o.decision, o.interest, o.status, o.notes FROM owner_state o "
+            "JOIN postings p USING(posting_id) WHERE COALESCE(o.decision,'') NOT IN ('', 'Pending') "
+            "OR COALESCE(o.interest,'')<>'' OR COALESCE(o.status,'')<>'' OR COALESCE(o.notes,'')<>''").fetchall():
+        pick = "Pass" if (r["decision"] or "").lower() in PASS_WORDS else (r["interest"] or r["decision"] or "")
+        store.conn.execute("INSERT INTO reset_backup VALUES (?,?,?,?,?,?)",
+                           (r["company"], r["title"], r["url"], pick, r["status"] or "", r["notes"] or ""))
+    store.conn.execute("DELETE FROM owner_state")
+    store.conn.execute("DELETE FROM sheet_tabs")
+    store.conn.execute("INSERT INTO sheet_tabs (tab, content_hash, written_at) VALUES ('__one_table_v1', '', ?)",
+                       (ts,))
+    store.commit()
+    if hasattr(backend, "delete_tabs"):
+        backend.delete_tabs(OLD_JOB_TABS)
+
+
+def backup_rows(store: Store) -> list[list]:
+    try:
+        rows = store.conn.execute("SELECT * FROM reset_backup ORDER BY pick='Pass', pick DESC, company").fetchall()
+    except Exception:
+        return []
+    return [[r["pick"], r["status"], r["company"], hyperlink(r["url"], r["title"]) if r["url"] else r["title"],
+             r["notes"]] for r in rows]
 
 
 def _decision_tab(m: dict, grid: list[list], existing_len: int) -> list[dict]:
@@ -473,7 +560,7 @@ COMPANIES, COMPANY_JOBS, PROGRAMS = "Companies", "Company jobs", "Grad programs"
 HOME, CONTACTS_TAB = "Home", "Contacts"
 BACK_OFFICE = [DROPPED, UNPARSED, FUNNEL, HEALTH]      # Passed stays visible: you like seeing your passes
 # your hub first, then the inboxes you browse, then the back office
-ALL_TABS = [HOME, COMPANIES, CONTACTS_TAB, APPLICATIONS, REVIEW, PASSED, PROGRAMS, COMPANY_JOBS,
+ALL_TABS = [HOME, JOBS, PICKS, PASSED, COMPANIES, CONTACTS_TAB, PROGRAMS, COMPANY_JOBS, "Before reset",
             DROPPED, UNPARSED, FUNNEL, HEALTH]
 
 # --- grad programs: their own view with lighter rules ---------------------------
@@ -515,7 +602,7 @@ def program_rows(store: Store) -> list[list]:
         d = json.loads(r["display"] or "{}")
         fails = json.loads(r["failures"] or "[]")
         if r["posting_id"] in tracked:
-            where = "✅ In To review" if r["passed"] else "✅ Your pick (in My applications)"
+            where = "✅ On Jobs" if r["passed"] else "✅ Your pick (on Jobs)"
             rank = 0
         else:
             if any(f.get("gate") in _PROGRAM_BLOCKERS for f in fails):
@@ -731,12 +818,12 @@ def home_grid(store: Store, contacts: list[dict], crows: list[list], ts: str) ->
             "JOIN postings p USING(posting_id)"):
         d = parse_day(r["due"])
         if r["next_step"] or d:
-            todo.append((d or week, d, r["next_step"] or "(next step)", f"{r['company']} - {r['title']}", "My applications"))
+            todo.append((d or week, d, r["next_step"] or "(next step)", f"{r['company']} - {r['title']}", "Jobs"))
         if (r["status"] or "") == "Applied" and r["status_changed_at"]:
             changed = parse_when(r["status_changed_at"]).date()
             if (today - changed).days >= 10:
                 todo.append((today, None, f"Follow up on your application (applied {changed.isoformat()})",
-                             f"{r['company']} - {r['title']}", "My applications"))
+                             f"{r['company']} - {r['title']}", "Jobs"))
     for name, o in store.company_owner().items():
         d = parse_day(o.get("due"))
         if o.get("next_step") or d:
@@ -1004,6 +1091,7 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
              unparsed: list[list] | None = None) -> dict:
     """Every tab: one read + one batchUpdate per run."""
     ts = ts or datetime.now(timezone.utc).isoformat(timespec="seconds")
+    reset_scores_once(backend, store, ts)
     meta = backend.ensure_tabs(ALL_TABS)
     existing = backend.read(ALL_TABS)
     known_companies = {r["company"].strip().lower() for r in store.target_companies()}
@@ -1030,6 +1118,10 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     crows = company_rows(store, load_target_companies(), ts, contacts)
     per_tab[CONTACTS] = _contacts_tab(meta, len(existing.get(CONTACTS, [])))
     per_tab[HOME] = _simple_tab(meta, HOME, *home_grid(store, contacts, crows, ts), 0)
+    per_tab[PICKS] = _view_tab(meta, PICKS, f"IFERROR(VALUE(Jobs!A2:A),0)>=1", True)
+    per_tab[PASSED] = _view_tab(meta, PASSED, 'Jobs!A2:A="Pass"', False)
+    per_tab[BACKUP] = _simple_tab(meta, BACKUP, ["Your pick", "Status", "Company", "Role", "Notes"],
+                                  backup_rows(store), len(existing.get(BACKUP, [])))
     per_tab[COMPANIES] = _company_tab(meta, crows, len(existing.get(COMPANIES, [])))
     per_tab[COMPANY_JOBS] = _company_jobs_tab(meta, company_job_rows(store), len(existing.get(COMPANY_JOBS, [])))
     prows = program_rows(store)
@@ -1054,11 +1146,6 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
         requests.append({"updateSheetProperties": {"properties": {"sheetId": meta[tab]["id"],
                                                                   "index": ALL_TABS.index(tab)},
                                                    "fields": "index"}})
-    if not store.conn.execute("SELECT 1 FROM sheet_tabs WHERE tab='__passed_shown_v1'").fetchone():
-        requests.append({"updateSheetProperties": {"properties": {"sheetId": meta[PASSED]["id"], "hidden": False},
-                                                   "fields": "hidden"}})
-        store.conn.execute("INSERT OR REPLACE INTO sheet_tabs (tab, content_hash, written_at) "
-                           "VALUES ('__passed_shown_v1', '', ?)", (ts,))
     # keep it simple: back-office tabs are hidden once (unhide any time from the Sheets menu)
     if not store.conn.execute("SELECT 1 FROM sheet_tabs WHERE tab='__hidden_v1'").fetchone():
         for tab in BACK_OFFICE:
@@ -1143,6 +1230,13 @@ class GspreadBackend:
                                       for cf in have[t].get("conditionalFormats") or []]}
         return out
 
+    def delete_tabs(self, names: list[str]) -> None:
+        meta = self.ss.fetch_sheet_metadata({"fields": "sheets(properties)"})
+        reqs = [{"deleteSheet": {"sheetId": s["properties"]["sheetId"]}} for s in meta["sheets"]
+                if s["properties"]["title"] in names]
+        if reqs and len(reqs) < len(meta["sheets"]):
+            self.ss.batch_update({"requests": reqs})
+
     def read(self, tabs: list[str]) -> dict[str, list[list[str]]]:
         res = self.ss.values_batch_get([f"'{t}'!A:Z" for t in tabs])
         return {t: vr.get("values", []) for t, vr in zip(tabs, res.get("valueRanges", []))}
@@ -1179,6 +1273,11 @@ class FakeBackend:
                     "has_cf": bool(self.tabs[t]["cf"]), "cf_count": len(self.tabs[t]["cf"]),
                     "cf_formulas": [c["rule"]["booleanRule"]["condition"]["values"][0]["userEnteredValue"]
                                     for c in self.tabs[t]["cf"]]} for t in tabs}
+
+    def delete_tabs(self, names: list[str]) -> None:
+        for n in names:
+            self.tabs.pop(n, None)
+        self._save()
 
     def _tab_by_id(self, sid: int) -> dict:
         return next(t for t in self.tabs.values() if t["id"] == sid)
