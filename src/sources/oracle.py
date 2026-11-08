@@ -29,7 +29,7 @@ from .workday import Listing
 PAGE = 25
 MAX_PAGES = 48          # up to 1,200 postings per site per poll
 FILTERED_PAGES_FACTOR = 3   # read through your cities' filters: up to 3,600
-MAX_NEW_DETAILS = 150       # new descriptions fetched per site per poll (cached; the rest come next poll)
+MAX_NEW_DETAILS = 80        # new descriptions fetched per site per poll (cached; the rest come next poll)
 API = "https://{host}/hcmRestApi/resources/latest/"
 
 
