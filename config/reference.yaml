@@ -42,6 +42,10 @@ geo:
       country: US
       states: [TX, Texas]
 
+  # City names that also exist elsewhere (Richmond VA / London, Surrey UK, Vancouver WA, ...):
+  # they count only when the same location also names the right state/province or country.
+  ambiguous_cities: [Richmond, Surrey, Burnaby, Vancouver, Markham, Vaughan, Oakville, Mississauga, Oakland, Evanston, Oak Park, Hoboken]
+
   countries:
     US: [US, USA, U.S., U.S.A., United States, United States of America]
     CA: [Canada, CAN]

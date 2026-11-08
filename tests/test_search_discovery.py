@@ -195,3 +195,10 @@ def test_greenhouse_behind_company_career_page():
     assert discover.greenhouse_behind("https://www.optiver.com/join-us/jobs/8451763002/?gh_jid=8451763002", "Optiver", s) == "optiverus"
     assert discover.greenhouse_behind("https://www.optiver.com/join-us/jobs/1/", "Optiver", s) is None     # no job id
     assert len(s.urls) <= 10
+
+
+def test_same_board_under_two_names_is_watched_once():
+    store = Store(":memory:")
+    store.add_discovered("JPMorganChase", "oracle", "jpmc.fa.oraclecloud.com/CX_1001", "Hacker News", "", T1)
+    store.add_discovered("JP Morgan Chase", "oracle", "jpmc.fa.oraclecloud.com/CX_1001", "New-grad lists", "", T2)
+    assert [r["company"] for r in store.discovered_boards()] == ["JPMorganChase"]

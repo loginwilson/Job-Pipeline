@@ -499,8 +499,10 @@ def main(argv: list[str] | None = None) -> int:
             except Exception as exc:  # never stops the run
                 log.error("New-grad list discovery error: %s", exc)
         watch = {normalize(c.name) for c in companies}
+        watched_boards = {(c.platform, c.slug.lower()) for c in companies}
         companies += [Company(name=r["company"], platform=r["platform"], slug=r["slug"])
-                      for r in store.discovered_boards() if normalize(r["company"]) not in watch]
+                      for r in store.discovered_boards()
+                      if normalize(r["company"]) not in watch and (r["platform"], r["slug"].lower()) not in watched_boards]
 
     # 3. company boards
     board_keys: set[str] = set()

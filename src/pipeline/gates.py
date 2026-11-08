@@ -102,6 +102,13 @@ class Gates:
             if hit:
                 ev.fail("salary", f"no salary posted; '{hit[0].term}' roles rarely pay the {floor:,} floor: {p.title}")
                 return
+            store = sal.get("store_roles") or {}
+            st = find_terms(p.title, store.get("titles", []) or [], first_only=True)
+            if st:
+                where = find_terms([p.title] + p.description_lines, store.get("store_terms", []) or [], first_only=True)
+                if where:
+                    ev.fail("salary", f"no salary posted; store/branch role ('{st[0].term}', '{where[0].term}'): {p.title}")
+                    return
             basis = (p.raw.raw.get("pay_basis") if p.raw and isinstance(p.raw.raw, dict) else None)
             if basis == "hour" and sal.get("hourly_without_amount_is_below_floor"):
                 ev.fail("salary", f"paid hourly, no amount posted (below the {floor:,} floor): {p.title}")

@@ -47,8 +47,10 @@ class LocationMatcher:
         ref = (reference or load_reference())["geo"]
         self.remote_words = ref.get("remote_words", [])
         self.countries = {code: [normalize(n) for n in names] for code, names in ref["countries"].items()}
+        self.countries_raw = ref["countries"]
         self.state_tokens = {normalize(s) for s in ref["us_states"] + ref["ca_provinces"]}
         self.region_meta = ref["regions"]
+        self.ambiguous = {normalize(c) for c in ref.get("ambiguous_cities", [])}
         self.names: list[tuple[str, str, str, int]] = []  # (name, region, display city, tier)
         for tier_key, tier in (criteria.get("location", "tiers") or {}).items():
             for region, cities in tier.items():
@@ -74,6 +76,18 @@ class LocationMatcher:
         if n in {normalize(s) for s in meta.get("states", [])}:
             return True
         return n in self.countries.get(meta["country"], [])
+
+    def _confirms(self, loc: str, region: str, country: str | None) -> bool:
+        """Does the location string (or the board's country field) place it in `region`?"""
+        meta = self.region_meta[region]
+        if country and country == meta["country"] == "CA":
+            return True         # a Canadian posting's Vancouver / Richmond / Surrey is the BC one
+        words = normalize(re.sub(r"[-,/()]", " , ", loc), lower=False)
+        tokens = {t.strip() for t in re.split(r"\s*,\s*|\s{2,}", words) if t.strip()}
+        tokens |= set(words.split())
+        wanted = {normalize(s, lower=False) for s in meta.get("states", [])} | \
+                 {normalize(c, lower=False) for c in self.countries_raw.get(meta["country"], [])}
+        return any(t in wanted or t.lower() in {w.lower() for w in wanted if len(w) > 3} for t in tokens)
 
     def _country_of(self, comp: str) -> str | None:
         n = normalize(comp)
@@ -125,6 +139,8 @@ class LocationMatcher:
                 for office in pending:
                     if single and country and country != office.country:
                         continue
+                    if normalize(office.city) in self.ambiguous and not self._confirms(loc, office.region, country):
+                        continue        # "Richmond" alone, "US-VA-Richmond", "Surrey, United Kingdom"
                     res.offices.append(office)
                     found = True
             if not found and not self.is_remote(loc):

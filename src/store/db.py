@@ -245,9 +245,24 @@ class Store:
 
     # --- discovery ----------------------------------------------------------
     def discovered_boards(self) -> list[sqlite3.Row]:
-        return self.conn.execute("SELECT * FROM discovered_boards ORDER BY company").fetchall()
+        """One row per board: the same board found under two names ('JP Morgan Chase' /
+        'JPMorganChase') keeps the name it was first found under."""
+        rows = self.conn.execute("SELECT * FROM discovered_boards ORDER BY found_at, company").fetchall()
+        seen, out = set(), []
+        for r in rows:
+            key = (r["platform"], r["slug"].lower())
+            if key not in seen:
+                seen.add(key)
+                out.append(r)
+        return sorted(out, key=lambda r: r["company"])
+
+    def has_board(self, platform: str, slug: str) -> bool:
+        return self.conn.execute("SELECT 1 FROM discovered_boards WHERE platform=? AND lower(slug)=lower(?)",
+                                 (platform, slug)).fetchone() is not None
 
     def add_discovered(self, company: str, platform: str, slug: str, via: str, title: str, ts: str) -> None:
+        if self.has_board(platform, slug):
+            return          # already watched under another name
         self.conn.execute("INSERT OR REPLACE INTO discovered_boards VALUES (?,?,?,?,?,?)",
                           (company, platform, slug, ts, via, title))
 

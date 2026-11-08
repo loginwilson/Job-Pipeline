@@ -249,3 +249,23 @@ def test_bank_internships_and_manager_levels(criteria):
     assert "seniority" in fails("Manager-Data Science (New York, NY)")
     assert "seniority" in fails("Managers, Data Analytics")
     assert not fails("Summer 2027 - Associate Product Manager (New Grad)")
+
+
+def test_ambiguous_city_names_need_their_region(criteria):
+    from src.pipeline.locations import LocationMatcher
+    m = LocationMatcher(criteria)
+    city = lambda s, country=None: [o.city for o in m.match([s], country).offices]
+    assert city("Richmond") == [] and city("US-VA-Richmond") == [] and city("Surrey, United Kingdom") == []
+    assert city("Vancouver, WA") == [] and city("Oakland") == []
+    assert city("Surrey, BC") == ["Surrey"] and city("CA-BC-Vancouver") == ["Vancouver"]
+    assert city("Vancouver", "CA") == ["Vancouver"] and city("Oakland, CA") == ["Oakland"]
+    assert city("Toronto") == ["Toronto"] and city("New York, NY") == ["NYC"]
+
+
+def test_store_roles_without_pay(criteria):
+    from src.pipeline.gates import Gates
+    g = Gates(criteria)
+    store = g.evaluate(_p(criteria, "Full Time - Sales Associate - Hardware", ["Help customers on the sales floor."], pay=""))
+    assert "salary" in {f.gate for f in store.failures}
+    saas = g.evaluate(_p(criteria, "Sales Associate", ["Sell our software to retail brands."], pay=""))
+    assert "salary" not in {f.gate for f in saas.failures}
