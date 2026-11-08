@@ -601,12 +601,7 @@ ALL_TABS = [HOME, JOBS, PICKS, PASSED, COMPANIES, CONTACTS_TAB, PROGRAMS, COMPAN
             DROPPED, UNPARSED, FUNNEL, HEALTH]
 
 # --- grad programs: their own view with lighter rules ---------------------------
-PROGRAM_RX = re.compile(
-    r"\b(?:new grad(?:uate)?s?|graduate (?:program|leadership|scheme|rotational|associate)|grad program|"
-    r"university (?:hire|graduate|grad)|campus (?:hire|full[- ]time)|rotational|rotation program|"
-    r"(?:leadership|career|operations|management|business|analyst|associate) development program|"
-    r"leadership program|early[- ]career|emerging talent|class of 202[6-8]|202[78] (?:start|graduates?|new grad)|"
-    r"wolf graduate|associates? program|analyst program|fellowship)\b", re.I)
+from ..pipeline.programs import PROGRAM_RX  # noqa: E402  (new grad / rotational program titles)
 PROGRAM_HEADERS = ["Add", "Company", "Program", "Where it stands", "Location", "Salary", "Experience ask",
                    "Posting ID"]
 # a program is hidden only for these: things you can't change (skills, degree, citizenship,

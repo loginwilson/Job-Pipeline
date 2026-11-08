@@ -13,6 +13,7 @@ from datetime import date
 from ..config import Criteria
 from ..textmatch import find_terms, normalize, term_spans
 from . import qualifications
+from .programs import PROGRAM_RX
 from .fields import field_of
 from .normalize import Posting
 from .tn import TNResult, map_tn
@@ -255,8 +256,11 @@ class Gates:
         market = {"USD": "US", "CAD": "CA"}.get(comp.currency or "", p.location.market or "US")
         m = markets.get(market) or {}
         mid = comp.midpoint_annual
-        if mid < m.get("floor", 0):
-            ev.fail("salary", f"midpoint {comp.currency or ''} {mid:,.0f} below floor {m.get('floor'):,}: "
+        floor = m.get("floor", 0)
+        if m.get("program_floor") and PROGRAM_RX.search(p.title or ""):
+            floor = m["program_floor"]              # grad programs: lower pay minimum (your choice, Nov 8)
+        if mid < floor:
+            ev.fail("salary", f"midpoint {comp.currency or ''} {mid:,.0f} below floor {floor:,}: "
                               f"{comp.matched_text}")
         elif mid < m.get("comfortable", 0):
             ev.flag("Low base — check incentives")

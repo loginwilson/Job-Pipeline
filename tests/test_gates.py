@@ -513,3 +513,10 @@ def test_language_in_title_and_real_estate_banking_is_a_stretch(full_criteria):
     cre = ["We finance commercial real estate and multifamily properties."] + ["Words about the role here."] * 12
     ev = g.evaluate(_p(full_criteria, "Loan Management, Commercial Real Estate Finance Analyst", cre))
     assert "Stretch: banking × real assets" in ev.flags and not any(f.startswith("Preferred") for f in ev.flags)
+
+
+def test_grad_programs_pass_at_90k(evaluate):
+    gates = lambda title, pay: {f.gate for f in evaluate(title=title, lines=[f"Base salary: {pay}"]).failures}
+    assert "salary" not in gates("The Wolf Graduate Program (2027)", "$90,000")
+    assert "salary" in gates("Business Operations Associate", "$90,000")       # other roles: $100K as before
+    assert "salary" in gates("Rotational Development Program", "$80,000")
