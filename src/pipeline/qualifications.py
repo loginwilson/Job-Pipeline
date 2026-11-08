@@ -37,13 +37,18 @@ def required_lines(p: Posting, criteria: Criteria) -> list[str]:
         for sec in p.sections.sections:
             if sec.kind == "preferred" or (sec.heading and find_terms(sec.heading, skip, first_only=True)):
                 continue
-            out += [item_text(ln) for ln in sec.lines if ln.startswith("- ")]
+            if sec.kind == "intro" and not sec.heading:
+                # the untitled opening: only lines that state a degree or years
+                out += [item_text(ln) for ln in sec.lines if _DEGREE.search(ln) or re.search(r"\byears?\b", ln, re.I)]
+            else:
+                out += [item_text(ln) for ln in sec.lines]
     for kind, ln in p.sections.kind_of_line():
         if kind != "required" and _REQUIRED_CUE.search(ln) and not find_terms(ln, pref_terms, first_only=True):
             out.append(item_text(ln))
     return [ln for ln in dict.fromkeys(out) if ln]
 
 
+_FLUENCY = re.compile(r"\b(?:fluen\w*|proficien\w*|native|bilingual|business[- ]level|professional[- ]level|written and spoken|spoken and written|speak\w*)\b", re.I)
 _ADVANCED_PREFERRED = re.compile(
     r"\(?[^,.;()]*\b(?:advanced|graduate|master'?s|masters|mba|ph\.?d)\b[^,.;()]*\b(?:preferred|a plus|desired|nice to have)\b[^,.;()]*\)?",
     re.I)
@@ -66,7 +71,13 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
     hits: list[Hit] = []
     strong = cred.get("strong_degree_fields", []) or []
     quant = cred.get("quantitative_field_terms", []) or []
+    mine = {str(x).lower() for x in criteria.get("candidate", "languages", default=["English"]) or []}
+    others = [x for x in criteria.get("other_languages", default=[]) or [] if str(x).lower() not in mine]
     for line in required_lines(p, criteria):
+        lang_hit = find_terms(line, others, first_only=True)
+        if lang_hit and _FLUENCY.search(line) and not find_terms(_ADVANCED_PREFERRED.sub(" ", line), soft, first_only=True):
+            hits.append(Hit("credentials", line, f"requires {lang_hit[0].term}"))
+            continue
         # "(Advanced degree preferred)" softens the advanced degree, not the bachelor's ask
         core = _ADVANCED_PREFERRED.sub(" ", line)
         softened = bool(find_terms(core, soft, first_only=True))

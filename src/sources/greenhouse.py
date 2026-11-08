@@ -11,6 +11,8 @@ the one-request-per-company rule holds.
 """
 from __future__ import annotations
 
+import re
+
 from typing import Any
 
 from ..pipeline.html_text import html_to_lines
@@ -30,7 +32,10 @@ class GreenhouseSource(Source):
             name = ((j.get("location") or {}).get("name") or "").strip()
             if name:
                 locs.append(name)
-            for office in j.get("offices") or []:
+            # offices are the company's internal groupings ("HQ" = San Jose for a São Paulo job):
+            # used only when the job's own location is blank or vague
+            vague = not name or re.search(r"multiple|various|locations|anywhere|flexible", name, re.I)
+            for office in (j.get("offices") or []) if vague else []:
                 loc = (office.get("location") or office.get("name") or "").strip()
                 if loc and loc not in locs:
                     locs.append(loc)

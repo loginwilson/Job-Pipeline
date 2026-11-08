@@ -22,7 +22,9 @@ candidate:
   # between graduation and this date. Later stated starts are flagged, not dropped.
   latest_preferred_start: 2027-08-01
   # degree fields Login has (or that clearly cover him) — used by the credentials rule
-  degree_fields: [business, finance, real estate, hospitality, hotel, tourism, travel, management]
+  # languages Login can work in; a REQUIRED line asking for fluency in any other language drops the posting
+  languages: [English]
+  degree_fields: [business, finance, real estate, hospitality, hotel, tourism, travel, hospitality management, hotel management, tourism management, business management, business administration]
 
 
 # 1 ── EMPLOYMENT TYPE ─────────────────────────────────────────
@@ -92,7 +94,7 @@ experience:
   pass_clean: [new grad, new graduate, entry level, early career, recent graduate, "0-1 years"]
   # headings that mark requirement sections (also used by rules 7 and 8)
   parse_sections:
-    required: [minimum qualifications, basic qualifications, required qualifications, requirements, qualifications, what you'll need, what we require, what you bring, what you'll bring, what we're looking for, we're looking for, who you are, about you, you have, must have, skills and experience, what you need, you need, we'd love to hear from you, ideal candidate, your profile, profil recherché, your skills, required skills, key skills, skills required, experience and skills, experience required, required experience, education and experience, education]
+    required: [minimum qualifications, basic qualifications, required qualifications, requirements, qualifications, what you'll need, what we require, what you bring, what you'll bring, what we're looking for, we're looking for, who you are, about you, you have, must have, skills and experience, what you need, you need, we are looking for, fit if, a fit, your background, love to meet you, who wins, what we care about, thrive if, should apply if, what it takes, we'd love to hear from you, ideal candidate, your profile, profil recherché, your skills, required skills, key skills, skills required, experience and skills, experience required, required experience, education and experience, education]
     preferred: [preferred qualifications, nice to have, bonus points, plus, preferred, what we value, sets you apart, stand out, extra credit, bonus]
     # When a posting has NO recognised requirements heading, bullets under any other heading are
     # read as requirements, except under these (duties, perks, company blurbs):
@@ -166,10 +168,10 @@ work_authorization:
 # REQUIRED line demands coding with no non-coding alternative on that line.
 technical:
   drop_titles: [engineer, engineering, "eng.", "engr", ingénieur, ingenieur, developer, application development, software development, scientist, data scientist, machine learning, ml engineer, architect, devops, sre, programmer]
-  keep_titles: [gtm engineer, go to market engineer, solutions engineer, sales engineer, prompt engineer, solutions engineering, sales engineering]
+  keep_titles: []   # sales / solutions / GTM engineers used to be kept; they need a technical background (Nov 8 audit)
   required_drop:
     languages: [Python, JavaScript, TypeScript, Java, C++, C#, Ruby, Scala, Rust, Kotlin, Swift, Golang, PHP]
-    phrases: [production code, production-quality code, write code, writing code, coding experience, programming experience, software development experience, software engineering experience, years of software engineering, build and train machine learning models, train machine learning models, building machine learning models, training ML models, building ML models]
+    phrases: [production code, production-quality code, write code, writing code, coding experience, programming experience, software development experience, software engineering experience, years of software engineering, build and train machine learning models, train machine learning models, building machine learning models, training ML models, building ML models, a technical background, strong technical background, engineering background, technical degree, video editing, graphic design experience, design portfolio, portfolio of work, Salesforce administration]
   # if any of these appears on the same line, the line offers a non-coding path → keep
   ok_alternatives: [SQL, Excel, spreadsheets, Tableau, Power BI, Looker, no-code, low-code, Zapier, n8n, Clay, Airtable, AI tools, ChatGPT, LLMs, statistical packages, or equivalent]
 
@@ -181,9 +183,9 @@ technical:
 credentials:
   drop_title_terms: [PhD, Ph.D., MBA, JD, postdoc, postdoctoral, doctoral]   # the title itself names a degree he doesn't have
   drop_required: [MBA, JD, Juris Doctor, law degree, "Master's degree", "Masters degree", "Master of", PhD, Ph.D., doctorate, CPA, bar admission, admitted to the bar, licensed attorney, registered nurse, RN license, PE license, professional engineer]
-  unrelated_degree_fields: [computer science, computer engineering, software engineering, electrical engineering, mechanical engineering, engineering, nursing, medicine, pharmacy, architecture, physics, chemistry, biology, mathematics, statistics, data science]
+  unrelated_degree_fields: [computer science, computer engineering, software engineering, electrical engineering, mechanical engineering, engineering, nursing, medicine, pharmacy, architecture, physics, chemistry, biology, mathematics, statistics, data science, graphic design, visual communication, fine arts, industrial design, film]
   # a bachelor's in one of these is genuinely yours (finance/economics alone don't count when the line is quantitative)
-  strong_degree_fields: [business, hospitality, hotel, tourism, travel, real estate, management, marketing, communications, any field, any discipline, liberal arts]
+  strong_degree_fields: [business, hospitality, hotel, tourism, travel, real estate, business administration, hospitality management, marketing, communications, any field, any discipline, liberal arts]
   # "degree in a quantitative field" and the like: drop unless a strong field above is also accepted
   quantitative_field_terms: [quantitative field, quantitative discipline, quantitative degree, quantitative major, technical field, technical discipline, technical degree, STEM, analytical field, engineering field, mathematical field]
   softeners: [or equivalent, equivalent experience, or related experience, preferred, a plus, nice to have, any field, any discipline, not required, not necessary, not a requirement, isnt required, is not needed, dont need, do not need, no prior, not expected]
@@ -192,7 +194,7 @@ credentials:
 # 9 ── START DATE ──────────────────────────────────────────────
 timing:
   drop_start_before_graduation: true
-  drop_title_terms: [january start, winter start, spring start, january 2027, spring 2027, winter 2027, december start]   # starts before graduation / not May–Aug
+  drop_title_terms: [january start, winter start, spring start, january 2027, spring 2027, winter 2027, december start, december 2026, fall 2026, winter 2026, 2026 graduates, 2026 grads, class of 2026, december graduates]   # starts before graduation / not May–Aug
   flag_start_after: "Starts after Aug 1 — check OPT timing"
 
 
@@ -243,9 +245,9 @@ tracking:                   # how your Status column is followed up
 field_fit:
   core_families:          # always kept
     hospitality_travel: [hotel, hotels, hospitality, resort, resorts, travel, tourism, guest experience, guest relations, revenue management, revenue manager, rooms division, front office, food and beverage, F&B, lodging, airline, airlines, cruise, concierge, catering, venue, venues, restaurant group, timeshare, vacation ownership]
-    real_estate: [real estate, property, properties, leasing, multifamily, CRE, REIT, acquisitions, development associate, development analyst, land development, construction management, asset management analyst, investment sales, proptech, facilities]
+    real_estate: [real estate, property, properties, leasing, multifamily, CRE, REIT, acquisitions, development associate, development analyst, land development, construction management, asset management analyst, investment sales, proptech]
   families:               # kept unless an unrelated-field term is also in the title
-    ops_strategy: [operations, business operations, bizops, strategy, strategic, chief of staff, founders office, founder's office, rotational, leadership program, leadership development, development program, management trainee, generalist, project manager, project coordinator, project associate, implementation, special projects, founder associate, founders associate]
+    ops_strategy: [operations, business operations, bizops, strategy, strategic, chief of staff, founders office, founder's office, rotational, leadership program, leadership development, development program, management trainee, generalist, project manager, project coordinator, project associate, implementation, special projects, founder associate, founders associate, facilities, workplace operations]
     sales_client: [sales, business development, BDR, SDR, account executive, account manager, account representative, account coordinator, customer success, client success, client service, client services, client relations, client experience, customer experience, relationship manager, partnerships, partner, GTM, go to market, revenue operations, AE, success manager]
     marketing_events: [marketing, brand, content, events, event, conferences, social media, growth, communications, public relations, PR, community, media planning, media buyer, media buying, advertising, creative, influencer, sponsorship, merchandising]
     consulting: [consultant, consulting, advisory, deployment strategist, forward deployed]
@@ -259,7 +261,8 @@ field_fit:
     hr_people: [recruiter, recruiting, talent acquisition, sourcer, human resources, HR, people partner, people operations, compensation, benefits, HRIS, talent operations]
     corporate_finance: [financial analyst, FP&A, finance analyst, finance associate, financial planning, strategic finance, corporate finance, finance & strategy, finance and strategy]
     product: [product manager, product management, associate product manager, APM, product owner, product designer, program manager]
-    tech: [IT, information technology, help desk, desktop support, security, cybersecurity, network, systems administrator, salesforce administrator, salesforce consultant, servicenow, workday, sap, dynamics 365, crm consultant, technical support, solutions architect, hardware, firmware, manufacturing, production, warehouse, big data]
+    design: [designer, graphic design, art director, illustrator, animator, video editor, videographer, photographer, UX, UI, motion design]
+    tech: [IT, information technology, help desk, desktop support, security, cybersecurity, network, systems administrator, salesforce administrator, salesforce consultant, servicenow, workday, sap, dynamics 365, crm consultant, technical support, solutions architect, hardware, firmware, manufacturing, production, warehouse, big data, sales engineer, solutions engineer, GTM engineer, go to market engineer, sales engineering, solutions engineering, engineer]
   data_title_terms: [data analyst, data analytics, data science, data engineer, business intelligence, BI, analytics engineer, data operations, data partnerships, data labeling]   # dropped unless a kept family is also in the title
 
 
@@ -269,4 +272,11 @@ field_fit:
 # "Research Associate" asking for backtests, asset pricing and machine learning).
 specialist_text:
   drop_at: 4
-  terms: [backtest, backtests, backtesting, asset pricing, stochastic, econometric, econometrics, time series, machine learning, deep learning, neural network, statistical modeling, statistical models, quantitative research, quantitative models, quantitative financial models, systematic strategies, systematic investment, derivatives pricing, monte carlo, optimization techniques, linear algebra, calculus, Matlab, C++, Python, R programming, PyTorch, TensorFlow, Kubernetes, distributed systems, microservices, data structures, algorithms, computer science, software engineering, CI/CD, API development, PhD, peer-reviewed, publications]
+  terms: [backtest, backtests, backtesting, asset pricing, stochastic, econometric, econometrics, time series, machine learning, deep learning, neural network, statistical modeling, statistical models, quantitative research, quantitative models, quantitative financial models, systematic strategies, systematic investment, derivatives pricing, monte carlo, optimization techniques, linear algebra, calculus, Matlab, C++, Python, R programming, PyTorch, TensorFlow, Kubernetes, distributed systems, microservices, data structures, algorithms, computer science, software engineering, CI/CD, API development, PhD, peer-reviewed, publications, OTC derivatives, derivatives, market making, market maker, liquidity provision, sales & trading, Series 7, Series 63, SIE, hedge fund, hedge funds, crypto markets, capital markets]
+
+# ── OTHER LANGUAGES ────────────────────────────────────────────
+# A required line asking for fluency in a language not in candidate.languages drops the posting.
+other_languages: [Mandarin, Chinese, Cantonese, Japanese, Korean, Spanish, Portuguese, French, German, Italian, Arabic, Hindi, Russian, Vietnamese, Thai, Tagalog, Hebrew, Turkish, Dutch, Polish, Indonesian, Malay, Swedish, Norwegian, Danish, Finnish, Greek, Czech, Ukrainian, Farsi, Urdu, Bengali, Punjabi, Tamil]
+
+# A posting with fewer words of description than this can't be checked (e.g. just a careers link): dropped.
+description_min_words: 40

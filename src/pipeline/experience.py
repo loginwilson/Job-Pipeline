@@ -17,8 +17,8 @@ _WORDNUM = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 
             "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twelve": 12, "fifteen": 15}
 _N = r"(\d{1,2}(?:\.\d)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fifteen)"
 _YEARS_RE = re.compile(
-    rf"\b{_N}\s*\+?\s*(?:(?:-|–|to)\s*{_N}\s*\+?\s*)?(?:\(\d+\)\s*)?(?:\+\s*)?(years?|yrs?|months?)\b"
-    r"(?:\s*\+)?(?P<tail>[^.;]{0,90})",
+    rf"\b{_N}\s*\+?\s*(?:(?:-|–|to)\s*{_N}\s*\+?\s*)?(?:\(\d+\)\s*)?(?:\+\s*)?(years?|yrs?|months?|anos|años|ans)\b"
+    r"(?:\s*\+)?(?=(?P<tail>[^.;]{0,90}))",
     re.IGNORECASE,
 )
 _NOT_EXPERIENCE_NEXT = re.compile(
@@ -26,7 +26,7 @@ _NOT_EXPERIENCE_NEXT = re.compile(
     r"plan|warranty|cliff|vesting|anniversary|history|track record of growth|ago|from now|later)\b",
     re.IGNORECASE,
 )
-_EXPERIENCE_WORD = re.compile(r"\bexperience|\bbackground\b|\bworking (?:in|as|on|with)\b|\bin (?:a|an)\b", re.I)
+_EXPERIENCE_WORD = re.compile(r"\bexperience|\bexperiência|\bexperiencia|\bem\b|\ben\b|\bbackground\b|\bworking (?:in|as|on|with)\b|\bin (?:a|an)\b", re.I)
 
 
 @dataclass
@@ -100,7 +100,10 @@ def parse_experience(kind_lines: list[tuple[str, str]], title: str, criteria: Cr
             else:
                 ask_kind = "required"
             line_asks.append(Ask(years, ask_kind, line.lstrip("- ").strip()))
-        if len(line_asks) > 1 and re.search(r"\bor\b", line, re.I):
+        if len(line_asks) > 1 and re.search(r"\bfollowed by\b|\band then\b|\bplus (?:an additional|another)\b", line, re.I):
+            # "2+ years in banking, ideally followed by 2+ years in BizOps" → 4 years in all
+            line_asks = [Ask(sum(a.years for a in line_asks), line_asks[0].kind, line_asks[0].line)]
+        elif len(line_asks) > 1 and re.search(r"\bor\b", line, re.I):
             # alternative paths on one line ("1+ years with a bachelor's; or 3+ years") → the easiest one
             line_asks = [min(line_asks, key=lambda a: a.years)]
         res.asks.extend(line_asks)

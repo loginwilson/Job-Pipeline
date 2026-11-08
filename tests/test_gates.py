@@ -109,8 +109,9 @@ def test_technical(evaluate):
     for title in ("Software Engineer", "Forward Deployed Engineer", "Data Scientist", "Solutions Architect",
                   "Frontend Developer"):
         assert "technical" in gates_of(evaluate(title=title, lines=[PAY_OK])), title
+    # sales / solutions / GTM engineers need a technical background: dropped since the Nov 8 audit
     for title in ("GTM Engineer", "Solutions Engineer", "Sales Engineer", "Prompt Engineer"):
-        assert evaluate(title=title, lines=[PAY_OK]).passed, title
+        assert "technical" in gates_of(evaluate(title=title, lines=[PAY_OK])), title
     req = ["## Requirements"]
     assert "technical" in gates_of(evaluate(lines=[PAY_OK] + req + ["- Proficiency in Python"]))
     assert "technical" in gates_of(evaluate(title="GTM Engineer", lines=[PAY_OK] + req + ["- Experience writing production code"]))
@@ -296,7 +297,7 @@ def test_audit_round4_titles(criteria):
     assert "not_related_to_degree" in fails("RN Case Manager")
     assert "technical" in fails("Computational Scientist, Structural & Thermal")
     assert "technical" in fails("Ingénieur(e) mécanique turbine-alternateur")
-    assert not fails("GTM Engineer") and not fails("Graduate Sales Engineer")
+    assert "technical" in fails("GTM Engineer") and "technical" in fails("Graduate Sales Engineer")
 
 
 def test_audit_round5_titles(criteria):
@@ -392,3 +393,30 @@ def test_whole_posting_specialist_vocabulary(evaluate):
     assert "specialist" in {f.gate for f in evaluate(lines=quant + [PAY_OK]).failures}
     ops = ["Own vendor operations and build dashboards in Excel and SQL.", "Partner with sales and finance."]
     assert "specialist" not in {f.gate for f in evaluate(lines=ops + [PAY_OK]).failures}
+
+
+def test_audit_nov8_reading_rules(evaluate, full_criteria):
+    """Misses found reading every passing posting on Nov 8."""
+    from conftest import PAY_OK
+    from src.pipeline.gates import Gates
+    gates = lambda lines, **kw: {f.gate for f in evaluate(lines=lines + [PAY_OK], **kw).failures}
+    # language fluency
+    assert "credentials" in gates(["## Requirements", "- Fluent written and spoken English and Mandarin"])
+    assert "credentials" not in gates(["## Requirements", "- Spanish fluency is a plus"])
+    # "a technical background" / design skills
+    assert "technical" in gates(["## Requirements", "- A technical background"])
+    assert "technical" in gates(["## Requirements", "- Video editing and graphic design experience required"])
+    # headings seen in the audit
+    assert "experience" in gates(["## What We Are Looking For", "4+ years in Sales Operations"])
+    assert "experience" in gates(["## You may be a fit if", "You have 4+ years of experience in sales"])
+    # years written in Portuguese; "followed by" adds up
+    assert "experience" in gates(["## Requisitos", "- 4-8 anos em facilities"])
+    assert "experience" in gates(["## Requirements", "- 2+ years in investment banking, followed by 2+ years in BizOps"])
+    # 'Construction Management' is not your degree
+    assert "credentials" in gates(["## Requirements", "- Bachelor's degree in Civil Engineering, Construction Management, or Architecture"])
+    # graduation timing
+    assert "start_date" in gates([], title="Incoming GTM Associate - December 2026 Graduates")
+    # a link with no description, under the full rules
+    g = Gates(full_criteria)
+    from tests.test_gates import _p
+    assert "no_description" in {f.gate for f in g.evaluate(_p(full_criteria, "Founding Sales", ["https://icon.com/careers"], pay="")).failures}

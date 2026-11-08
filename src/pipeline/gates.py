@@ -51,7 +51,7 @@ class Gates:
 
     def evaluate(self, p: Posting) -> Evaluation:
         ev = Evaluation(posting=p)
-        for rule in (self.real_opening, self.opt_related, self.field_fit, self.specialist_text, self.employment_type, self.location, self.salary, self.experience,
+        for rule in (self.real_opening, self.opt_related, self.field_fit, self.has_description, self.specialist_text, self.employment_type, self.location, self.salary, self.experience,
                      self.seniority, self.work_authorization, self.technical_and_credentials, self.timing):
             rule(p, ev)
         ev.field = field_of(p, self.c)
@@ -71,6 +71,15 @@ class Gates:
             ev.fail("not_related_to_degree", f"'{hit[0].term}' field isn't supported by your degree (OPT): {p.title}")
 
     # 12. field fit (your fields only) ------------------------------------
+    def has_description(self, p: Posting, ev: Evaluation) -> None:
+        """A posting whose text is just a link (or empty) can't be checked against anything."""
+        need = int(self.c.get("description_min_words", default=0) or 0)
+        if not need or p.raw is None or not getattr(p.raw, "description_lines", None):
+            return                                        # title-only first pass: decided later
+        words = sum(len(ln.split()) for ln in p.description_lines if not ln.strip().startswith("http"))
+        if words < need:
+            ev.fail("no_description", "no job description to check (open the link to read it)")
+
     def specialist_text(self, p: Posting, ev: Evaluation) -> None:
         """Reads the WHOLE description: a posting packed with quant / engineering / research
         vocabulary is a specialist job whatever its title says."""
