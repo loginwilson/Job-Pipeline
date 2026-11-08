@@ -278,3 +278,21 @@ def test_company_auto_add_needs_the_company_description(criteria):
                                              "apartments, helping landlords and renters."]), co, T1)
     fits = {r["company"]: r["fit"] for r in store.target_companies()}
     assert fits == {"Lease AI": "AI × real estate"}
+
+
+def test_company_jobs_add_moves_a_dropped_job_to_my_applications(criteria):
+    store, sheet = Store(":memory:"), FakeBackend()
+    store.upsert_posting("ashby:decagon:1", "Decagon", "Revenue Operations Associate", "https://x/1", None, None, T1)
+    store.save_score("ashby:decagon:1", False, [{"gate": "experience", "matched": "2+ yrs required: 2-4 years"}],
+                     [], {"experience": "2+ yrs required"}, T1)
+    store.note_target_company("Decagon", "AI-forward", "AI support agents", "test", T1)
+    store.save_company_owner("Decagon", {"Status": "Target"}, T1)
+    store.commit()
+    sync_all(sheet, store, criteria, T1)
+    jobs = sheet.read(["Company jobs"])["Company jobs"]
+    assert jobs[0][0] == "Add" and len(jobs) == 2 and jobs[1][3].startswith("No: experience")
+    sheet.set_cell("Company jobs", 1, 0, "Add")
+    sync_all(sheet, store, criteria, T2)
+    apps = tab(sheet, APPLICATIONS)
+    assert [r[ID_COL] for r in apps] == ["ashby:decagon:1"] and apps[0][DEC] == "Apply"
+    assert len([r for r in sheet.read(["Company jobs"])["Company jobs"][1:] if any(r)]) == 0

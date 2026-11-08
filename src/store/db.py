@@ -91,6 +91,10 @@ CREATE TABLE IF NOT EXISTS company_owner (     -- your Companies-tab columns, mi
     company TEXT PRIMARY KEY, interest TEXT, status TEXT, contact TEXT, notes TEXT, updated_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS forced_in (         -- jobs you added from the Company jobs tab
+    posting_id TEXT PRIMARY KEY, added_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS sheet_tabs (      -- what was last written to each Sheet tab (skip unchanged)
     tab TEXT PRIMARY KEY, content_hash TEXT, written_at TEXT
 );
@@ -247,7 +251,30 @@ class Store:
     def pipeline_rows(self) -> list[sqlite3.Row]:
         return self.conn.execute(
             "SELECT p.*, s.* FROM postings p JOIN scores s USING(posting_id) "
-            "WHERE s.passed=1 AND p.merged_into IS NULL").fetchall()
+            "WHERE (s.passed=1 OR p.posting_id IN (SELECT posting_id FROM forced_in)) "
+            "AND p.merged_into IS NULL").fetchall()
+
+    def add_forced(self, posting_id: str, ts: str) -> None:
+        """You picked this job yourself: it shows (in My applications) whatever the rules say."""
+        if self.conn.execute("SELECT 1 FROM forced_in WHERE posting_id=?", (posting_id,)).fetchone():
+            return
+        self.conn.execute("INSERT INTO forced_in VALUES (?, ?)", (posting_id, ts))
+        prev = self.conn.execute("SELECT * FROM owner_state WHERE posting_id=?", (posting_id,)).fetchone()
+        if prev is None or not (prev["decision"] or "").strip() or prev["decision"] == "Pending":
+            self.save_owner_state(posting_id, {"Decision": "Apply", "Interest": (prev["interest"] if prev else "") or "",
+                                               "Status": (prev["status"] if prev else "") or "",
+                                               "Notes": (prev["notes"] if prev else "") or ""}, ts)
+
+    def company_job_rows(self, companies: set[str]) -> list[sqlite3.Row]:
+        """Open jobs at the given companies (lower-cased names) that aren't already on your tabs."""
+        if not companies:
+            return []
+        rows = self.conn.execute(
+            "SELECT p.posting_id, p.company, p.title, p.url, s.passed, s.gate, s.matched, s.display "
+            "FROM postings p LEFT JOIN scores s USING(posting_id) "
+            "WHERE p.closed_at IS NULL AND p.merged_into IS NULL AND COALESCE(s.passed, 0) = 0 "
+            "AND p.posting_id NOT IN (SELECT posting_id FROM forced_in)").fetchall()
+        return [r for r in rows if (r["company"] or "").strip().lower() in companies]
 
     def dropped_rows(self, days: int, ts: str) -> list[sqlite3.Row]:
         cutoff = (datetime.fromisoformat(ts) - timedelta(days=days)).isoformat(timespec="seconds")

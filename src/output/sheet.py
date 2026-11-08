@@ -328,8 +328,72 @@ def _validation(sid: int, col: int, options: list[str], rows: int) -> dict:
 
 # --- the other tabs (rewritten in full each run) ---------------------------
 DROPPED, UNPARSED, FUNNEL, HEALTH = "Dropped", "Unparsed alerts", "Funnel", "Board health"
-COMPANIES = "Companies"
-ALL_TABS = DECISION_TABS + [COMPANIES, DROPPED, UNPARSED, FUNNEL, HEALTH]
+COMPANIES, COMPANY_JOBS = "Companies", "Company jobs"
+ALL_TABS = DECISION_TABS + [COMPANIES, COMPANY_JOBS, DROPPED, UNPARSED, FUNNEL, HEALTH]
+COMPANY_JOB_HEADERS = ["Add", "Company", "Role", "Passes your rules?", "Location", "Salary", "Experience ask",
+                       "Posting ID"]
+_GATE_WORDS = {"field": "not your field", "experience": "experience", "salary": "pay below your minimum",
+               "location": "location", "technical": "technical skill", "credentials": "credential / degree",
+               "seniority": "too senior", "employment_type": "job type", "start_date": "start date",
+               "work_authorization": "work authorization", "specialist": "specialist job",
+               "no_description": "no description", "not_related_to_degree": "not related to your degree (OPT)",
+               "not_a_real_opening": "not a real opening"}
+
+
+def read_company_job_adds(existing: dict) -> list[str]:
+    """Posting IDs you marked 'Add' on the Company jobs tab."""
+    rows = existing.get(COMPANY_JOBS) or []
+    if not rows:
+        return []
+    idx = {h: i for i, h in enumerate(rows[0])}
+    if "Add" not in idx or "Posting ID" not in idx:
+        return []
+    out = []
+    for raw in rows[1:]:
+        raw = _pad(raw, len(rows[0]))
+        if (raw[idx["Add"]] or "").strip().lower() == "add" and raw[idx["Posting ID"]]:
+            out.append(raw[idx["Posting ID"]].strip())
+    return out
+
+
+def company_job_rows(store: Store, cap: int = 1500) -> list[list]:
+    """Every open job at a company you marked Target-type (or Interest 4-5) that isn't already
+    on your job tabs - with why the rules left it out. Pick Add to put it in My applications."""
+    owner = store.company_owner()
+    picked = {c.strip().lower() for c, o in owner.items()
+              if (o.get("status") or "") in TARGET_STATUSES or _interest(o.get("interest") or "") >= 4}
+    out = []
+    for r in store.company_job_rows(picked):
+        d = json.loads(r["display"] or "{}")
+        why = (_GATE_WORDS.get(r["gate"] or "", r["gate"] or "not checked yet")
+               + (f": {str(r['matched'] or '')[:90]}" if r["matched"] else ""))
+        out.append(["", r["company"], hyperlink(r["url"], r["title"]), "No: " + why,
+                    d.get("location", ""), d.get("salary", ""), d.get("experience", ""), r["posting_id"]])
+    # closest misses first: experience / pay / location before field and technical drops
+    order = {"experience": 0, "salary": 1, "location": 2, "start_date": 3, "credentials": 4}
+    by_id = {r["posting_id"]: r for r in store.company_job_rows(picked)}
+    out.sort(key=lambda row: (row[1].lower(), order.get(by_id[row[7]]["gate"] or "", 9), str(row[2])))
+    return out[:cap]
+
+
+def _company_jobs_tab(meta: dict, rows: list[list], existing_len: int) -> list[dict]:
+    m = meta[COMPANY_JOBS]
+    sid = m["id"]
+    grid = [COMPANY_JOB_HEADERS] + rows
+    need = len(grid) + 20
+    padded = grid + [[""] * len(COMPANY_JOB_HEADERS)] * (min(existing_len, need) - len(grid))
+    return [
+        {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
+            "rowCount": need, "columnCount": max(m.get("cols", 26), len(COMPANY_JOB_HEADERS)), "frozenRowCount": 1}},
+            "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
+        {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
+                         "rows": [{"values": [_cell(v) for v in _pad(r, len(COMPANY_JOB_HEADERS))]} for r in padded],
+                         "fields": "userEnteredValue"}},
+        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
+                        "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+                        "fields": "userEnteredFormat.textFormat.bold"}},
+        _validation(sid, 0, ["Add"], need),
+    ]
 
 # --- pipeline 2: the Companies tab -------------------------------------------
 COMPANY_HEADERS = ["Interest", "Status", "Company", "Fit", "What they do", "Open roles", "Roles that fit you",
@@ -491,6 +555,8 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     existing = backend.read(ALL_TABS)
     for name, vals in read_company_owner(existing).items():   # your Companies-tab columns first
         store.save_company_owner(name, vals, ts)
+    for pid in read_company_job_adds(existing):                # jobs you added from Company jobs
+        store.add_forced(pid, ts)
     store.commit()
     dec_requests, info = decision_tab_requests(meta, existing, store, criteria, ts)
     per_tab: dict[str, list[dict]] = {t: [] for t in ALL_TABS}
@@ -500,6 +566,7 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
         per_tab[tab] = _simple_tab(meta, tab, header, rows, len(existing.get(tab, [])))
     crows = company_rows(store, load_target_companies(), ts)
     per_tab[COMPANIES] = _company_tab(meta, crows, len(existing.get(COMPANIES, [])))
+    per_tab[COMPANY_JOBS] = _company_jobs_tab(meta, company_job_rows(store), len(existing.get(COMPANY_JOBS, [])))
     info["companies"] = len(crows)
     # A rewrite makes an open Sheet reload and recalculate (it froze on big tabs), so a tab
     # whose content is the same as last time is left alone.
