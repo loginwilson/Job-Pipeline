@@ -2,10 +2,13 @@ name: hourly pipeline
 
 on:
   schedule:
-    # twice an hour, off the top of the hour. GitHub often delays or skips
-    # scheduled runs; two slots keep postings arriving close to hourly.
+    # four slots an hour, off the top of the hour. GitHub often delays or skips
+    # scheduled runs (overnight it ran ~every 4 hours with two slots); more slots,
+    # more chances. Runs never overlap (concurrency group below).
     # (Free for public repos; a private repo would count these against its minutes.)
+    - cron: "7 * * * *"
     - cron: "17 * * * *"
+    - cron: "32 * * * *"
     - cron: "47 * * * *"
   workflow_dispatch:           # "Run workflow" button for manual runs
     inputs:
