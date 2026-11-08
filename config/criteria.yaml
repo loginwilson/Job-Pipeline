@@ -250,7 +250,7 @@ field_fit:
     ops_strategy: [operations, business operations, bizops, strategy, strategic, chief of staff, founders office, founder's office, rotational, leadership program, leadership development, development program, management trainee, generalist, project manager, project coordinator, project associate, implementation, special projects, founder associate, founders associate, facilities, workplace operations]
     sales_client: [sales, business development, BDR, SDR, account executive, account manager, account representative, account coordinator, customer success, client success, client service, client services, client relations, client experience, customer experience, relationship manager, partnerships, partner, GTM, go to market, revenue operations, AE, success manager]
     marketing_events: [marketing, brand, content, events, event, conferences, social media, growth, communications, public relations, PR, community, media planning, media buyer, media buying, advertising, creative, influencer, sponsorship, merchandising]
-    consulting: [consultant, consulting, advisory, deployment strategist, forward deployed]
+    consulting: [consultant, consulting, advisory, deployment strategist, forward deployed, strategist, agent development]
   # a hospitality/travel company counts even for a generic title, when the posting's opening says so
   core_from_description_lines: 12
   # the company's own opening description puts it in your core fields: any role there counts
