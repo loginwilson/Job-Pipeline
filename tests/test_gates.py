@@ -472,3 +472,12 @@ def test_investment_banking_jobs_with_strategy_titles(full_criteria):
     # the same vocabulary at a real-estate company is your concentration (CMBS / RE finance)
     re_body = ["We are a commercial real estate lender."] + body
     assert "field" not in {f.gate for f in g.evaluate(_p(full_criteria, "Strategy Associate", re_body)).failures}
+
+
+def test_financial_modeling_is_a_missing_hard_skill(evaluate):
+    from conftest import PAY_OK
+    gates = lambda req: {f.gate for f in evaluate(lines=["## Requirements", req, PAY_OK]).failures}
+    assert "technical" in gates("- Advanced financial modeling skills in Excel")      # Excel doesn't excuse it
+    assert "technical" in gates("- Experience building DCF and LBO models")
+    assert "technical" not in gates("- Financial modeling experience a plus")
+    assert "technical" not in gates("- Comfortable with Excel and Google Sheets")

@@ -310,3 +310,8 @@ stretch_banking:
   title_hints: [financing, finance, structured, securitization, securitized, ABS, CMBS, real estate, infrastructure, project finance, solutions, origination, lending, credit]
   # never a stretch: trading, research, wealth / private-client and brokerage-sales titles
   never_titles: [trader, trading, quant, quantitative, equity research, research analyst, wealth, private bank, private client, prime brokerage, sales and trading, sales & trading]
+
+# Hard skills you don't have (your words, Nov 8: "a hard skill I don't have like CS or
+# analyst (financial modelling)"). A REQUIRED line asking for one drops the job; "a plus" /
+# "preferred" keeps it. Coding is covered by the technical rule.
+missing_skills: [financial modeling, financial modelling, financial models, financial model, build models, building models, build financial models, building financial models, three-statement, 3-statement, DCF, discounted cash flow, LBO, leveraged buyout model, valuation models, valuation modeling, operating models, merger model, accretion dilution]

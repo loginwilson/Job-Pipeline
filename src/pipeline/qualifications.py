@@ -87,6 +87,13 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
         if (lang or phrase) and not softened and not find_terms(line, ok_alt, first_only=True):
             hits.append(Hit("technical", line, f"requires {lang or phrase[0].term}"))
             continue
+        # hard skills you don't have (e.g. financial modeling): softening wording keeps the line,
+        # but a tool on the same line (Excel) doesn't - modeling in Excel is still modeling
+        if not softened:
+            miss = find_terms(line, criteria.get("missing_skills", default=[]) or [], first_only=True)
+            if miss:
+                hits.append(Hit("technical", line, f"requires {miss[0].term}"))
+                continue
         # 8. credentials
         if softened:
             continue
