@@ -86,6 +86,9 @@ experience:
   drop_at_or_above: 3
   # Experience asks with no number that still mean "several years" (drop; the line is shown in Dropped)
   unstated_senior_terms: [extensive experience, significant experience, deep experience, many years of experience, several years of experience, multiple years of experience, several years experience, spent years, seasoned professional, mentor junior, mentor less experienced, mentoring junior, mentor and develop junior, train and mentor less experienced]
+  # With NO years stated, these mid-level titles drop unless the title also has an entry cue (your choice, Nov 8)
+  no_years_mid_level_titles: [manager, account executive, consultant, officer, advisor, producer, broker, executive, partner]
+  entry_title_cues: [associate, assistant, junior, jr, entry, new grad, graduate, early career, analyst, coordinator, trainee, program, apprentice, " I", "1", campus, university, "2027", "2026"]
   pass_clean: [new grad, new graduate, entry level, early career, recent graduate, "0-1 years"]
   # headings that mark requirement sections (also used by rules 7 and 8)
   parse_sections:
@@ -225,3 +228,29 @@ tracking:                   # how your Status column is followed up
   follow_up_after_days: 10  # flag "Follow up" when an application hasn't moved this long
   follow_up_statuses: [Applied, Networking]
   dropped_tab_max_rows: 10000   # the Dropped tab shows the newest drops (all are kept in the database)
+
+# 12 ── FIELD FIT (your choice, Nov 8) ──────────────────────────
+# Keep only roles in these families (matched on the job title). Your core fields
+# (hospitality/travel, real estate) win over everything; unrelated fields (banking,
+# legal, accounting, insurance, HR, pure data/tech) win over the other families.
+field_fit:
+  core_families:          # always kept
+    hospitality_travel: [hotel, hotels, hospitality, resort, resorts, travel, tourism, guest experience, guest relations, revenue management, revenue manager, rooms division, front office, food and beverage, F&B, lodging, airline, airlines, cruise, concierge, catering, venue, venues, restaurant group, timeshare, vacation ownership]
+    real_estate: [real estate, property, properties, leasing, multifamily, CRE, REIT, acquisitions, development associate, development analyst, land development, construction management, asset management analyst, investment sales, proptech, facilities]
+  families:               # kept unless an unrelated-field term is also in the title
+    ops_strategy: [operations, business operations, bizops, strategy, strategic, chief of staff, founders office, founder's office, rotational, leadership program, leadership development, development program, management trainee, generalist, project manager, project coordinator, project associate, implementation, special projects, founder associate, founders associate]
+    sales_client: [sales, business development, BDR, SDR, account executive, account manager, account representative, account coordinator, customer success, client success, client service, client services, client relations, client experience, customer experience, relationship manager, partnerships, partner, GTM, go to market, revenue operations, AE, success manager]
+    marketing_events: [marketing, brand, content, events, event, conferences, social media, growth, communications, public relations, PR, community, media planning, media buyer, media buying, advertising, creative, influencer, sponsorship, merchandising]
+    consulting: [consultant, consulting, advisory, deployment strategist, forward deployed]
+  # a hospitality/travel company counts even for a generic title, when the posting's opening says so
+  core_from_description_lines: 8
+  core_description_terms: [hotel, hotels, hospitality, resort, resorts, travel company, travel platform, airline]
+  unrelated_title_terms:  # drop, even when a kept-family word is also in the title
+    banking_markets: [investment banking, banker, banking, trader, trading, quant, quantitative, capital markets, derivatives, securities, clearing, settlement, fixed income, equities, equity research, wealth, private bank, private client, brokerage, prime brokerage, fund accounting, portfolio manager, treasury, lending, loan, credit analyst, structured products, investment services, investment operations, fund services]
+    legal_compliance: [legal, counsel, paralegal, compliance, regulatory, AML, KYC, audit, auditor, risk, fraud, investigator, sanctions, privacy]
+    accounting_insurance: [accounting, accountant, tax, controller, controllership, bookkeeper, payroll, accounts payable, accounts receivable, underwriter, underwriting, claims, actuarial, actuary, insurance, reinsurance, broker]
+    hr_people: [recruiter, recruiting, talent acquisition, sourcer, human resources, HR, people partner, people operations, compensation, benefits, HRIS, talent operations]
+    corporate_finance: [financial analyst, FP&A, finance analyst, finance associate, financial planning, strategic finance, corporate finance, finance & strategy, finance and strategy]
+    product: [product manager, product management, associate product manager, APM, product owner, product designer, program manager]
+    tech: [IT, information technology, help desk, desktop support, security, cybersecurity, network, systems administrator, salesforce administrator, salesforce consultant, servicenow, workday, sap, dynamics 365, crm consultant, technical support, solutions architect, hardware, firmware, manufacturing, production, warehouse, big data]
+  data_title_terms: [data analyst, data analytics, data science, data engineer, business intelligence, BI, analytics engineer, data operations, data partnerships, data labeling]   # dropped unless a kept family is also in the title

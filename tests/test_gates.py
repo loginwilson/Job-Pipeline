@@ -318,3 +318,29 @@ def test_audit_round6_assistants_and_drivers(criteria):
     assert "not_related_to_degree" in fails("Pathologists' Assistant")
     assert "salary" not in fails("Executive Assistant") and "salary" not in fails("Trading Assistant")
     assert not fails("Research Assistant", pay="Salary: $110,000 - $130,000/year")   # posted pay wins
+
+
+def test_field_fit_keeps_your_fields_only(full_criteria):
+    from src.pipeline.gates import Gates
+    g = Gates(full_criteria)
+    fails = lambda t, lines=(): {f.gate for f in g.evaluate(_p(full_criteria, t, list(lines))).failures}
+    for t in ("Hotel Revenue Management Analyst", "Real Estate Acquisitions Analyst", "Business Operations Associate",
+              "Sales Development Representative", "Marketing Coordinator", "Strategy Consulting Analyst",
+              "CMBS and Real Estate Finance Analyst", "Marketing Data Analyst", "Chief of Staff"):
+        assert "field" not in fails(t), t
+    for t in ("Investment Banking Analyst", "Compliance Operations Analyst", "Sales Trader", "Tax Associate",
+              "Financial Analyst", "Associate Product Manager", "Data Analyst", "Recruiting Coordinator",
+              "Underwriting Associate", "Trade Support Associate"):
+        assert "field" in fails(t), t
+    # a hospitality company's generic title counts
+    assert "field" not in fails("Analyst", ["Marriott is a global hotel company."])
+
+
+def test_no_years_mid_level_titles(full_criteria):
+    from src.pipeline.gates import Gates
+    g = Gates(full_criteria)
+    fails = lambda t, lines=(): {f.gate for f in g.evaluate(_p(full_criteria, t, list(lines))).failures}
+    assert "experience" in fails("Business Operations Manager")
+    assert "experience" in fails("Account Executive")
+    assert "experience" not in fails("Associate Account Executive")
+    assert "experience" not in fails("Account Executive", ["## Requirements", "- 1+ years of sales experience"])

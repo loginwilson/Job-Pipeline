@@ -15,8 +15,21 @@ from src.sources.base import CompRange, RawPosting  # noqa: E402
 
 
 @pytest.fixture(scope="session")
-def criteria():
+def full_criteria():
+    """criteria.yaml exactly as configured (including the field-fit rule)."""
     return load_criteria()
+
+
+@pytest.fixture(scope="session")
+def criteria():
+    """criteria.yaml without the field-fit and no-years mid-level rules, so each other
+    rule's tests can use any title; those two rules are tested with full_criteria."""
+    import copy
+    from src.config import Criteria
+    data = copy.deepcopy(load_criteria().data)
+    data.pop("field_fit", None)
+    data["experience"].pop("no_years_mid_level_titles", None)
+    return Criteria(data)
 
 
 @pytest.fixture(scope="session")

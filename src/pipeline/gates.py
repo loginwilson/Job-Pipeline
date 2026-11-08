@@ -51,7 +51,7 @@ class Gates:
 
     def evaluate(self, p: Posting) -> Evaluation:
         ev = Evaluation(posting=p)
-        for rule in (self.real_opening, self.opt_related, self.employment_type, self.location, self.salary, self.experience,
+        for rule in (self.real_opening, self.opt_related, self.field_fit, self.employment_type, self.location, self.salary, self.experience,
                      self.seniority, self.work_authorization, self.technical_and_credentials, self.timing):
             rule(p, ev)
         ev.field = field_of(p, self.c)
@@ -69,6 +69,32 @@ class Gates:
         hit = find_terms(p.title, terms, first_only=True)
         if hit:
             ev.fail("not_related_to_degree", f"'{hit[0].term}' field isn't supported by your degree (OPT): {p.title}")
+
+    # 12. field fit (your fields only) ------------------------------------
+    def field_fit(self, p: Posting, ev: Evaluation) -> None:
+        ff = self.c.get("field_fit", default=None)
+        if not ff:
+            return
+        title = p.title
+        core = next((f for f, terms in (ff.get("core_families") or {}).items()
+                     if find_terms(title, terms, first_only=True)), None)
+        if not core and ff.get("core_description_terms"):
+            intro = p.description_lines[: int(ff.get("core_from_description_lines", 8))]
+            if find_terms(intro, ff["core_description_terms"], first_only=True):
+                core = "hospitality_travel (company)"
+        if core:
+            return                                   # your degree's core fields always stay
+        for group, terms in (ff.get("unrelated_title_terms") or {}).items():
+            hit = find_terms(title, terms, first_only=True)
+            if hit:
+                ev.fail("field", f"{group.replace('_', ' ')} ('{hit[0].term}'): {title}")
+                return
+        kept = next((f for f, terms in (ff.get("families") or {}).items()
+                     if find_terms(title, terms, first_only=True)), None)
+        if kept:
+            return
+        data = find_terms(title, ff.get("data_title_terms") or [], first_only=True)
+        ev.fail("field", f"{'pure data role' if data else 'not one of your fields'}: {title}")
 
     # 1. employment type --------------------------------------------------
     def employment_type(self, p: Posting, ev: Evaluation) -> None:
@@ -137,6 +163,12 @@ class Gates:
                            first_only=True)
         if vague:
             ev.fail("experience", f"'{vague[0].term}' (several years implied): {vague[0].line}")
+            return
+        exp = self.c.get("experience", default={}) or {}
+        if not p.experience.asks and not p.experience.clean_terms:
+            mid = find_terms(p.title, exp.get("no_years_mid_level_titles") or [], first_only=True)
+            if mid and not find_terms(p.title, exp.get("entry_title_cues") or [], first_only=True):
+                ev.fail("experience", f"no years stated and '{mid[0].term}' is a mid-level title: {p.title}")
 
     # 5. seniority -----------------------------------------------------------
     def seniority(self, p: Posting, ev: Evaluation) -> None:
