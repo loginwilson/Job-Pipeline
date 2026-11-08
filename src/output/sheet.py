@@ -23,6 +23,8 @@ Per run: ONE read + ONE spreadsheets.batchUpdate. Tabs are created on first run.
 """
 from __future__ import annotations
 
+import hashlib
+
 import json
 import re
 import logging
@@ -252,9 +254,10 @@ def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Cr
 
 def _decision_tab(m: dict, grid: list[list], existing_len: int) -> list[dict]:
     sid = m["id"]
-    total = max(len(grid), existing_len)
-    padded = grid + [[""] * len(HEADERS)] * (total - len(grid))
-    need_rows = max(m.get("rows", 1000), total + 1)
+    # the grid is resized to the rows plus a little room (shrinking deletes the rest); old rows
+    # inside that room are blanked
+    need_rows = len(grid) + 20
+    padded = grid + [[""] * len(HEADERS)] * (min(existing_len, need_rows) - len(grid))
     col = {h: i for i, h in enumerate(HEADERS)}
     reqs: list[dict] = [
         {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
@@ -392,15 +395,52 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     ts = ts or datetime.now(timezone.utc).isoformat(timespec="seconds")
     meta = backend.ensure_tabs(ALL_TABS)
     existing = backend.read(ALL_TABS)
-    requests, info = decision_tab_requests(meta, existing, store, criteria, ts)
+    dec_requests, info = decision_tab_requests(meta, existing, store, criteria, ts)
+    per_tab: dict[str, list[dict]] = {t: [] for t in ALL_TABS}
+    for r in dec_requests:                       # group by tab so unchanged tabs can be skipped
+        per_tab[_tab_of(r, meta)].append(r)
     for tab, (header, rows) in other_tab_rows(store, criteria, ts, unparsed).items():
-        requests += _simple_tab(meta, tab, header, rows, len(existing.get(tab, [])))
-    for i, tab in enumerate(ALL_TABS):           # keep the tab order: To review first
-        requests.append({"updateSheetProperties": {"properties": {"sheetId": meta[tab]["id"], "index": i},
+        per_tab[tab] = _simple_tab(meta, tab, header, rows, len(existing.get(tab, [])))
+    # A rewrite makes an open Sheet reload and recalculate (it froze on big tabs), so a tab
+    # whose content is the same as last time is left alone.
+    last = dict(store.conn.execute("SELECT tab, content_hash FROM sheet_tabs").fetchall())
+    requests: list[dict] = []
+    skipped = []
+    for tab in ALL_TABS:
+        h = hashlib.sha1(json.dumps(per_tab[tab], sort_keys=True, default=str).encode()).hexdigest()
+        if last.get(tab) == h and existing.get(tab):
+            skipped.append(tab)
+            continue
+        requests += per_tab[tab]
+        store.conn.execute("INSERT OR REPLACE INTO sheet_tabs (tab, content_hash, written_at) VALUES (?, ?, ?)",
+                           (tab, h, ts))
+    order = [t for t in ALL_TABS if meta[t].get("index") != ALL_TABS.index(t)]
+    for tab in order:                            # keep the tab order: To review first
+        requests.append({"updateSheetProperties": {"properties": {"sheetId": meta[tab]["id"],
+                                                                  "index": ALL_TABS.index(tab)},
                                                    "fields": "index"}})
-    backend.batch_update(requests)
+    if requests:
+        backend.batch_update(requests)
+    store.commit()
     info["requests"] = len(requests)
+    info["unchanged_tabs"] = skipped
     return info
+
+
+def _tab_of(req: dict, meta: dict) -> str:
+    """Which tab a request writes to (by sheetId)."""
+    ids = {m["id"]: t for t, m in meta.items()}
+    def find(o):
+        if isinstance(o, dict):
+            if "sheetId" in o:
+                return o["sheetId"]
+            o = list(o.values())
+        if isinstance(o, list):
+            for v in o:
+                if isinstance(v, (dict, list)) and (r := find(v)) is not None:
+                    return r
+        return None
+    return ids[find(req)]
 
 
 # --- backends ---------------------------------------------------------------
@@ -431,7 +471,7 @@ class GspreadBackend:
             p = have[t]["properties"]
             gp = p.get("gridProperties", {})
             out[t] = {"id": p["sheetId"], "rows": gp.get("rowCount", 1000), "cols": gp.get("columnCount", 26),
-                      "has_cf": bool(have[t].get("conditionalFormats"))}
+                      "has_cf": bool(have[t].get("conditionalFormats")), "index": p.get("index")}
         return out
 
     def read(self, tabs: list[str]) -> dict[str, list[list[str]]]:

@@ -81,6 +81,10 @@ CREATE TABLE IF NOT EXISTS board_health (
     last_error_at TEXT, count_last INTEGER, count_prev INTEGER, status TEXT,
     first_polled TEXT, last_pass_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS sheet_tabs (      -- what was last written to each Sheet tab (skip unchanged)
+    tab TEXT PRIMARY KEY, content_hash TEXT, written_at TEXT
+);
 """
 
 

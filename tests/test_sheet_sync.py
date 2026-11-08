@@ -224,3 +224,14 @@ def test_sort_flags_and_source_names(criteria, board, evals):
     LOC = H.index("Location")
     tiers = [int(r[LOC].split("tier ")[1][0]) for r in rows if "tier " in r[LOC]]
     assert tiers == sorted(tiers)                                         # same day found → NYC first
+
+
+def test_unchanged_tabs_are_not_rewritten_and_tabs_shrink(criteria, board, evals):
+    """A rewrite makes an open Sheet reload (it froze on big tabs): unchanged tabs are skipped."""
+    store, sheet = Store(":memory:"), FakeBackend()
+    run(store, sheet, board, evals, criteria, T1)
+    run(store, sheet, board, evals, criteria, T1)            # nothing changed
+    info = sync_all(sheet, store, criteria, T1)
+    assert REVIEW in info["unchanged_tabs"]
+    n = len(tab(sheet, REVIEW))
+    assert sheet.tabs[REVIEW]["rows"] <= n + 1 + 20           # sized to fit, not to its largest ever

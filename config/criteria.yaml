@@ -234,7 +234,7 @@ freshness:
 tracking:                   # how your Status column is followed up
   follow_up_after_days: 10  # flag "Follow up" when an application hasn't moved this long
   follow_up_statuses: [Applied, Networking]
-  dropped_tab_max_rows: 10000   # the Dropped tab shows the newest drops (all are kept in the database)
+  dropped_tab_max_rows: 1000   # the Dropped tab shows the newest drops (kept small: big tabs froze the Sheet) (all are kept in the database)
 
 # 12 ── FIELD FIT (your choice, Nov 8) ──────────────────────────
 # Keep only roles in these families (matched on the job title). Your core fields
