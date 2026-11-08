@@ -307,3 +307,14 @@ def test_audit_round5_titles(criteria):
     assert "not_related_to_degree" in fails("Advanced Practice Provider, Complex Gyn")
     assert "salary" in fails("Food Service Worker") and "salary" in fails("Athletic Aide I")
     assert "salary" not in fails("Finance Operator", pay="Salary: $120,000 - $140,000/year")
+
+
+def test_audit_round6_assistants_and_drivers(criteria):
+    from src.pipeline.gates import Gates
+    g = Gates(criteria)
+    fails = lambda t, pay="": {f.gate for f in g.evaluate(_p(criteria, t, [], pay=pay)).failures}
+    for t in ("Operations Assistant", "Assistant Account Executive", "Driver (Dallas-Fort Worth)", "Research Assistant"):
+        assert "salary" in fails(t), t
+    assert "not_related_to_degree" in fails("Pathologists' Assistant")
+    assert "salary" not in fails("Executive Assistant") and "salary" not in fails("Trading Assistant")
+    assert not fails("Research Assistant", pay="Salary: $110,000 - $130,000/year")   # posted pay wins
