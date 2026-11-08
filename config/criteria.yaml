@@ -265,7 +265,7 @@ field_fit:
     banking_markets: [investment banking, banker, banking, trader, trading, quant, quantitative, capital markets, derivatives, securities, clearing, settlement, fixed income, equities, equity research, wealth, private bank, private client, brokerage, prime brokerage, fund accounting, portfolio manager, treasury, lending, loan, credit analyst, structured products, investment services, investment operations, fund services]
     legal_compliance: [legal, counsel, paralegal, compliance, regulatory, AML, KYC, audit, auditor, risk, fraud, investigator, sanctions, privacy]
     accounting_insurance: [accounting, accountant, tax, controller, controllership, bookkeeper, payroll, accounts payable, accounts receivable, underwriter, underwriting, claims, actuarial, actuary, insurance, reinsurance, broker]
-    hr_people: [recruiter, recruiting, talent acquisition, sourcer, human resources, HR, people partner, people operations, compensation, benefits, HRIS, talent operations]
+    hr_people: [talent, recruiter, recruiting, talent acquisition, sourcer, human resources, HR, people partner, people operations, compensation, benefits, HRIS, talent operations]
     corporate_finance: [financial analyst, FP&A, finance analyst, finance associate, financial planning, strategic finance, corporate finance, finance & strategy, finance and strategy]
     product: [product manager, product management, associate product manager, APM, product owner, product designer, program manager]
     design: [designer, graphic design, art director, illustrator, animator, video editor, videographer, photographer, UX, UI, motion design]
