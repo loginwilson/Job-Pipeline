@@ -365,3 +365,16 @@ def test_grad_programs_tab_lists_programs_with_lighter_rules(criteria):
     sync_all(sheet, store, criteria, T2)
     assert "a:1" in [r[ID_COL] for r in tab(sheet, APPLICATIONS)]
     assert any("Grad program" in r[FLAGS] for r in tab(sheet, REVIEW) if r[ID_COL] == "a:5")
+
+
+def test_a_company_you_type_on_the_companies_tab_is_kept(criteria):
+    store, sheet = Store(":memory:"), FakeBackend()
+    sync_all(sheet, store, criteria, T1)
+    rows = sheet.read(["Companies"])["Companies"]
+    n = len([r for r in rows if any(r)])
+    sheet.set_cell("Companies", n, 2, "Palantir Technologies")
+    sheet.set_cell("Companies", n, 1, "Target")
+    sync_all(sheet, store, criteria, T2)
+    rows = sheet.read(["Companies"])["Companies"]
+    hit = [r for r in rows if len(r) > 2 and r[2] == "Palantir Technologies"]
+    assert hit and hit[0][1] == "Target" and hit[0][11] == "you added on the Sheet"

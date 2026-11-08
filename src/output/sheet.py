@@ -671,8 +671,11 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     ts = ts or datetime.now(timezone.utc).isoformat(timespec="seconds")
     meta = backend.ensure_tabs(ALL_TABS)
     existing = backend.read(ALL_TABS)
+    known_companies = {r["company"].strip().lower() for r in store.target_companies()}
     for name, vals in read_company_owner(existing).items():   # your Companies-tab columns first
         store.save_company_owner(name, vals, ts)
+        if name.strip().lower() not in known_companies:        # a company you typed in yourself
+            store.note_target_company(name.strip(), "", "", "you added on the Sheet", ts)
     for pid in read_company_job_adds(existing):                # jobs you added from Company jobs
         store.add_forced(pid, ts)
     for pid in load_picked_jobs():                             # jobs you asked to add directly
@@ -890,6 +893,8 @@ class FakeBackend:
     # convenience for tests / owner simulation
     def set_cell(self, tab: str, row: int, col: int, value: str) -> None:
         grid = self.tabs[tab]["grid"]
+        while len(grid) <= row:          # typing into an empty row below the data
+            grid.append([])
         grid[row] = _pad(grid[row], col + 1)
         grid[row] = [c if isinstance(c, dict) else {} for c in grid[row]]
         grid[row][col] = {"stringValue": value}
