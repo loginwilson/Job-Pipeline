@@ -269,3 +269,16 @@ def test_store_roles_without_pay(criteria):
     assert "salary" in {f.gate for f in store.failures}
     saas = g.evaluate(_p(criteria, "Sales Associate", ["Sell our software to retail brands."], pay=""))
     assert "salary" not in {f.gate for f in saas.failures}
+
+
+def test_low_pay_title_with_posted_pay_is_read_in_full(criteria):
+    from src.config import Company
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.run import evaluate_one
+    from src.sources.base import RawPosting
+    raw = RawPosting(platform="lever", slug="x", native_id="1", title="Special Inspector", url="u",
+                     locations=["New York, NY"], workplace_type="onsite", employment_type="Full-time",
+                     description_lines=["Pay: $60.00 - $70.00 per hour"])
+    ev = evaluate_one(raw, Company("X", "lever", "x"), criteria, Gates(criteria), LocationMatcher(criteria))
+    assert "salary" not in {f.gate for f in ev.failures}          # $60-70/hr ≈ $135K meets the floor

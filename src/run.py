@@ -70,12 +70,18 @@ def evaluate_company(company, payload=None, criteria=None, gates=None, matcher=N
     return out
 
 
+def stub_drops(ev: Evaluation) -> bool:
+    """A title/location-only check is final unless its only problem is salary: the pay may
+    be in the description it hasn't seen ('Special Inspector' with $45-55/hr inside)."""
+    return not ev.passed and any(f.gate != "salary" for f in ev.failures)
+
+
 def evaluate_one(raw, company, criteria, gates, matcher) -> Evaluation:
     """Rules for one posting. Fast path: a posting that already fails on its title,
     location or job type is not put through the (slow) description parsing."""
     stub = dataclasses.replace(raw, description_lines=[])
     quick = gates.evaluate(normalize_posting(stub, company, criteria, matcher))
-    if not quick.passed:
+    if stub_drops(quick):
         quick.posting.raw = raw            # keep the full posting for the snapshot
         quick.posting.description_lines = raw.description_lines
         return quick
@@ -107,7 +113,7 @@ def _fetch_with_details(src, company, criteria, gates, matcher, store, ts, cache
                               country=(loc.get("country") or "").upper() or None,
                               workplace_type="remote" if loc.get("remote") and not loc.get("hybrid") else None,
                               employment_type=(item.get("typeOfEmployment") or {}).get("label"))
-        return gates.evaluate(normalize_posting(stub, company, criteria, matcher)).passed
+        return not stub_drops(gates.evaluate(normalize_posting(stub, company, criteria, matcher)))
 
     prefix = f"{src.platform}:{company.slug}:"
     extra = ({"place_ok": lambda d: matcher.match_component(d) is not None}
@@ -272,6 +278,35 @@ def run_jsearch(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> l
     store.commit()
     log.info("JSearch: %d searches, %d postings", spent, len(evals))
     return evals
+
+
+def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> int:
+    """Open JSearch results are only fetched once; re-apply today's rules to them every run
+    (from the stored copy) so a rule fix also removes search results that no longer qualify."""
+    src, changed = JSearchSource(), 0
+    rows = store.conn.execute(
+        "SELECT p.posting_id, p.company, p.snapshot FROM postings p JOIN scores s USING(posting_id) "
+        "WHERE p.posting_id LIKE 'jsearch:%' AND p.closed_at IS NULL AND p.merged_into IS NULL "
+        "AND s.passed = 1 AND p.snapshot IS NOT NULL").fetchall()
+    for r in rows:
+        try:
+            job = (json.loads(r["snapshot"]) or {}).get("job")
+            if not job:
+                continue          # stored before full copies were kept; it ages out after 7 days
+            raw = src.parse({"data": [job]})[0]
+            company = Company(name=r["company"] or raw.company or "", platform="jsearch", slug=raw.slug)
+            ev = evaluate_one(raw, company, criteria, gates, matcher)
+        except Exception as exc:      # one bad stored copy never stops the run
+            log.warning("re-check %s: %s", r["posting_id"], exc)
+            continue
+        if not ev.passed:
+            changed += 1
+        store.save_score(r["posting_id"], ev.passed, [{"gate": f.gate, "matched": f.matched} for f in ev.failures],
+                         ev.flags, display_fields(ev), ts)
+    store.commit()
+    if changed:
+        log.info("Re-checked search results: %d no longer meet the must-haves", changed)
+    return changed
 
 
 def discover_from_hn(store: Store, cfg: dict, known: set[str], matcher, ts: str) -> list[Company]:
@@ -477,6 +512,7 @@ def main(argv: list[str] | None = None) -> int:
         cfg = load_sources_config()
         muse_evals, muse_complete = run_muse(store, cfg.get("muse") or {}, criteria, gates, matcher, ts)
         jsearch_evals = run_jsearch(store, cfg.get("jsearch") or {}, criteria, gates, matcher, ts)
+        recheck_search_postings(store, criteria, gates, matcher, ts)
         known = {normalize(c.name) for c in companies} | {normalize(r["company"]) for r in store.discovered_boards()}
         if muse_evals or jsearch_evals:
             try:

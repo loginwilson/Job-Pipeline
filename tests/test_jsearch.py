@@ -156,3 +156,31 @@ def test_truncated_board_closes_nothing(criteria):
     store_evaluations(store, co, ev, "2026-11-07T10:00:00+00:00", criteria)
     store_evaluations(store, co, [], "2026-11-07T11:00:00+00:00", criteria, close=False)
     assert store.conn.execute("SELECT closed_at FROM postings").fetchone()[0] is None
+
+
+def test_stored_search_results_are_rechecked(criteria):
+    import json
+    from src.config import Company
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.run import recheck_search_postings, store_evaluations, evaluate_raws
+    from src.sources.jsearch import JSearchSource
+    from src.store.db import Store
+    job = {"job_id": "x1", "job_title": "Full Time - Sales Associate - Hardware", "employer_name": "Lowes",
+           "job_city": "Austin", "job_state": "TX", "job_country": "US", "job_employment_type": "Full-time",
+           "job_description": "Help customers on the sales floor.", "job_apply_link": "https://x/1"}
+    raw = JSearchSource().parse({"data": [job]})[0]
+    store, g, m = Store(":memory:"), Gates(criteria), LocationMatcher(criteria)
+    ev = evaluate_raws([raw], criteria, g, m)
+    store_evaluations(store, Company("JSearch", "jsearch", "search"), ev, "2026-11-08T00:00:00+00:00", criteria, prefix="jsearch:")
+    # pretend it passed under older rules
+    store.conn.execute("UPDATE scores SET passed=1"); store.conn.execute("UPDATE postings SET snapshot=?", (json.dumps(raw.raw),))
+    assert recheck_search_postings(store, criteria, g, m, "2026-11-08T01:00:00+00:00") == 1
+    assert store.conn.execute("SELECT passed FROM scores").fetchone()[0] == 0
+
+
+def test_pay_in_title_is_read(criteria):
+    from conftest import FIXTURES  # noqa
+    from test_gates import _p
+    p = _p(criteria, "Medical Device Driver - 1st Shift - $22.10/hr", [], pay="")
+    assert p.comp.known and p.comp.midpoint_annual < 100000

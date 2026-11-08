@@ -138,7 +138,7 @@ def normalize_posting(raw: RawPosting, company: Company, criteria: Criteria,
     loc = matcher.match(raw.locations, raw.country, raw.workplace_type, "\n".join(lines))
     etype, ereason = employment_type_of(raw, lines)
     best = loc.best
-    comp = parse_comp(lines, raw.comp_ranges, raw.comp_extra, criteria,
+    comp = parse_comp(([f"Pay: {raw.title}"] if "$" in raw.title else []) + lines, raw.comp_ranges, raw.comp_extra, criteria,
                       market=loc.market, region=best.region if best else None,
                       employment_type=etype, matcher=matcher)
     exp = parse_experience(sections.kind_of_line(), raw.title, criteria)

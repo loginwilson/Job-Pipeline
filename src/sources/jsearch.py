@@ -88,5 +88,6 @@ class JSearchSource(Source):
                     company=j.get("employer_name"),
                     raw={"apply_links": [o.get("apply_link") for o in options] + [j.get("job_apply_link")],
                          "publisher": j.get("job_publisher"), "website": j.get("employer_website"),
-                         "pay_basis": (j.get("job_salary_period") or "").lower() or None}))
+                         "pay_basis": (j.get("job_salary_period") or "").lower() or None,
+                         "job": j}))
         return out
