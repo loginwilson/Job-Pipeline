@@ -179,6 +179,10 @@ credentials:
   drop_title_terms: [PhD, Ph.D., MBA, JD, postdoc, postdoctoral, doctoral]   # the title itself names a degree he doesn't have
   drop_required: [MBA, JD, Juris Doctor, law degree, "Master's degree", "Masters degree", "Master of", PhD, Ph.D., doctorate, CPA, bar admission, admitted to the bar, licensed attorney, registered nurse, RN license, PE license, professional engineer]
   unrelated_degree_fields: [computer science, computer engineering, software engineering, electrical engineering, mechanical engineering, engineering, nursing, medicine, pharmacy, architecture, physics, chemistry, biology, mathematics, statistics, data science]
+  # a bachelor's in one of these is genuinely yours (finance/economics alone don't count when the line is quantitative)
+  strong_degree_fields: [business, hospitality, hotel, tourism, travel, real estate, management, marketing, communications, any field, any discipline, liberal arts]
+  # "degree in a quantitative field" and the like: drop unless a strong field above is also accepted
+  quantitative_field_terms: [quantitative field, quantitative discipline, quantitative degree, quantitative major, technical field, technical discipline, technical degree, STEM, analytical field, engineering field, mathematical field]
   softeners: [or equivalent, equivalent experience, or related experience, preferred, a plus, nice to have, any field, any discipline, not required, not necessary, not a requirement, isnt required, is not needed, dont need, do not need, no prior, not expected]
 
 

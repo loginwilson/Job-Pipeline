@@ -344,3 +344,18 @@ def test_no_years_mid_level_titles(full_criteria):
     assert "experience" in fails("Account Executive")
     assert "experience" not in fails("Associate Account Executive")
     assert "experience" not in fails("Account Executive", ["## Requirements", "- 1+ years of sales experience"])
+
+
+def test_quantitative_degree_requirements(evaluate):
+    from conftest import PAY_OK
+    gates = lambda req: {f.gate for f in evaluate(lines=["## Requirements", req, PAY_OK]).failures}
+    for req in ("- Bachelor’s degree (Advanced degree preferred) in a quantitative field, such as Mathematics, "
+                "Finance, Economics, Statistics, Physics, or Computer Science.",
+                "- Bachelor's degree in Finance, Mathematics, Statistics, or Computer Science",
+                "- BS in a STEM field"):
+        assert "credentials" in gates(req), req
+    for req in ("- Bachelor's degree in Business, Finance, Economics, or a related field",
+                "- Bachelor's degree in Hospitality, Mathematics, or Statistics",
+                "- Bachelor's degree in a quantitative field preferred",
+                "- Bachelor's degree in Finance or Economics"):
+        assert "credentials" not in gates(req), req

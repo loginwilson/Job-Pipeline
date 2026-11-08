@@ -37,6 +37,11 @@ def required_lines(p: Posting, criteria: Criteria) -> list[str]:
     return [ln for ln in dict.fromkeys(out) if ln]
 
 
+_ADVANCED_PREFERRED = re.compile(
+    r"\(?[^,.;()]*\b(?:advanced|graduate|master'?s|masters|mba|ph\.?d)\b[^,.;()]*\b(?:preferred|a plus|desired|nice to have)\b[^,.;()]*\)?",
+    re.I)
+
+
 def _case_sensitive(line: str, terms: list[str]) -> str | None:
     for t in terms:
         if re.search(rf"(?<![A-Za-z0-9+#]){re.escape(t)}(?![A-Za-z0-9+#])", line):
@@ -52,8 +57,12 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
     soft = cred.get("softeners", []) or []
     fields = criteria.get("candidate", "degree_fields", default=[]) or []
     hits: list[Hit] = []
+    strong = cred.get("strong_degree_fields", []) or []
+    quant = cred.get("quantitative_field_terms", []) or []
     for line in required_lines(p, criteria):
-        softened = bool(find_terms(line, soft, first_only=True))
+        # "(Advanced degree preferred)" softens the advanced degree, not the bachelor's ask
+        core = _ADVANCED_PREFERRED.sub(" ", line)
+        softened = bool(find_terms(core, soft, first_only=True))
         # 7. technical
         lang = _case_sensitive(line, req.get("languages", []) or [])
         phrase = find_terms(line, req.get("phrases", []) or [], first_only=True)
@@ -63,6 +72,15 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
         # 8. credentials
         if softened:
             continue
+        # a degree "in a quantitative field" / mostly math-stats-CS-physics: finance or economics
+        # on the list doesn't make it yours; only a business / hospitality / real-estate field does
+        if _DEGREE.search(line) and not find_terms(line, strong, first_only=True):
+            q = find_terms(line, quant, first_only=True)
+            unrel = {h.term for h in find_terms(line, cred.get("unrelated_degree_fields", []) or [])}
+            if q or len(unrel) >= 2:
+                why = q[0].term if q else ", ".join(sorted(unrel)[:3])
+                hits.append(Hit("credentials", line, f"requires a degree in a {why} field" if q else f"requires a {why} degree"))
+                continue
         has_field = bool(find_terms(line, fields, first_only=True))
         c = find_terms(line, cred.get("drop_required", []) or [], first_only=True)
         if c and not _BACHELOR.search(line) and not has_field:
