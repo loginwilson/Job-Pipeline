@@ -5,6 +5,7 @@ Tables: companies, postings, scores, runs, board_health.
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -285,6 +286,8 @@ class Store:
                           (domain,))
 
     def source_due(self, source: str, every_hours: float, ts: str) -> bool:
+        if os.environ.get("PIPELINE_CHECK_ALL") == "1":
+            return True       # manual "check everything now" run (the JSearch budget still applies)
         r = self.conn.execute("SELECT last_complete FROM source_runs WHERE source=?", (source,)).fetchone()
         if r is None or not r["last_complete"]:
             return True

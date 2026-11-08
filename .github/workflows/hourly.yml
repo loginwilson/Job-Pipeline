@@ -7,7 +7,12 @@ on:
     # (Free for public repos; a private repo would count these against its minutes.)
     - cron: "17 * * * *"
     - cron: "47 * * * *"
-  workflow_dispatch: {}        # "Run workflow" button for manual runs
+  workflow_dispatch:           # "Run workflow" button for manual runs
+    inputs:
+      check_all:
+        description: "Check every source and board now, ignoring their daily / 6-hour schedules"
+        type: boolean
+        default: false
 
 concurrency:
   group: pipeline              # never two runs at once (they share the database)
@@ -46,6 +51,7 @@ jobs:
           JSEARCH_API_KEY: ${{ secrets.JSEARCH_API_KEY }}
           ALERTS_IMAP_USER: ${{ secrets.ALERTS_IMAP_USER }}
           ALERTS_IMAP_APP_PASSWORD: ${{ secrets.ALERTS_IMAP_APP_PASSWORD }}
+          PIPELINE_CHECK_ALL: ${{ inputs.check_all && '1' || '0' }}
         run: python -m src.run
 
       - name: Save database
