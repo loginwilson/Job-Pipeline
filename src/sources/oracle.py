@@ -29,6 +29,7 @@ from .workday import Listing
 PAGE = 25
 MAX_PAGES = 48          # up to 1,200 postings per site per poll
 FILTERED_PAGES_FACTOR = 3   # read through your cities' filters: up to 3,600
+MAX_NEW_DETAILS = 150       # new descriptions fetched per site per poll (cached; the rest come next poll)
 API = "https://{host}/hcmRestApi/resources/latest/"
 
 
@@ -109,11 +110,16 @@ class OracleSource(Source):
         host, site = split_slug(slug)
         items = self.fetch_list(slug, sess, place_ok=place_ok)
         details: dict[str, dict] = {}
+        fetched, skipped = 0, set()
         for it in items:
             rid = str(it.get("Id") or "")
             if cache is not None and rid in cache:
                 details[rid] = cache[rid]
             elif rid and (want is None or want(it)):
+                if fetched >= MAX_NEW_DETAILS:
+                    skipped.add(rid)       # judged next poll, once its description is in
+                    continue
+                fetched += 1
                 url = (API.format(host=host) + "recruitingCEJobRequisitionDetails?expand=all&onlyData=true"
                        f"&finder=ById;Id=%22{rid}%22,siteNumber={site}")
                 try:
@@ -122,8 +128,9 @@ class OracleSource(Source):
                     continue
                 if cache is not None:
                     cache[rid] = details[rid]
-        out = Listing(self.parse({"pages": [{"requisitionList": items}], "details": details}, slug))
-        out.truncated = getattr(items, "truncated", False)
+        keep = [it for it in items if str(it.get("Id") or "") not in skipped]
+        out = Listing(self.parse({"pages": [{"requisitionList": keep}], "details": details}, slug))
+        out.truncated = getattr(items, "truncated", False) or bool(skipped)
         return out
 
     def parse(self, payload: Any, slug: str, now=None) -> list[RawPosting]:

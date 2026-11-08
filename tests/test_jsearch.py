@@ -184,3 +184,20 @@ def test_pay_in_title_is_read(criteria):
     from test_gates import _p
     p = _p(criteria, "Medical Device Driver - 1st Shift - $22.10/hr", [], pay="")
     assert p.comp.known and p.comp.midpoint_annual < 100000
+
+
+def test_workday_detail_cap_defers_the_rest(monkeypatch):
+    from src.sources import workday
+    posts = [{"title": f"Analyst {i}", "externalPath": f"/job/NY/{i}", "locationsText": "New York, NY"} for i in range(5)]
+
+    def fake(self, method, url, sess, body=None):
+        if method == "POST":
+            return {"total": 5, "jobPostings": posts}
+        return {"jobPostingInfo": {"title": "Analyst", "jobDescription": "<p>x</p>", "location": "New York, NY"}}
+    monkeypatch.setattr(workday.WorkdaySource, "_request", fake)
+    monkeypatch.setattr(workday, "MAX_NEW_DETAILS", 2)
+    cache = {}
+    out = workday.WorkdaySource().fetch("big.wd1/Careers", want=lambda it: True, cache=cache)
+    assert len(out) == 2 and out.truncated and len(cache) == 2      # 3 wait for the next poll
+    out = workday.WorkdaySource().fetch("big.wd1/Careers", want=lambda it: True, cache=cache)
+    assert len(out) == 4 and len(cache) == 4

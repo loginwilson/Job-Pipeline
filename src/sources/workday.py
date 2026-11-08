@@ -28,6 +28,7 @@ from .base import BACKOFF_S, RETRIES, TIMEOUT_S, USER_AGENT, RawPosting, Source,
 PAGE = 20
 MAX_PAGES = 60          # up to 1,200 postings per site per poll
 FILTERED_PAGES_FACTOR = 3   # read through your cities' filters: up to 3,600
+MAX_NEW_DETAILS = 150       # new descriptions fetched per site per poll (cached; the rest come next poll)
 _COUNTRY = {"united states of america": "US", "united states": "US", "canada": "CA"}
 
 
@@ -131,19 +132,25 @@ class WorkdaySource(Source):
         sess = session or requests.Session()
         items = self.fetch_list(slug, sess, place_ok=place_ok)
         details: dict[str, dict] = {}
+        fetched, skipped = 0, set()
         for it in items:
             path = it.get("externalPath") or ""
             if cache is not None and path in cache:
                 details[path] = cache[path]
             elif path and (want is None or want(it)):
+                if fetched >= MAX_NEW_DETAILS:
+                    skipped.add(path)       # judged next poll, once its description is in
+                    continue
+                fetched += 1
                 try:
                     details[path] = self._request("GET", api_root(slug) + path, sess)
                 except SourceError:
                     continue
                 if cache is not None:
                     cache[path] = details[path]
-        out = Listing(self.parse({"pages": [{"jobPostings": items}], "details": details}, slug))
-        out.truncated = getattr(items, "truncated", False)
+        keep = [it for it in items if (it.get("externalPath") or "") not in skipped]
+        out = Listing(self.parse({"pages": [{"jobPostings": keep}], "details": details}, slug))
+        out.truncated = getattr(items, "truncated", False) or bool(skipped)
         return out
 
     def parse(self, payload: Any, slug: str, now: datetime | None = None) -> list[RawPosting]:
