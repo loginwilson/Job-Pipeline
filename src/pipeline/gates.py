@@ -124,6 +124,13 @@ class Gates:
         # keep any role except legal / HR / tech / design / product ones; finance there is your
         # concentration, so it stays
         if qualifications.is_ai_builder(p.title, self.c):
+            # an AI-builder title is one of your fields - unless it names another field
+            # ('Forward Deployed Accountant'); 'tech' terms are expected in these titles
+            for group, terms in (ff.get("unrelated_title_terms") or {}).items():
+                hit = None if group == "tech" else find_terms(title, terms, first_only=True)
+                if hit:
+                    ev.fail("field", f"{group.replace('_', ' ')} ('{hit[0].term}'): {title}")
+                    return
             ev.flag("AI builder")
             return
         title_domain = self._title_domain(p)

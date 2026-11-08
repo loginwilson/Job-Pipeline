@@ -107,7 +107,14 @@ def test_work_authorization(evaluate):
 
 
 # 7. technical
+def make_full(title):
+    from src.config import load_criteria
+    return _p(load_criteria(), title, ["Words about the role here."] * 12)
+
+
 def test_technical(evaluate):
+    from src.pipeline.gates import Gates
+    from src.config import load_criteria
     for title in ("Software Engineer", "Forward Deployed Engineer", "Data Scientist", "Solutions Architect",
                   "Frontend Developer"):
         assert "technical" in gates_of(evaluate(title=title, lines=[PAY_OK])), title
@@ -119,6 +126,7 @@ def test_technical(evaluate):
         assert "technical" not in gates_of(evaluate(title=title, lines=[PAY_OK])), title
     assert "technical" not in gates_of(evaluate(title="GTM Engineer", lines=[PAY_OK, "## Requirements",
                                                                          "- Comfortable with Python, SQL and APIs"]))
+    assert "field" in {f.gate for f in Gates(load_criteria()).evaluate(make_full("Forward Deployed Accountant")).failures}
     # ... but not software-engineering jobs, or ones asking for production code
     for title in ("Forward Deployed Software Engineer", "Forward Deployed AI Engineer", "Forward Deployed Engineer"):
         assert "technical" in gates_of(evaluate(title=title, lines=[PAY_OK])), title
