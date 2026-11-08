@@ -129,7 +129,7 @@ def _fetch_with_details(src, company, criteria, gates, matcher, store, ts, cache
 
 
 SOURCE_NAMES = {"lever": "Lever", "greenhouse": "Greenhouse", "ashby": "Ashby", "muse": "The Muse",
-                "smartrecruiters": "SmartRecruiters", "jsearch": "JSearch", "workday": "Workday", "oracle": "Oracle"}
+                "smartrecruiters": "SmartRecruiters", "jsearch": "JSearch", "workday": "Workday", "oracle": "Oracle", "workable": "Workable"}
 SEARCH_PLATFORMS = ("muse", "jsearch")
 
 

@@ -73,3 +73,18 @@ def test_oracle_parse_and_link():
     assert r.url.endswith("/sites/CX_1001/job/1") and r.workplace_type == "hybrid"
     assert r.locations == ["New York, NY, United States", "Jersey City, NJ, United States"]
     assert "- Bachelor's degree" in r.description_lines and r.employment_type == "Full time"
+
+
+def test_workable_parse_and_link():
+    from src.resolve.discover import board_from_url
+    from src.sources.workable import WorkableSource
+    assert board_from_url("https://apply.workable.com/tickpick/j/5840ECEB50/apply") == ("workable", "tickpick")
+    assert board_from_url("https://apply.workable.com/j/5840ECEB50") is None
+    payload = {"name": "TickPick", "jobs": [{"title": "Operations Associate", "shortcode": "5840ECEB50",
+               "employment_type": "Full-time", "telecommuting": False, "url": "https://apply.workable.com/tickpick/j/5840ECEB50/",
+               "published_on": "2026-11-01", "country": "United States", "city": "New York", "state": "New York",
+               "locations": [{"country": "United States", "city": "New York", "region": "New York"}],
+               "description": "<p>About</p><ul><li>Bachelor's degree</li></ul>"}]}
+    r = WorkableSource().parse(payload, "tickpick")[0]
+    assert r.locations == ["New York, New York, United States"] and r.country == "US"
+    assert r.native_id == "5840ECEB50" and "- Bachelor's degree" in r.description_lines

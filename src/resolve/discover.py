@@ -82,6 +82,7 @@ _LINK_PATTERNS = [
     ("greenhouse", re.compile(r"greenhouse\.io/.*[?&]for=([A-Za-z0-9_-]+)")),
     ("lever", re.compile(r"jobs\.lever\.co/([A-Za-z0-9_.-]+)")),
     ("ashby", re.compile(r"jobs\.ashbyhq\.com/([A-Za-z0-9_.%-]+)")),
+    ("workable", re.compile(r"apply\.workable\.com/(?:api/v\d/(?:widget/)?accounts/)?([A-Za-z0-9_-]+)")),
     ("smartrecruiters", re.compile(r"(?:jobs|careers)\.smartrecruiters\.com/([A-Za-z0-9_-]+)")),
 ]
 _ORACLE = re.compile(r"https?://([a-z0-9-]+\.fa\.(?:[a-z0-9]+\.)?oraclecloud\.com)/hcmUI/CandidateExperience/[A-Za-z-]+/sites/([A-Za-z0-9_]+)")
@@ -94,7 +95,7 @@ def board_from_url(url: str) -> tuple[str, str] | None:
         return None
     for platform, rx in _LINK_PATTERNS:
         m = rx.search(url)
-        if m and m.group(1).lower() not in ("embed", "jobs", "v1"):
+        if m and m.group(1).lower() not in ("embed", "jobs", "v1", "j", "api"):
             return platform, m.group(1)
     m = _WORKDAY.search(url)
     if m:
