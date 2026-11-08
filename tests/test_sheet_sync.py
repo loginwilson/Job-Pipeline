@@ -296,3 +296,24 @@ def test_company_jobs_add_moves_a_dropped_job_to_my_applications(criteria):
     apps = tab(sheet, APPLICATIONS)
     assert [r[ID_COL] for r in apps] == ["ashby:decagon:1"] and apps[0][DEC] == "Apply"
     assert len([r for r in sheet.read(["Company jobs"])["Company jobs"][1:] if any(r)]) == 0
+
+
+def test_a_job_you_marked_keeps_its_link_when_rules_change(criteria):
+    """Meow / Jain Global lost their links after a rule change: marked jobs now stay live."""
+    store, sheet = Store(":memory:"), FakeBackend()
+    store.upsert_posting("ashby:meow:1", "Meow", "GTM Associate", "https://jobs.example/meow/1", None, {}, T1)
+    store.save_score("ashby:meow:1", True, [], [], {}, T1)
+    store.commit()
+    sync_all(sheet, store, criteria, T1)
+    sheet.set_cell(REVIEW, 1, DEC, "Apply")
+    sync_all(sheet, store, criteria, T1)
+    # a later rule change drops it
+    store.save_score("ashby:meow:1", False, [{"gate": "field", "matched": "not one of your fields"}], [], {}, T2)
+    store.commit()
+    sync_all(sheet, store, criteria, T2)
+    raw = sheet.tabs[APPLICATIONS]["grid"][1]
+    role = raw[H.index("Role")]
+    assert "formulaValue" in role and "jobs.example/meow/1" in role["formulaValue"]
+    flags = tab(sheet, APPLICATIONS)[0][H.index("Flags")]
+    assert "Outside your rules now (field)" in flags and "Closed" not in flags
+    assert store.is_tracked("ashby:meow:1")

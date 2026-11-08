@@ -202,6 +202,9 @@ def _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses,
         if changed and now - changed >= timedelta(days=follow_days):
             flags.append("Follow up")
     flags += json.loads(r["flags"] or "[]")
+    if not r["passed"]:
+        # you marked it, so it stays, but say why today's rules would leave it out
+        flags.append(f"Outside your rules now ({r['gate'] or 'changed'})")
     if r["evergreen"]:
         flags.append(evergreen_label)
     if r["closed_at"]:
@@ -261,6 +264,9 @@ def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Cr
     for pid, vals in sheet_owner.items():          # touched rows that left the DB view are kept
         if pid not in db_ids and any(v for k, v in vals.items() if k != "Decision" or v != "Pending"):
             cells = {h: full_rows[pid].get(h, "") for h in HEADERS}
+            known = store.conn.execute("SELECT title, url FROM postings WHERE posting_id=?", (pid,)).fetchone()
+            if known and known["url"]:
+                cells["Role"] = hyperlink(known["url"], known["title"] or cells.get("Role", ""))
             rows.append({"posting_id": pid, "closed": True, "first_seen": "", "cells": cells})
 
     by_tab: dict[str, list[dict]] = {t: [] for t in DECISION_TABS}

@@ -243,7 +243,7 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
             counts["reasons"]["duplicate (other search source)"] += 1
             continue        # the same job is already in from another search source
         # a full copy is kept only for postings that pass (the ones you may apply to)
-        snapshot = (p.raw.raw if p.raw else {}) if ev.passed else None
+        snapshot = (p.raw.raw if p.raw else {}) if (ev.passed or store.is_tracked(p.posting_id)) else None
         info = store.upsert_posting(p.posting_id, p.company, p.title, p.url, p.posted_at,
                                     snapshot, ts, dedupe_key=key)
         if not is_search:

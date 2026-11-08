@@ -251,8 +251,19 @@ class Store:
     def pipeline_rows(self) -> list[sqlite3.Row]:
         return self.conn.execute(
             "SELECT p.*, s.* FROM postings p JOIN scores s USING(posting_id) "
-            "WHERE (s.passed=1 OR p.posting_id IN (SELECT posting_id FROM forced_in)) "
+            "WHERE (s.passed=1 OR p.posting_id IN (SELECT posting_id FROM forced_in) "
+            # a job you marked is tracked for good, even if today's rules would drop it
+            "OR p.posting_id IN (SELECT posting_id FROM owner_state WHERE "
+            "COALESCE(decision,'') NOT IN ('', 'Pending') OR COALESCE(interest,'')<>'' "
+            "OR COALESCE(status,'')<>'' OR COALESCE(notes,'')<>'')) "
             "AND p.merged_into IS NULL").fetchall()
+
+    def is_tracked(self, posting_id: str) -> bool:
+        """You marked or added this job: keep its full copy even if it never passed the rules."""
+        return self.conn.execute(
+            "SELECT 1 FROM forced_in WHERE posting_id=? UNION SELECT 1 FROM owner_state WHERE posting_id=? AND "
+            "(COALESCE(decision,'') NOT IN ('', 'Pending') OR COALESCE(interest,'')<>'' OR "
+            "COALESCE(status,'')<>'' OR COALESCE(notes,'')<>'')", (posting_id, posting_id)).fetchone() is not None
 
     def add_forced(self, posting_id: str, ts: str) -> None:
         """You picked this job yourself: it shows (in My applications) whatever the rules say."""
