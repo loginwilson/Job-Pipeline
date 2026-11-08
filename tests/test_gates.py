@@ -457,8 +457,18 @@ def test_investment_banking_jobs_with_strategy_titles(full_criteria):
     body = ["The team sits between Banking and Sales and Trading in Capital Markets.",
             "Analyze Digital Infrastructure ABS and Whole Business Securitizations.",
             "Work with rating agencies and trading desks; prior investment banking front office role."] + ["More words."] * 10
+    # banking on real assets (infrastructure ABS, whole business securitizations) is a stretch:
+    # kept and flagged (your choice, Nov 8)
     for title in ("Strategic Financing Solutions – Associate", "Strategy Associate"):
-        assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, title, body)).failures}, title
+        ev = g.evaluate(_p(full_criteria, title, body))
+        assert ev.passed and "Stretch: banking × real assets" in ev.flags, (title, ev.failures)
+    # other banking still drops: no real assets, or a trading / research / wealth title
+    plain = ["The team sits between Banking and Sales and Trading in Capital Markets.",
+             "Analyze leveraged finance and syndicated loans for technology clients.",
+             "Work with rating agencies and trading desks; prior investment banking front office role."] + ["More words."] * 10
+    for title in ("Strategic Financing Solutions – Associate", "Strategy Associate"):
+        assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, title, plain)).failures}, title
+    assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, "Equity Research Associate", body)).failures}
     # the same vocabulary at a real-estate company is your concentration (CMBS / RE finance)
     re_body = ["We are a commercial real estate lender."] + body
     assert "field" not in {f.gate for f in g.evaluate(_p(full_criteria, "Strategy Associate", re_body)).failures}

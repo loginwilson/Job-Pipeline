@@ -299,3 +299,14 @@ description_min_words: 40
 banking_text:
   drop_at: 4
   terms: [sales and trading, sales & trading, capital markets, securitization, securitizations, ABS, CLO, CLOs, syndicated, syndication, rating agencies, trading desks, trading desk, front office, principal risk, structuring, origination, leveraged finance, investment banking, global markets, fixed income, derivatives, prime brokerage, equity research, pitch books, pitchbooks, Series 79, Series 7, Series 63, Series 24]
+
+# Banking jobs on real assets come back as "Stretch: banking × real assets" instead of
+# dropping (your choice, Nov 8: probably a reach, still worth applying - e.g. JPMorgan
+# Strategic Financing Solutions: digital infrastructure ABS, whole business securitizations).
+stretch_banking:
+  min_terms: 2           # distinct real-asset terms in the description
+  real_asset_terms: [real estate, commercial real estate, CRE, CMBS, RMBS, REIT, REITs, real assets, infrastructure, digital infrastructure, data centers, data center, cell towers, towers, fiber, project finance, hospitality, hotel, hotels, lodging, franchise, franchises, franchisors, whole business securitization, whole business securitizations, property, properties, multifamily, housing, land, single-family rental, net lease]
+  # a banking title with one of these is read in full before it is dropped
+  title_hints: [financing, finance, structured, securitization, securitized, ABS, CMBS, real estate, infrastructure, project finance, solutions, origination, lending, credit]
+  # never a stretch: trading, research, wealth / private-client and brokerage-sales titles
+  never_titles: [trader, trading, quant, quantitative, equity research, research analyst, wealth, private bank, private client, prime brokerage, sales and trading, sales & trading]

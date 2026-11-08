@@ -93,7 +93,7 @@ class Gates:
         bt = self.c.get("banking_text", default=None)
         if bt and not (self._title_domain(p) or self._company_domain(p)):
             bank = sorted({h.term.lower() for h in find_terms(p.description_lines, bt.get("terms") or [])})
-            if len(bank) >= int(bt.get("drop_at", 4)):
+            if len(bank) >= int(bt.get("drop_at", 4)) and not self._stretch_banking(p, ev):
                 ev.fail("field", f"investment banking / markets job ({len(bank)} signs: {', '.join(bank[:5])})")
 
     def _company_domain(self, p: Posting) -> str | None:
@@ -126,6 +126,8 @@ class Gates:
                 continue                             # e.g. finance at a hotel / real-estate company
             hit = find_terms(title, terms, first_only=True)
             if hit:
+                if group == "banking_markets" and self._stretch_banking(p, ev):
+                    return
                 ev.fail("field", f"{group.replace('_', ' ')} ('{hit[0].term}'): {title}")
                 return
         if company:
@@ -136,6 +138,22 @@ class Gates:
             return
         data = find_terms(title, ff.get("data_title_terms") or [], first_only=True)
         ev.fail("field", f"{'pure data role' if data else 'not one of your fields'}: {title}")
+
+    def _stretch_banking(self, p: Posting, ev: Evaluation) -> bool:
+        """Banking work on real assets (real estate, infrastructure, hospitality / franchise
+        securitizations) is next to your real-estate-finance concentration: kept as a stretch.
+        True = keep (flagged). With no description yet, a financing-type title waits for it."""
+        sb = self.c.get("stretch_banking", default=None)
+        if not sb or find_terms(p.title, sb.get("never_titles") or [], first_only=True):
+            return False
+        if not p.description_lines:
+            # title-only first pass: read the description before deciding
+            return bool(find_terms(p.title, sb.get("title_hints") or [], first_only=True))
+        assets = {h.term.lower() for h in find_terms(p.description_lines, sb.get("real_asset_terms") or [])}
+        if len(assets) >= int(sb.get("min_terms", 2)):
+            ev.flag("Stretch: banking × real assets")
+            return True
+        return False
 
     def edge(self, p: Posting, ev: Evaluation) -> None:
         """Your edge: AI applied to hospitality or real estate. Flagged and listed first."""
