@@ -13,8 +13,9 @@ from src.store.db import Store
 
 T1, T2 = "2026-11-05T10:17:00+00:00", "2026-11-05T11:17:00+00:00"
 T_LATER = "2026-11-16T11:17:00+00:00"        # 11 days after T1
+# one pick column since Nov 8: Interest holds Pass / 1-5 ("Apply" typed there still counts)
 DEC, INT, STATUS, APPLIED, FLAGS, ROLE, NOTES = (H.index(x) for x in
-    ("Decision", "Interest", "Status", "Applied on", "Flags", "Role", "Notes"))
+    ("Interest", "Interest", "Status", "Applied on", "Flags", "Role", "Notes"))
 
 
 @pytest.fixture(scope="module")
@@ -53,7 +54,7 @@ def test_new_postings_land_in_review(criteria, board, evals):
     passed = sum(e.passed for e in evals)
     assert info["tabs"] == {REVIEW: passed, APPLICATIONS: 0, PASSED: 0}
     assert sheet.read([REVIEW])[REVIEW][0] == H
-    assert all(r[DEC] == "Pending" and "New" in r[FLAGS] for r in tab(sheet, REVIEW))
+    assert all(r[DEC] == "" and "New" in r[FLAGS] for r in tab(sheet, REVIEW))
     assert set(sheet.tabs) == set(ALL_TABS) and len(sheet.calls) == 1       # one write per run
     assert sheet.tabs["Home"]["index"] == 0 and sheet.tabs["Companies"]["index"] == 1   # your hub opens first
 
@@ -76,7 +77,7 @@ def test_decisions_move_rows_and_survive(criteria, board, evals):
 
     apps = tab(sheet, APPLICATIONS)
     assert [r[ID_COL] for r in apps] == [a, c, d]          # Interest 5, then 3; ended (Rejected) last
-    assert apps[0][DEC] == "Apply" and apps[0][INT] == "5" and apps[0][NOTES] == "Coffee chat"
+    assert apps[0][INT] == "5" and apps[0][NOTES] == "Coffee chat"
     assert apps[1][APPLIED] == T2[:10]                       # Applied on stamped automatically
     assert [r[ID_COL] for r in tab(sheet, PASSED)] == [b]
     review = tab(sheet, REVIEW)
@@ -112,7 +113,7 @@ def test_owner_values_restored_from_database(criteria, board, evals):
     fresh = FakeBackend()                                    # tabs deleted / new Sheet
     run(store, fresh, board, evals, criteria, T2)
     app = next(r for r in tab(fresh, APPLICATIONS) if r[ID_COL] == pid)
-    assert app[DEC] == "Apply" and app[INT] == "4"
+    assert app[INT] == "4"
 
 
 def test_hyperlinks_and_formatting(criteria, board, evals):
@@ -296,7 +297,7 @@ def test_company_jobs_add_moves_a_dropped_job_to_my_applications(criteria):
     sheet.set_cell("Company jobs", 1, 0, "Add")
     sync_all(sheet, store, criteria, T2)
     apps = tab(sheet, APPLICATIONS)
-    assert [r[ID_COL] for r in apps] == ["ashby:decagon:1"] and apps[0][DEC] == "Apply"
+    assert [r[ID_COL] for r in apps] == ["ashby:decagon:1"] and apps[0][INT] == "3"     # added = a 3
     assert len([r for r in sheet.read(["Company jobs"])["Company jobs"][1:] if any(r)]) == 0
 
 
@@ -404,3 +405,19 @@ def test_home_contacts_and_company_hub(criteria, board, evals):
     text = "\n".join(home)
     assert "Ask about Wolf program" in text and "Coffee chat ask" in text and "No reply since 2026-10-25" in text
     assert "STANDOUT COMPANIES" in text and "Fora | Networking | 5" in text
+
+
+
+def test_one_pick_column_pass_and_numbers(criteria, board, evals):
+    store, sheet = Store(":memory:"), FakeBackend()
+    run(store, sheet, board, evals, criteria, T1)
+    a, b, c = [r[ID_COL] for r in tab(sheet, REVIEW)][:3]
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, a), INT, "5")
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, b), INT, "Pass")
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, c), INT, "Apply")
+    run(store, sheet, board, evals, criteria, T2)
+    review = {r[ID_COL]: r for r in tab(sheet, REVIEW)}
+    assert review[a][INT] == "5" and b not in review and review[c][INT] == "3"
+    assert {a, c} <= {r[ID_COL] for r in tab(sheet, APPLICATIONS)}
+    assert [r[ID_COL] for r in tab(sheet, PASSED)] == [b]
+    assert sheet.read([REVIEW])[REVIEW][0][:4] == ["Interest", "Status", "Next step", "Due"]

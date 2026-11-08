@@ -168,7 +168,12 @@ work_authorization:
 # REQUIRED line demands coding with no non-coding alternative on that line.
 technical:
   drop_titles: [engineer, engineering, "eng.", "engr", ingénieur, ingenieur, developer, application development, software development, scientist, data scientist, machine learning, ml engineer, architect, devops, sre, programmer]
-  keep_titles: []   # sales / solutions / GTM engineers used to be kept; they need a technical background (Nov 8 audit)
+  keep_titles: []   # sales / solutions engineers need a technical sales background (Nov 8 audit)
+  # AI-builder roles (your package: you build real systems by directing AI coding tools). These titles
+  # are kept as long as you qualify: Python / SQL / APIs / "coding" asks are fine; they still drop
+  # for production / software-engineering experience, ML model training or a required CS degree.
+  ai_builder_titles: [GTM engineer, go to market engineer, go-to-market engineer, GTM automation, automation specialist, automation engineer, automation lead, automation strategist, workflow automation, AI automation, AI operations, AI ops, AI enablement, AI implementation, AI deployment, forward deployed, agent operations, agent deployment]
+  ai_builder_ok_phrases: [write code, writing code, coding experience, programming experience, a technical background, strong technical background, engineering background]
   required_drop:
     languages: [Python, JavaScript, TypeScript, Java, C++, C#, Ruby, Scala, Rust, Kotlin, Swift, Golang, PHP]
     phrases: [production code, production-quality code, write code, writing code, coding experience, programming experience, software development experience, software engineering experience, years of software engineering, build and train machine learning models, train machine learning models, building machine learning models, training ML models, building ML models, a technical background, strong technical background, engineering background, technical degree, video editing, graphic design experience, design portfolio, portfolio of work, Salesforce administration]

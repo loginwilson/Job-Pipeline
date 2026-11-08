@@ -87,6 +87,10 @@ class Gates:
         if not st or not p.description_lines:
             return
         hits = sorted({h.term.lower() for h in find_terms(p.description_lines, st.get("terms") or [])})
+        if qualifications.is_ai_builder(p.title, self.c):
+            hits = [h for h in hits if h not in {"python", "api development", "ci/cd", "llms", "algorithms",
+                                                  "computer science", "software engineering", "data structures",
+                                                  "machine learning", "microservices", "distributed systems"}]
         if len(hits) >= int(st.get("drop_at", 4)):
             ev.fail("specialist", f"specialist job ({len(hits)} signs: {', '.join(hits[:5])})")
             return
@@ -119,6 +123,9 @@ class Gates:
         # your core fields (hospitality / real estate, by title or by the company's description)
         # keep any role except legal / HR / tech / design / product ones; finance there is your
         # concentration, so it stays
+        if qualifications.is_ai_builder(p.title, self.c):
+            ev.flag("AI builder")
+            return
         title_domain = self._title_domain(p)
         company = title_domain or (self._company_domain(p) if p.description_lines else None)
         allowed = set(ff.get("core_company_allows") or []) if company else set()
@@ -340,7 +347,8 @@ class Gates:
     def technical_and_credentials(self, p: Posting, ev: Evaluation) -> None:
         tech = self.c.get("technical", default={}) or {}
         title_hit = None
-        if not find_terms(p.title, tech.get("keep_titles", []) or [], first_only=True):
+        if not (find_terms(p.title, tech.get("keep_titles", []) or [], first_only=True)
+                or qualifications.is_ai_builder(p.title, self.c)):
             for term in tech.get("drop_titles", []) or []:
                 if re.search(rf"\b{re.escape(term)}", p.title, re.I):
                     title_hit = term

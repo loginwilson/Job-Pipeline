@@ -41,13 +41,15 @@ log = logging.getLogger(__name__)
 
 REVIEW, APPLICATIONS, PASSED = "To review", "My applications", "Passed"
 DECISION_TABS = [REVIEW, APPLICATIONS, PASSED]
-HEADERS = ["Decision", "Interest", "Status", "Applied on", "Next step", "Due", "Company", "Role", "Field", "Location",
-           "Salary", "Extra comp", "Experience ask", "Visa", "Flags", "Posted", "First seen", "Source",
-           "Notes", "Posting ID"]
+# one pick column: Pass / 1-5 (your Nov 8 choice); what you scan first, the rest to the right
+HEADERS = ["Interest", "Status", "Next step", "Due", "Applied on", "Company", "Role", "Location", "Salary",
+           "Experience ask", "Flags", "Notes", "Field", "Extra comp", "Visa", "Posted", "First seen", "Source",
+           "Posting ID"]
 OWNER_HEADERS = ("Decision", "Interest", "Status", "Notes", "Next step", "Due")
 ID_COL = HEADERS.index("Posting ID")
 DECISION_OPTIONS = ["Pending", "Apply", "Pass"]
 INTEREST_OPTIONS = ["1", "2", "3", "4", "5"]
+PICK_OPTIONS = ["Pass", "1", "2", "3", "4", "5"]      # the job tabs' Interest column
 STATUS_OPTIONS = ["Not started", "Drafting", "Applied", "Networking", "Interviewing", "Offer",
                   "Rejected", "Withdrawn", "No response"]
 ENDED = {"Rejected", "Withdrawn", "No response"}
@@ -135,6 +137,18 @@ def _neg_date(iso: str | None) -> float:
         return 0.0
 
 
+def _from_pick(vals: dict) -> dict:
+    """Interest column: 'Pass' hides the job, a number (or 'Apply') means you're interested."""
+    v = (vals.get("Interest") or "").strip()
+    if v.lower() in PASS_WORDS:
+        return {**vals, "Decision": "Pass", "Interest": ""}
+    if v.lower() in ("apply", "all-in"):
+        return {**vals, "Decision": "Apply", "Interest": ""}
+    if _interest(v) > 0:
+        return {**vals, "Decision": "Apply"}
+    return {**vals, "Decision": "Pending", "Interest": ""}
+
+
 def route(owner: dict) -> str:
     """Which tab a posting belongs in, from your Decision (Interest/Status imply Apply)."""
     d = (owner.get("Decision") or "").strip().lower()
@@ -184,6 +198,8 @@ def read_owner_values(existing: dict[str, list[list[str]]],
             if not pid:
                 continue
             vals = {h: raw[idx[h]].strip() for h in OWNER_HEADERS if h in idx}
+            if "Decision" not in idx:
+                vals = _from_pick(vals)
             if pid in owner:
                 if not any(vals.values()):
                     continue   # a stale duplicate never wipes real entries
@@ -226,6 +242,15 @@ def build_rows(store: Store, criteria: Criteria, ts: str, owner_states: dict[str
     return rows
 
 
+def _pick_cell(st: dict) -> str:
+    d = (st.get("decision") or "").strip().lower()
+    if d in PASS_WORDS:
+        return "Pass"
+    if st.get("interest"):
+        return st["interest"]
+    return "3" if d in ("apply", "all-in") else ""      # an Apply with no Interest becomes a 3
+
+
 def _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses,
                evergreen_label="Open 60+ days") -> dict | None:
     """Sheet cells for one stored posting (None when it should not be shown)."""
@@ -259,7 +284,7 @@ def _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses,
     if r["closed_at"]:
         flags.append("Closed")
     cells = {
-        "Decision": st.get("decision") or "Pending", "Interest": st.get("interest") or "",
+        "Decision": st.get("decision") or "Pending", "Interest": _pick_cell(st),
         "Status": st.get("status") or "", "Notes": st.get("notes") or "",
         "Applied on": _date(st.get("applied_on")),
         "Next step": st.get("next_step") or "", "Due": due_cell(st.get("due")),
@@ -352,8 +377,9 @@ def _decision_tab(m: dict, grid: list[list], existing_len: int) -> list[dict]:
         {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
                         "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
                         "fields": "userEnteredFormat.textFormat.bold"}},
-        _validation(sid, col["Decision"], DECISION_OPTIONS, need_rows),
-        _validation(sid, col["Interest"], INTEREST_OPTIONS, need_rows),
+        {"setDataValidation": {"range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": need_rows,
+                                         "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}}},
+        _validation(sid, col["Interest"], PICK_OPTIONS, need_rows),
         _validation(sid, col["Status"], STATUS_OPTIONS, need_rows),
         {"setBasicFilter": {"filter": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": len(grid),
                                                  "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}}}},
@@ -362,7 +388,7 @@ def _decision_tab(m: dict, grid: list[list], existing_len: int) -> list[dict]:
                                        "properties": {"hiddenByUser": True}, "fields": "hiddenByUser"}},
     ]
     full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}
-    flags, interest, decision = _col_letter(col["Flags"]), _col_letter(col["Interest"]), _col_letter(col["Decision"])
+    flags, interest = _col_letter(col["Flags"]), _col_letter(col["Interest"])
     # first matching rule wins: closed grey, follow-up yellow, then your picks in greens by Interest
     rules = [
         (f'=REGEXMATCH(${flags}2,"Closed")', {"textFormat": {"foregroundColor": GRAY}}),
@@ -371,7 +397,7 @@ def _decision_tab(m: dict, grid: list[list], existing_len: int) -> list[dict]:
         (f'=VALUE(0&${interest}2)=5', {"backgroundColor": GREEN_5}),
         (f'=VALUE(0&${interest}2)=4', {"backgroundColor": GREEN_4}),
         (f'=VALUE(0&${interest}2)=3', {"backgroundColor": GREEN_3}),
-        (f'=OR(VALUE(0&${interest}2)>=1,${decision}2="Apply")', {"backgroundColor": GREEN_1}),
+        (f'=IFERROR(VALUE(0&${interest}2)>=1,FALSE)', {"backgroundColor": GREEN_1}),
     ]
     if m.get("cf_formulas") != [f for f, _ in rules]:
         for _ in range(int(m.get("cf_count", 1 if m.get("has_cf") else 0))):

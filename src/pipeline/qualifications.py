@@ -61,6 +61,19 @@ def _case_sensitive(line: str, terms: list[str]) -> str | None:
     return None
 
 
+def is_ai_builder(title: str, criteria: Criteria) -> bool:
+    """Automation / GTM-engineering / forward-deployed titles you qualify for (see criteria).
+    An 'engineer' title counts only as a GTM or automation engineer: 'Forward Deployed
+    (Software / AI) Engineer' is a software job."""
+    t = title or ""
+    if not find_terms(t, criteria.get("technical", "ai_builder_titles", default=[]) or [], first_only=True):
+        return False
+    if re.search(r"\bengineer", t, re.I) and not re.search(r"\b(?:gtm|go[- ]to[- ]market|automation)\s+engineer", t, re.I):
+        return False
+    return not re.search(r"\b(?:software|full[- ]?stack|back[- ]?end|front[- ]?end|machine learning|ML|data engineer|"
+                         r"developer|scientist|research)\b", t, re.I)
+
+
 def check(p: Posting, criteria: Criteria) -> list[Hit]:
     tech = criteria.get("technical", default={}) or {}
     req = tech.get("required_drop", {}) or {}
@@ -73,6 +86,8 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
     quant = cred.get("quantitative_field_terms", []) or []
     mine = {str(x).lower() for x in criteria.get("candidate", "languages", default=["English"]) or []}
     others = [x for x in criteria.get("other_languages", default=[]) or [] if str(x).lower() not in mine]
+    builder = is_ai_builder(p.title, criteria)
+    ok_phrases = set(t.lower() for t in (tech.get("ai_builder_ok_phrases") or [])) if builder else set()
     for line in required_lines(p, criteria):
         lang_hit = find_terms(line, others, first_only=True)
         if lang_hit and _FLUENCY.search(line) and not find_terms(_ADVANCED_PREFERRED.sub(" ", line), soft, first_only=True):
@@ -82,8 +97,8 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
         core = _ADVANCED_PREFERRED.sub(" ", line)
         softened = bool(find_terms(core, soft, first_only=True))
         # 7. technical
-        lang = _case_sensitive(line, req.get("languages", []) or [])
-        phrase = find_terms(line, req.get("phrases", []) or [], first_only=True)
+        lang = None if builder else _case_sensitive(line, req.get("languages", []) or [])
+        phrase = [h for h in find_terms(line, req.get("phrases", []) or []) if h.term.lower() not in ok_phrases][:1]
         if (lang or phrase) and not softened and not find_terms(line, ok_alt, first_only=True):
             hits.append(Hit("technical", line, f"requires {lang or phrase[0].term}"))
             continue

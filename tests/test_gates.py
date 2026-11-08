@@ -111,8 +111,16 @@ def test_technical(evaluate):
     for title in ("Software Engineer", "Forward Deployed Engineer", "Data Scientist", "Solutions Architect",
                   "Frontend Developer"):
         assert "technical" in gates_of(evaluate(title=title, lines=[PAY_OK])), title
-    # sales / solutions / GTM engineers need a technical background: dropped since the Nov 8 audit
-    for title in ("GTM Engineer", "Solutions Engineer", "Sales Engineer", "Prompt Engineer"):
+    # sales / solutions / prompt engineers need a technical background: dropped since the Nov 8 audit
+    for title in ("Solutions Engineer", "Sales Engineer", "Prompt Engineer"):
+        assert "technical" in gates_of(evaluate(title=title, lines=[PAY_OK])), title
+    # AI-builder roles you qualify for pass (your package: building with AI coding tools) ...
+    for title in ("GTM Engineer", "Automation Specialist", "AI Operations Associate", "Forward Deployed Strategist"):
+        assert "technical" not in gates_of(evaluate(title=title, lines=[PAY_OK])), title
+    assert "technical" not in gates_of(evaluate(title="GTM Engineer", lines=[PAY_OK, "## Requirements",
+                                                                         "- Comfortable with Python, SQL and APIs"]))
+    # ... but not software-engineering jobs, or ones asking for production code
+    for title in ("Forward Deployed Software Engineer", "Forward Deployed AI Engineer", "Forward Deployed Engineer"):
         assert "technical" in gates_of(evaluate(title=title, lines=[PAY_OK])), title
     req = ["## Requirements"]
     assert "technical" in gates_of(evaluate(lines=[PAY_OK] + req + ["- Proficiency in Python"]))
@@ -299,7 +307,7 @@ def test_audit_round4_titles(criteria):
     assert "not_related_to_degree" in fails("RN Case Manager")
     assert "technical" in fails("Computational Scientist, Structural & Thermal")
     assert "technical" in fails("Ingénieur(e) mécanique turbine-alternateur")
-    assert "technical" in fails("GTM Engineer") and "technical" in fails("Graduate Sales Engineer")
+    assert "technical" not in fails("GTM Engineer") and "technical" in fails("Graduate Sales Engineer")
 
 
 def test_audit_round5_titles(criteria):

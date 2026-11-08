@@ -90,9 +90,11 @@ def test_passed_us_roles_have_no_citizenship_or_clearance(evals, criteria):
 
 
 def test_engineer_titles_dropped_unless_allowed(evals, criteria):
+    from src.pipeline.qualifications import is_ai_builder
     keep = criteria.get("technical", "keep_titles")
     eng = [e for e in evals if re.search(r"\b(?:engineer|developer)\b", e.posting.title, re.I)
-           and not find_terms(e.posting.title, keep, first_only=True)]
+           and not find_terms(e.posting.title, keep, first_only=True)
+           and not is_ai_builder(e.posting.title, criteria)]
     assert eng and all("technical" in {f.gate for f in e.failures} for e in eng)
 
 
