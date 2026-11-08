@@ -56,6 +56,10 @@ STATUS_ORDER = {"Offer": 0, "Interviewing": 1, "Networking": 2, "Applied": 3, "D
 PASS_WORDS = {"pass", "veto"}
 GREEN = {"red": 0.85, "green": 0.94, "blue": 0.83}
 YELLOW = {"red": 1.0, "green": 0.95, "blue": 0.75}
+GREEN_5 = {"red": 0.66, "green": 0.85, "blue": 0.62}     # Interest 5: darkest
+GREEN_4 = {"red": 0.78, "green": 0.91, "blue": 0.74}
+GREEN_3 = {"red": 0.87, "green": 0.95, "blue": 0.84}
+GREEN_1 = {"red": 0.93, "green": 0.98, "blue": 0.92}     # Interest 1-2, or Apply with no Interest
 GRAY = {"red": 0.6, "green": 0.6, "blue": 0.6}
 
 
@@ -123,10 +127,23 @@ def _interest(v: str) -> int:
 
 
 # --- reading your columns ---------------------------------------------------
-def read_owner_values(existing: dict[str, list[list[str]]]) -> tuple[dict[str, dict], dict[str, dict]]:
-    """Owner cells per Posting ID from the decision tabs (+ full rows, for rows to keep)."""
+def read_owner_values(existing: dict[str, list[list[str]]],
+                      known: dict[str, dict] | None = None) -> tuple[dict[str, dict], dict[str, dict]]:
+    """Owner cells per Posting ID from the decision tabs (+ full rows, for rows to keep).
+    A picked job shows in To review AND My applications: the copy whose cells differ from
+    what was last saved is the one you just edited, so it wins."""
     owner: dict[str, dict] = {}
     full: dict[str, dict] = {}
+    known = known or {}
+
+    def saved(pid: str) -> dict:
+        k = known.get(pid) or {}
+        return {"Decision": k.get("decision") or "", "Interest": k.get("interest") or "",
+                "Status": k.get("status") or "", "Notes": k.get("notes") or ""}
+
+    def same(a: dict, b: dict) -> bool:
+        return all((a.get(h) or "").strip() == (b.get(h) or "").strip() for h in OWNER_HEADERS
+                   if not (h == "Decision" and {(a.get(h) or "Pending"), (b.get(h) or "Pending")} <= {"", "Pending"}))
     for tab in DECISION_TABS:
         rows = existing.get(tab) or []
         if not rows:
@@ -140,8 +157,11 @@ def read_owner_values(existing: dict[str, list[list[str]]]) -> tuple[dict[str, d
             if not pid:
                 continue
             vals = {h: raw[idx[h]].strip() for h in OWNER_HEADERS if h in idx}
-            if pid in owner and not any(vals.values()):
-                continue   # a stale duplicate never wipes real entries
+            if pid in owner:
+                if not any(vals.values()):
+                    continue   # a stale duplicate never wipes real entries
+                if pid in known and same(vals, saved(pid)) and not same(owner[pid], saved(pid)):
+                    continue   # the other copy is the one you edited
             owner[pid] = vals
             full[pid] = {h: raw[i] for h, i in idx.items()}
     return owner, full
@@ -254,7 +274,7 @@ def _sort_key(tab: str, row: dict):
 # --- sync -----------------------------------------------------------------
 def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Criteria,
                           ts: str) -> tuple[list[dict], dict]:
-    sheet_owner, full_rows = read_owner_values(existing)
+    sheet_owner, full_rows = read_owner_values(existing, store.owner_states())
     for pid, vals in sheet_owner.items():          # the Sheet is the source of truth for your columns
         store.save_owner_state(pid, vals, ts)
     store.commit()
@@ -271,7 +291,10 @@ def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Cr
 
     by_tab: dict[str, list[dict]] = {t: [] for t in DECISION_TABS}
     for r in rows:
-        by_tab[route(r["cells"])].append(r)
+        tab = route(r["cells"])
+        by_tab[tab].append(r)
+        if tab == APPLICATIONS:
+            by_tab[REVIEW].append(r)      # your picks also stay in To review, shaded by Interest
     requests: list[dict] = []
     counts = {}
     for tab in DECISION_TABS:
@@ -308,14 +331,20 @@ def _decision_tab(m: dict, grid: list[list], existing_len: int) -> list[dict]:
                                                  "startIndex": ID_COL, "endIndex": ID_COL + 1},
                                        "properties": {"hiddenByUser": True}, "fields": "hiddenByUser"}},
     ]
-    if not m.get("has_cf"):
-        full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}
-        flags, interest = _col_letter(col["Flags"]), _col_letter(col["Interest"])
-        rules = [
-            (f'=REGEXMATCH(${flags}2,"Closed")', {"textFormat": {"foregroundColor": GRAY}}),
-            (f'=REGEXMATCH(${flags}2,"Follow up")', {"backgroundColor": YELLOW}),
-            (f'=VALUE(0&${interest}2)>=4', {"backgroundColor": GREEN}),
-        ]
+    full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}
+    flags, interest, decision = _col_letter(col["Flags"]), _col_letter(col["Interest"]), _col_letter(col["Decision"])
+    # first matching rule wins: closed grey, follow-up yellow, then your picks in greens by Interest
+    rules = [
+        (f'=REGEXMATCH(${flags}2,"Closed")', {"textFormat": {"foregroundColor": GRAY}}),
+        (f'=REGEXMATCH(${flags}2,"Follow up")', {"backgroundColor": YELLOW}),
+        (f'=VALUE(0&${interest}2)=5', {"backgroundColor": GREEN_5}),
+        (f'=VALUE(0&${interest}2)=4', {"backgroundColor": GREEN_4}),
+        (f'=VALUE(0&${interest}2)=3', {"backgroundColor": GREEN_3}),
+        (f'=OR(VALUE(0&${interest}2)>=1,${decision}2="Apply")', {"backgroundColor": GREEN_1}),
+    ]
+    if m.get("cf_formulas") != [f for f, _ in rules]:
+        for _ in range(int(m.get("cf_count", 1 if m.get("has_cf") else 0))):
+            reqs.append({"deleteConditionalFormatRule": {"sheetId": sid, "index": 0}})
         for i, (formula, fmt) in enumerate(rules):
             reqs.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [full], "booleanRule": {
                 "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": formula}]},
@@ -653,7 +682,11 @@ class GspreadBackend:
             p = have[t]["properties"]
             gp = p.get("gridProperties", {})
             out[t] = {"id": p["sheetId"], "rows": gp.get("rowCount", 1000), "cols": gp.get("columnCount", 26),
-                      "has_cf": bool(have[t].get("conditionalFormats")), "index": p.get("index")}
+                      "has_cf": bool(have[t].get("conditionalFormats")), "index": p.get("index"),
+                      "cf_count": len(have[t].get("conditionalFormats") or []),
+                      "cf_formulas": [((((cf.get("booleanRule") or {}).get("condition") or {}).get("values")
+                                        or [{}])[0]).get("userEnteredValue")
+                                      for cf in have[t].get("conditionalFormats") or []]}
         return out
 
     def read(self, tabs: list[str]) -> dict[str, list[list[str]]]:
@@ -689,7 +722,9 @@ class FakeBackend:
                 self.tabs[t] = {"id": len(self.tabs) + 1, "rows": 1000, "cols": 26, "grid": [],
                                 "cf": [], "other": []}
         return {t: {"id": self.tabs[t]["id"], "rows": self.tabs[t]["rows"], "cols": self.tabs[t]["cols"],
-                    "has_cf": bool(self.tabs[t]["cf"])} for t in tabs}
+                    "has_cf": bool(self.tabs[t]["cf"]), "cf_count": len(self.tabs[t]["cf"]),
+                    "cf_formulas": [c["rule"]["booleanRule"]["condition"]["values"][0]["userEnteredValue"]
+                                    for c in self.tabs[t]["cf"]]} for t in tabs}
 
     def _tab_by_id(self, sid: int) -> dict:
         return next(t for t in self.tabs.values() if t["id"] == sid)
@@ -717,6 +752,10 @@ class FakeBackend:
                     tab["frozen"] = gp["frozenRowCount"]
                 if "index" in body["properties"]:
                     tab["index"] = body["properties"]["index"]
+            elif kind == "deleteConditionalFormatRule":
+                cf = self._tab_by_id(body["sheetId"])["cf"]
+                if cf:
+                    cf.pop(body["index"])
             elif kind == "addConditionalFormatRule":
                 self._tab_by_id(body["rule"]["ranges"][0]["sheetId"])["cf"].append(body)
             else:

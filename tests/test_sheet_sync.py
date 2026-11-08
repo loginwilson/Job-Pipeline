@@ -80,7 +80,9 @@ def test_decisions_move_rows_and_survive(criteria, board, evals):
     assert apps[1][APPLIED] == T2[:10]                       # Applied on stamped automatically
     assert [r[ID_COL] for r in tab(sheet, PASSED)] == [b]
     review = tab(sheet, REVIEW)
-    assert {a, b, c, d}.isdisjoint(r[ID_COL] for r in review)
+    # picks stay in To review too (shaded by Interest); only Pass leaves it
+    in_review = {r[ID_COL] for r in review}
+    assert {a, c, d} <= in_review and b not in in_review
     assert not any("New" in r[FLAGS].split(", ") for r in review)
 
     run(store, sheet, board, evals, criteria, T2)            # a third run keeps everything in place
@@ -119,11 +121,11 @@ def test_hyperlinks_and_formatting(criteria, board, evals):
     assert all(f.startswith('=HYPERLINK("https://jobs.lever.co/') for f in sheet.formulas(REVIEW, ROLE))
     for name in (REVIEW, APPLICATIONS, PASSED):
         t = sheet.tabs[name]
-        assert t["frozen"] == 1 and len(t["cf"]) == 3
+        assert t["frozen"] == 1 and len(t["cf"]) == 6
         kinds = [next(iter(r)) for r in t["other"]]
         assert kinds.count("setDataValidation") == 3 and "setBasicFilter" in kinds
     run(store, sheet, board, evals, criteria, T2)
-    assert len(sheet.tabs[REVIEW]["cf"]) == 3                # rules not duplicated
+    assert len(sheet.tabs[REVIEW]["cf"]) == 6                # rules not duplicated
 
 
 def test_closed_postings_leave_review_but_stay_in_applications(criteria, board, payload):
@@ -317,3 +319,23 @@ def test_a_job_you_marked_keeps_its_link_when_rules_change(criteria):
     flags = tab(sheet, APPLICATIONS)[0][H.index("Flags")]
     assert "Outside your rules now (field)" in flags and "Closed" not in flags
     assert store.is_tracked("ashby:meow:1")
+
+
+
+def test_edit_in_either_copy_of_a_picked_job_wins(criteria, board, evals):
+    """A pick shows in To review and My applications; whichever copy you edit is kept."""
+    store, sheet = Store(":memory:"), FakeBackend()
+    run(store, sheet, board, evals, criteria, T1)
+    pid = tab(sheet, REVIEW)[0][ID_COL]
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, pid), DEC, "Apply")
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, pid), INT, "5")
+    run(store, sheet, board, evals, criteria, T1)
+    assert pid in [r[ID_COL] for r in tab(sheet, APPLICATIONS)] and pid in [r[ID_COL] for r in tab(sheet, REVIEW)]
+    # edit the My applications copy
+    sheet.set_cell(APPLICATIONS, row_index(sheet, APPLICATIONS, pid), STATUS, "Applied")
+    run(store, sheet, board, evals, criteria, T2)
+    assert tab(sheet, REVIEW)[row_index(sheet, REVIEW, pid) - 1][STATUS] == "Applied"
+    # now edit the To review copy
+    sheet.set_cell(REVIEW, row_index(sheet, REVIEW, pid), INT, "3")
+    run(store, sheet, board, evals, criteria, T2)
+    assert tab(sheet, APPLICATIONS)[row_index(sheet, APPLICATIONS, pid) - 1][INT] == "3"
