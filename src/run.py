@@ -207,6 +207,11 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
         p.first_seen = info["first_seen"]
         counts["new"] += int(info["is_new"])
         counts["passed"] += int(ev.passed)
+        if ev.passed and os.environ.get("PIPELINE_DUMP_PASSED"):
+            # review aid: every passing posting's full text, one JSON line each
+            with open(os.environ["PIPELINE_DUMP_PASSED"], "a", encoding="utf-8") as fh:
+                fh.write(json.dumps({"id": p.posting_id, "company": p.company, "title": p.title, "url": p.url,
+                                     "lines": p.description_lines}) + "\n")
         counts["new_passed"] += int(ev.passed and info["is_new"])
         if not ev.passed:
             counts["reasons"][ev.failures[0].gate] += 1
