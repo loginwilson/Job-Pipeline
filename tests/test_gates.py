@@ -448,3 +448,17 @@ def test_edge_ai_in_hospitality_and_real_estate(full_criteria):
     # no AI: kept, but no edge flag
     ev = g.evaluate(_p(full_criteria, "Analyst", reit))
     assert not any(f.startswith("Your edge") for f in ev.flags)
+
+
+def test_investment_banking_jobs_with_strategy_titles(full_criteria):
+    """JPMorgan 'Strategic Financing Solutions – Associate' passed on 'strategic' in the title."""
+    from src.pipeline.gates import Gates
+    g = Gates(full_criteria)
+    body = ["The team sits between Banking and Sales and Trading in Capital Markets.",
+            "Analyze Digital Infrastructure ABS and Whole Business Securitizations.",
+            "Work with rating agencies and trading desks; prior investment banking front office role."] + ["More words."] * 10
+    for title in ("Strategic Financing Solutions – Associate", "Strategy Associate"):
+        assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, title, body)).failures}, title
+    # the same vocabulary at a real-estate company is your concentration (CMBS / RE finance)
+    re_body = ["We are a commercial real estate lender."] + body
+    assert "field" not in {f.gate for f in g.evaluate(_p(full_criteria, "Strategy Associate", re_body)).failures}

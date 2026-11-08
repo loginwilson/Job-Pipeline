@@ -89,6 +89,12 @@ class Gates:
         hits = sorted({h.term.lower() for h in find_terms(p.description_lines, st.get("terms") or [])})
         if len(hits) >= int(st.get("drop_at", 4)):
             ev.fail("specialist", f"specialist job ({len(hits)} signs: {', '.join(hits[:5])})")
+            return
+        bt = self.c.get("banking_text", default=None)
+        if bt and not (self._title_domain(p) or self._company_domain(p)):
+            bank = sorted({h.term.lower() for h in find_terms(p.description_lines, bt.get("terms") or [])})
+            if len(bank) >= int(bt.get("drop_at", 4)):
+                ev.fail("field", f"investment banking / markets job ({len(bank)} signs: {', '.join(bank[:5])})")
 
     def _company_domain(self, p: Posting) -> str | None:
         """Hospitality / real estate from the company's own opening description (the title

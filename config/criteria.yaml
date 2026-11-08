@@ -267,7 +267,7 @@ field_fit:
   # "Your edge" flag (listed first): one of the above plus AI in the title or opening description
   ai_terms: [AI, A.I., artificial intelligence, machine learning, LLM, LLMs, agentic, AI agents, AI agent, generative AI, GenAI, conversational AI, AI-native, AI-powered]
   unrelated_title_terms:  # drop, even when a kept-family word is also in the title
-    banking_markets: [investment banking, banker, banking, trader, trading, quant, quantitative, capital markets, derivatives, securities, clearing, settlement, fixed income, equities, equity research, wealth, private bank, private client, brokerage, prime brokerage, fund accounting, portfolio manager, treasury, lending, loan, credit analyst, structured products, investment services, investment operations, fund services]
+    banking_markets: [investment banking, banker, banking, financing solutions, structured finance, structured financing, securitization, securitized, origination, syndicate, syndication, leveraged finance, debt capital markets, equity capital markets, DCM, ECM, M&A, mergers and acquisitions, trader, trading, quant, quantitative, capital markets, derivatives, securities, clearing, settlement, fixed income, equities, equity research, wealth, private bank, private client, brokerage, prime brokerage, fund accounting, portfolio manager, treasury, lending, loan, credit analyst, structured products, investment services, investment operations, fund services]
     legal_compliance: [legal, counsel, paralegal, compliance, regulatory, AML, KYC, audit, auditor, risk, fraud, investigator, sanctions, privacy]
     accounting_insurance: [accounting, accountant, tax, controller, controllership, bookkeeper, payroll, accounts payable, accounts receivable, underwriter, underwriting, claims, actuarial, actuary, insurance, reinsurance, broker]
     hr_people: [talent, recruiter, recruiting, talent acquisition, sourcer, human resources, HR, people partner, people operations, compensation, benefits, HRIS, talent operations]
@@ -292,3 +292,10 @@ other_languages: [Mandarin, Chinese, Cantonese, Japanese, Korean, Spanish, Portu
 
 # A posting with fewer words of description than this can't be checked (e.g. just a careers link): dropped.
 description_min_words: 40
+
+# Banking / markets vocabulary in the whole description (JPMorgan's "Strategic Financing
+# Solutions – Associate": sales and trading, ABS, securitizations, rating agencies...).
+# Skipped for hospitality / real-estate jobs: real-estate finance uses the same words.
+banking_text:
+  drop_at: 4
+  terms: [sales and trading, sales & trading, capital markets, securitization, securitizations, ABS, CLO, CLOs, syndicated, syndication, rating agencies, trading desks, trading desk, front office, principal risk, structuring, origination, leveraged finance, investment banking, global markets, fixed income, derivatives, prime brokerage, equity research, pitch books, pitchbooks, Series 79, Series 7, Series 63, Series 24]
