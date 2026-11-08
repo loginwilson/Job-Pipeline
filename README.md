@@ -8,11 +8,11 @@ to do with each one. Runs on GitHub Actions twice an hour (`.github/workflows/ho
 
 | Source | What it is | How often |
 |---|---|---|
-| **Company job boards** | Greenhouse, Lever, Ashby, SmartRecruiters and Workday boards — the ones in `config/watchlist.yaml` plus every board discovered automatically | Every run; Workday sites and boards with nothing passing for 3 days every 6 hours |
+| **Company job boards** | Greenhouse, Lever, Ashby, SmartRecruiters, Workday and Oracle career sites — the ones in `config/watchlist.yaml` plus every board discovered automatically | Every run; Workday / Oracle sites and boards with nothing passing for 3 days every 6 hours. Very large sites are read through their own city filters; new descriptions are fetched up to 80 per site per run (cached) |
 | **JSearch** (Google for Jobs) | LinkedIn, Indeed, Glassdoor and company sites, searched by keyword group × city | Within the daily request budget (`requests_per_day`; free plan = 6/day). Needs the `JSEARCH_API_KEY` secret |
 | **The Muse** | Entry-level postings in all your cities (≤30 days old) | Daily |
 | **Hacker News "Who is hiring?"** | Discovery only: job-board links in posts that mention your cities | Daily |
-| **New-grad lists on GitHub** (SimplifyJobs) | Discovery only: the company boards behind ~1,000 open new-grad listings in your cities (up to 60 new boards a day) | Daily |
+| **New-grad lists on GitHub** (SimplifyJobs) | Discovery only: the company boards behind ~1,000 open new-grad listings in your cities (up to 60 new boards a day), including Greenhouse boards hidden behind company career pages (`gh_jid=` links) | Daily |
 
 **Auto-discovery.** Every company these sources surface in your cities is checked for its own
 board (apply links first, then name lookups, confirmed by the same job being listed there).
@@ -21,7 +21,9 @@ sources appears once — the company-board copy wins and keeps any decision you 
 
 **Active only.** Board postings show while they're in the company's live feed; search
 postings must be recent and, when we watch that company's board, listed on it. Closed
-postings you never touched leave To review.
+postings you never touched leave To review. Search results are stored in full and re-checked
+against the current rules every run, so a rule fix reaches them too. A site that couldn't be
+read in full in one run never marks its unread postings closed.
 
 ## How it works — every option comes in, you decide
 
@@ -64,7 +66,8 @@ and flags **Follow up** when an Applied / Networking application hasn't moved fo
   Interest 5 → 1, active statuses before ended ones. All-in (4–5) rows are green; Follow up
   rows are yellow.
 * **Passed** — your archive; set Decision back to Apply any time.
-* **Dropped** (with the rule + matched text), **Board health**, **Unparsed alerts**.
+* **Dropped** — the newest 10,000 drops with the rule + matched text (all are kept in the
+  database; `tracking.dropped_tab_max_rows`), **Board health**, **Unparsed alerts**.
 * **Funnel** — is it working? Latest run by source (seen → new → passed → new options, top
   reasons dropped), coverage (boards watched, boards discovered this week, JSearch searches
   used vs. budget and keyword×city pairs covered, last Muse sweep, career sites we can't read
@@ -114,9 +117,15 @@ pip install -r requirements.txt
 python -m src.run --print --company "<name>"                 # one watchlist board, live
 python -m src.run --print --company "<name>" --fixture <saved API response>
 python -m src.run --fake-sheet data/fake_sheet.json            # full run, local stand-in Sheet
+python -m src.run --probe oracle:jpmc.fa.oraclecloud.com/CX_1001  # check one board, print a summary
 SHEET_ID=... GOOGLE_SERVICE_ACCOUNT_JSON="$(cat key.json)" python -m src.run   # real Sheet, from your laptop
 python -m pytest
 ```
+
+**On GitHub (Actions tab):** *hourly pipeline* → *Run workflow* runs it now; tick
+**check_all** to re-check every source and board immediately instead of waiting for their
+daily / 6-hour schedules (takes ~15 min). *probe a board* checks any board on GitHub's network
+and prints what passes.
 
 ## Config files
 
