@@ -471,9 +471,9 @@ def _validation(sid: int, col: int, options: list[str], rows: int) -> dict:
 DROPPED, UNPARSED, FUNNEL, HEALTH = "Dropped", "Unparsed alerts", "Funnel", "Board health"
 COMPANIES, COMPANY_JOBS, PROGRAMS = "Companies", "Company jobs", "Grad programs"
 HOME, CONTACTS_TAB = "Home", "Contacts"
-BACK_OFFICE = [PASSED, DROPPED, UNPARSED, FUNNEL, HEALTH]
+BACK_OFFICE = [DROPPED, UNPARSED, FUNNEL, HEALTH]      # Passed stays visible: you like seeing your passes
 # your hub first, then the inboxes you browse, then the back office
-ALL_TABS = [HOME, COMPANIES, CONTACTS_TAB, APPLICATIONS, REVIEW, PROGRAMS, COMPANY_JOBS, PASSED,
+ALL_TABS = [HOME, COMPANIES, CONTACTS_TAB, APPLICATIONS, REVIEW, PASSED, PROGRAMS, COMPANY_JOBS,
             DROPPED, UNPARSED, FUNNEL, HEALTH]
 
 # --- grad programs: their own view with lighter rules ---------------------------
@@ -1054,6 +1054,11 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
         requests.append({"updateSheetProperties": {"properties": {"sheetId": meta[tab]["id"],
                                                                   "index": ALL_TABS.index(tab)},
                                                    "fields": "index"}})
+    if not store.conn.execute("SELECT 1 FROM sheet_tabs WHERE tab='__passed_shown_v1'").fetchone():
+        requests.append({"updateSheetProperties": {"properties": {"sheetId": meta[PASSED]["id"], "hidden": False},
+                                                   "fields": "hidden"}})
+        store.conn.execute("INSERT OR REPLACE INTO sheet_tabs (tab, content_hash, written_at) "
+                           "VALUES ('__passed_shown_v1', '', ?)", (ts,))
     # keep it simple: back-office tabs are hidden once (unhide any time from the Sheets menu)
     if not store.conn.execute("SELECT 1 FROM sheet_tabs WHERE tab='__hidden_v1'").fetchone():
         for tab in BACK_OFFICE:
