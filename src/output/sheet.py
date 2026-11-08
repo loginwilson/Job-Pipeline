@@ -41,7 +41,8 @@ log = logging.getLogger(__name__)
 
 # One table (Nov 8 rebuild): every job lives ONCE, on Jobs; My picks and Passed are live
 # formula views of it, so they update the moment you type - no copies to keep in sync.
-JOBS, PICKS, PASSED = "Jobs", "My picks", "Passed"
+JOBS, PICKS, PASSED = "To review", "Apply", "Passed"     # your names (Nov 8)
+RENAMES = {"Jobs": JOBS, "My picks": PICKS}                    # tabs from the first one-table layout
 OLD_JOB_TABS = ["To review", "My applications", "Passed"]      # the copy-based layout, removed once
 REVIEW = APPLICATIONS = JOBS                                   # older names some code still uses
 DECISION_TABS = [JOBS]
@@ -447,7 +448,8 @@ def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Cr
     pos = {pid: i for i, pid in enumerate(order)}
     new = sorted([r for r in rows if r["posting_id"] not in pos], key=lambda r: _sort_key("new finds", r))
     kept = sorted([r for r in rows if r["posting_id"] in pos], key=lambda r: pos[r["posting_id"]])
-    tab_rows = new + kept
+    scored = lambda r: bool((r["cells"].get("Interest") or "").strip())
+    tab_rows = [r for r in new + kept if not scored(r)] + [r for r in new + kept if scored(r)]
     grid = [HEADERS] + [[r["cells"].get(h, "") for h in HEADERS] for r in tab_rows]
     requests = _decision_tab(meta[JOBS], grid, len(existing.get(JOBS) or []))
     picks = sum(1 for r in tab_rows if _interest(r["cells"].get("Interest") or "") > 0)
@@ -460,11 +462,11 @@ def _view_tab(meta: dict, tab: str, condition: str, sort_desc: bool) -> list[dic
     """My picks / Passed: one formula that shows matching Jobs rows live."""
     sid = meta[tab]["id"]
     last = _col_letter(len(HEADERS) - 1)
-    rows = f"Jobs!A2:{last}"
+    rows = f"'{JOBS}'!A2:{last}"
     body = f"FILTER({rows}, {condition})"
     if sort_desc:
         body = f"SORT({body}, 1, FALSE)"
-    formula = f'={{Jobs!A1:{last}1; IFERROR({body}, "")}}'
+    formula = f"={{'{JOBS}'!A1:{last}1; IFERROR({body}, \"\")}}"
     col = {h: i for i, h in enumerate(HEADERS)}
     reqs = [
         {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
@@ -561,6 +563,7 @@ def _decision_tab(m: dict, grid: list[list], existing_len: int) -> list[dict]:
     flags, interest = _col_letter(col["Flags"]), _col_letter(col["Interest"])
     # first matching rule wins: closed grey, follow-up yellow, then your picks in greens by Interest
     rules = [
+        (f'=${interest}2="Pass"', {"textFormat": {"foregroundColor": GRAY}}),
         (f'=REGEXMATCH(${flags}2,"Closed")', {"textFormat": {"foregroundColor": GRAY}}),
         (f'=REGEXMATCH(${flags}2,"Follow up")', {"backgroundColor": YELLOW}),
         (_due_formula(_col_letter(col["Due"])), {"backgroundColor": YELLOW}),
@@ -1126,6 +1129,8 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     """Every tab: one read + one batchUpdate per run."""
     ts = ts or datetime.now(timezone.utc).isoformat(timespec="seconds")
     reset_scores_once(backend, store, ts)
+    if hasattr(backend, "rename_tabs"):
+        backend.rename_tabs(RENAMES)
     meta = backend.ensure_tabs(ALL_TABS)
     existing = backend.read(ALL_TABS)
     known_companies = {r["company"].strip().lower() for r in store.target_companies()}
@@ -1152,8 +1157,8 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     crows = company_rows(store, load_target_companies(), ts, contacts)
     per_tab[CONTACTS] = _contacts_tab(meta, len(existing.get(CONTACTS, [])))
     per_tab[HOME] = _simple_tab(meta, HOME, *home_grid(store, contacts, crows, ts), 0)
-    per_tab[PICKS] = _view_tab(meta, PICKS, f"IFERROR(VALUE(Jobs!A2:A),0)>=1", True)
-    per_tab[PASSED] = _view_tab(meta, PASSED, 'Jobs!A2:A="Pass"', False)
+    per_tab[PICKS] = _view_tab(meta, PICKS, f"IFERROR(VALUE('{JOBS}'!A2:A),0)>=1", True)
+    per_tab[PASSED] = _view_tab(meta, PASSED, f"'{JOBS}'!A2:A=\"Pass\"", False)
     per_tab[BACKUP] = _simple_tab(meta, BACKUP, ["Your pick", "Status", "Company", "Role", "Notes"],
                                   backup_rows(store), len(existing.get(BACKUP, [])))
     per_tab[COMPANIES] = _company_tab(meta, crows, len(existing.get(COMPANIES, [])))
@@ -1264,6 +1269,14 @@ class GspreadBackend:
                                       for cf in have[t].get("conditionalFormats") or []]}
         return out
 
+    def rename_tabs(self, renames: dict[str, str]) -> None:
+        meta = self.ss.fetch_sheet_metadata({"fields": "sheets(properties)"})
+        have = {s["properties"]["title"]: s["properties"]["sheetId"] for s in meta["sheets"]}
+        reqs = [{"updateSheetProperties": {"properties": {"sheetId": have[old], "title": new}, "fields": "title"}}
+                for old, new in renames.items() if old in have and new not in have]
+        if reqs:
+            self.ss.batch_update({"requests": reqs})
+
     def delete_tabs(self, names: list[str]) -> None:
         meta = self.ss.fetch_sheet_metadata({"fields": "sheets(properties)"})
         reqs = [{"deleteSheet": {"sheetId": s["properties"]["sheetId"]}} for s in meta["sheets"]
@@ -1307,6 +1320,12 @@ class FakeBackend:
                     "has_cf": bool(self.tabs[t]["cf"]), "cf_count": len(self.tabs[t]["cf"]),
                     "cf_formulas": [c["rule"]["booleanRule"]["condition"]["values"][0]["userEnteredValue"]
                                     for c in self.tabs[t]["cf"]]} for t in tabs}
+
+    def rename_tabs(self, renames: dict[str, str]) -> None:
+        for old, new in renames.items():
+            if old in self.tabs and new not in self.tabs:
+                self.tabs[new] = self.tabs.pop(old)
+        self._save()
 
     def delete_tabs(self, names: list[str]) -> None:
         for n in names:
