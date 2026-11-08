@@ -297,3 +297,13 @@ def test_audit_round4_titles(criteria):
     assert "technical" in fails("Computational Scientist, Structural & Thermal")
     assert "technical" in fails("Ingénieur(e) mécanique turbine-alternateur")
     assert not fails("GTM Engineer") and not fails("Graduate Sales Engineer")
+
+
+def test_audit_round5_titles(criteria):
+    from src.pipeline.gates import Gates
+    g = Gates(criteria)
+    fails = lambda t, pay="": {f.gate for f in g.evaluate(_p(criteria, t, [], pay=pay)).failures}
+    assert "not_related_to_degree" in fails("Certified Surgical Technologist I - 4th Floor")
+    assert "not_related_to_degree" in fails("Advanced Practice Provider, Complex Gyn")
+    assert "salary" in fails("Food Service Worker") and "salary" in fails("Athletic Aide I")
+    assert "salary" not in fails("Finance Operator", pay="Salary: $120,000 - $140,000/year")
