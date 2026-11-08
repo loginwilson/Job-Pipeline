@@ -51,7 +51,7 @@ class Gates:
 
     def evaluate(self, p: Posting) -> Evaluation:
         ev = Evaluation(posting=p)
-        for rule in (self.real_opening, self.opt_related, self.field_fit, self.has_description, self.specialist_text, self.edge, self.employment_type, self.location, self.salary, self.experience,
+        for rule in (self.real_opening, self.opt_related, self.field_fit, self.title_language, self.has_description, self.specialist_text, self.edge, self.employment_type, self.location, self.salary, self.experience,
                      self.seniority, self.work_authorization, self.technical_and_credentials, self.timing):
             rule(p, ev)
         ev.field = field_of(p, self.c)
@@ -159,6 +159,14 @@ class Gates:
             return True
         return False
 
+    def title_language(self, p: Posting, ev: Evaluation) -> None:
+        """'Strategist (Spanish speaking)': the title itself asks for a language you don't list."""
+        mine = {str(x).lower() for x in self.c.get("candidate", "languages", default=["English"]) or []}
+        others = [x for x in self.c.get("other_languages", default=[]) or [] if str(x).lower() not in mine]
+        hit = find_terms(p.title, others, first_only=True)
+        if hit and re.search(r"speak|speaker|bilingual|fluent|native|language", p.title, re.I):
+            ev.fail("credentials", f"requires {hit[0].term}: {p.title}")
+
     def edge(self, p: Posting, ev: Evaluation) -> None:
         """Your edge: AI applied to hospitality or real estate. Flagged and listed first."""
         ff = self.c.get("field_fit", default={}) or {}
@@ -171,7 +179,13 @@ class Gates:
         label = ("hospitality" if domain.startswith("hospitality") else "real estate") if domain else ""
         # ranking (your words, Nov 8): hospitality / real estate preferred, an AI-forward
         # company preferred; both together first
-        if domain and ai:
+        bank_title = find_terms(p.title, (ff.get("unrelated_title_terms") or {}).get("banking_markets") or [],
+                                first_only=True)
+        if domain and bank_title:
+            # real-estate banking (CRE finance, ECM real estate): a reach, not a preferred-field fit
+            if "Stretch: banking × real assets" not in ev.flags:
+                ev.flag("Stretch: banking × real assets")
+        elif domain and ai:
             ev.flag(f"Your edge: AI × {label}")
         elif domain:
             ev.flag(f"Preferred field: {label}")

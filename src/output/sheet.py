@@ -217,6 +217,8 @@ def _build_row(r, owner_states, now, apply_days, follow_days, follow_statuses,
 def _preference_rank(flags: str) -> int:
     """Your ranking (Nov 8): AI x hospitality / real estate, then hospitality / real estate,
     then an AI-forward company, then the rest."""
+    if "Stretch" in flags:
+        return 4                   # reaches last, after every realistic fit
     for rank, mark in enumerate(("Your edge", "Preferred field", "AI-forward company")):
         if mark in flags:
             return rank

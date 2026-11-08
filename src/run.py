@@ -325,16 +325,52 @@ def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> 
     src, changed = JSearchSource(), 0
     _refetch_old_search_copies(store, ts)
     rows = store.conn.execute(
-        "SELECT p.posting_id, p.company, p.snapshot FROM postings p JOIN scores s USING(posting_id) "
+        "SELECT p.posting_id, p.company, p.title, p.url, p.snapshot FROM postings p JOIN scores s USING(posting_id) "
         "WHERE p.posting_id LIKE 'jsearch:%' AND p.closed_at IS NULL AND p.merged_into IS NULL "
-        "AND s.passed = 1 AND p.snapshot IS NOT NULL").fetchall()
+        "AND s.passed = 1").fetchall()
     for r in rows:
         try:
-            job = (json.loads(r["snapshot"]) or {}).get("job")
+            job = (json.loads(r["snapshot"] or "null") or {}).get("job")
             if not job:
-                continue          # stored before full copies were kept; it ages out after 7 days
+                # stored before full copies were kept: the title alone still decides most
+                # rules (field, level, job type), so a title that fails today's rules drops
+                from .sources.base import RawPosting
+                stub = RawPosting(platform="jsearch", slug="", native_id=r["posting_id"].split(":", 2)[2],
+                                  title=r["title"] or "", url=r["url"] or "", locations=[])
+                company = Company(name=r["company"] or "", platform="jsearch", slug="")
+                quick = gates.evaluate(normalize_posting(stub, company, criteria, matcher))
+                title_fails = [f for f in quick.failures if f.gate not in ("salary", "location")]
+                if title_fails:
+                    changed += 1
+                    store.save_score(r["posting_id"], False,
+                                     [{"gate": f.gate, "matched": f.matched} for f in title_fails],
+                                     quick.flags, display_fields(quick), ts)
+                continue
             raw = src.parse({"data": [job]})[0]
             company = Company(name=r["company"] or raw.company or "", platform="jsearch", slug=raw.slug)
+            ev = evaluate_one(raw, company, criteria, gates, matcher)
+        except Exception as exc:      # one bad stored copy never stops the run
+            log.warning("re-check %s: %s", r["posting_id"], exc)
+            continue
+        if not ev.passed:
+            changed += 1
+        store.save_score(r["posting_id"], ev.passed, [{"gate": f.gate, "matched": f.matched} for f in ev.failures],
+                         ev.flags, display_fields(ev), ts)
+    # The Muse: stored copies are the full result, so they re-check the same way
+    from .textmatch import parse_when
+    muse_rows = store.conn.execute(
+        "SELECT p.posting_id, p.company, p.snapshot FROM postings p JOIN scores s USING(posting_id) "
+        "WHERE p.posting_id LIKE 'muse:%' AND p.closed_at IS NULL AND p.merged_into IS NULL "
+        "AND s.passed = 1 AND p.snapshot IS NOT NULL").fetchall()
+    muse = MuseSource(load_sources_config().get("muse") or {})
+    for r in muse_rows:
+        try:
+            snap = json.loads(r["snapshot"]) or {}
+            parsed = muse.parse({"results": [snap]}, now=parse_when(ts)) if snap.get("name") else []
+            if not parsed:
+                continue          # too old to parse: it closes with the next Muse sweep
+            raw = parsed[0]
+            company = Company(name=r["company"] or raw.company or "", platform="muse", slug=raw.slug)
             ev = evaluate_one(raw, company, criteria, gates, matcher)
         except Exception as exc:      # one bad stored copy never stops the run
             log.warning("re-check %s: %s", r["posting_id"], exc)

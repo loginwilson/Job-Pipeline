@@ -487,3 +487,13 @@ def test_financial_modeling_is_a_missing_hard_skill(evaluate):
     assert "technical" in gates("- Experience building DCF and LBO models")
     assert "technical" not in gates("- Financial modeling experience a plus")
     assert "technical" not in gates("- Comfortable with Excel and Google Sheets")
+
+
+def test_language_in_title_and_real_estate_banking_is_a_stretch(full_criteria):
+    from src.pipeline.gates import Gates
+    g = Gates(full_criteria)
+    body = ["We build AI agents for enterprises."] + ["Words about the role here."] * 12
+    assert "credentials" in {f.gate for f in g.evaluate(_p(full_criteria, "Strategist, Agent Development (Spanish speaking)", body)).failures}
+    cre = ["We finance commercial real estate and multifamily properties."] + ["Words about the role here."] * 12
+    ev = g.evaluate(_p(full_criteria, "Loan Management, Commercial Real Estate Finance Analyst", cre))
+    assert "Stretch: banking × real assets" in ev.flags and not any(f.startswith("Preferred") for f in ev.flags)

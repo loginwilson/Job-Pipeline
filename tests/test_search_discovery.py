@@ -202,3 +202,23 @@ def test_same_board_under_two_names_is_watched_once():
     store.add_discovered("JPMorganChase", "oracle", "jpmc.fa.oraclecloud.com/CX_1001", "Hacker News", "", T1)
     store.add_discovered("JP Morgan Chase", "oracle", "jpmc.fa.oraclecloud.com/CX_1001", "New-grad lists", "", T2)
     assert [r["company"] for r in store.discovered_boards()] == ["JPMorganChase"]
+
+
+def test_old_search_copies_without_full_text_are_rechecked_by_title(criteria):
+    """JSearch rows stored before full copies were kept used to skip the re-check forever."""
+    from src.run import recheck_search_postings
+    from src.store.db import Store
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.config import load_criteria
+    full = load_criteria()
+    store = Store(":memory:")
+    ts = "2026-11-08T19:00:00+00:00"
+    for pid, title in (("jsearch:lowes:1", "Full Time - Sales Associate - Building Materials"),
+                       ("jsearch:acme:2", "Business Operations Associate")):
+        store.upsert_posting(pid, "Co", title, "https://x", None, {"apply_links": []}, ts)
+        store.save_score(pid, True, [], [], {}, ts)
+    store.commit()
+    recheck_search_postings(store, full, Gates(full), LocationMatcher(full), ts)
+    passed = {r["posting_id"]: r["passed"] for r in store.conn.execute("SELECT posting_id, passed FROM scores")}
+    assert passed == {"jsearch:lowes:1": 0, "jsearch:acme:2": 1}
