@@ -421,3 +421,23 @@ def test_one_pick_column_pass_and_numbers(criteria, board, evals):
     assert {a, c} <= {r[ID_COL] for r in tab(sheet, APPLICATIONS)}
     assert [r[ID_COL] for r in tab(sheet, PASSED)] == [b]
     assert sheet.read([REVIEW])[REVIEW][0][:4] == ["Interest", "Status", "Next step", "Due"]
+
+
+def test_sorting_without_the_hidden_id_column_keeps_picks_on_the_right_jobs(criteria, board, evals):
+    """Nov 8: rows were re-sorted but the hidden Posting ID column stayed put."""
+    store, sheet = Store(":memory:"), FakeBackend()
+    run(store, sheet, board, evals, criteria, T1)
+    grid = sheet.tabs[REVIEW]["grid"]
+    rows = [r for r in tab(sheet, REVIEW)]
+    # pick the first job (by its own Company + Role), then "sort" every column except the ID
+    first_role = rows[0][ROLE]
+    sheet.set_cell(REVIEW, 1, INT, "5")
+    body = grid[1:len(rows) + 1]
+    ids = [r[ID_COL] for r in body]
+    body.reverse()
+    for r, pid in zip(body, ids):
+        r[ID_COL] = pid
+    grid[1:len(rows) + 1] = body
+    run(store, sheet, board, evals, criteria, T2)
+    apps = tab(sheet, APPLICATIONS)
+    assert len(apps) == 1 and apps[0][ROLE] == first_role and apps[0][INT] == "5"

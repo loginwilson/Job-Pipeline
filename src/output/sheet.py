@@ -167,8 +167,53 @@ def _interest(v: str) -> int:
 
 
 # --- reading your columns ---------------------------------------------------
+def _norm(v) -> str:
+    return re.sub(r"\s+", " ", str(v or "")).strip().lower()
+
+
+def make_row_resolver(store: Store):
+    """(hidden ID, row cells) -> the posting the row really shows, or None if it can't be told."""
+    rows = store.conn.execute(
+        "SELECT p.posting_id, p.company, p.title, s.display FROM postings p LEFT JOIN scores s USING(posting_id) "
+        "WHERE p.merged_into IS NULL").fetchall()
+    by_id = {r["posting_id"]: r for r in rows}
+    by_name: dict[tuple, list] = {}
+    for r in rows:
+        by_name.setdefault((_norm(r["company"]), _norm(r["title"])), []).append(r)
+
+    def loc(r) -> str:
+        try:
+            return _norm(json.loads(r["display"] or "{}").get("location", ""))
+        except ValueError:
+            return ""
+
+    def resolve(pid: str, cells: dict) -> str | None:
+        co, role = _norm(cells.get("Company")), _norm(cells.get("Role"))
+        if not co and not role:
+            return pid or None
+        r = by_id.get(pid)
+        if r is not None and _norm(r["company"]) == co and _norm(r["title"]) == role:
+            return pid                                   # the usual case: ID and row agree
+        cands = by_name.get((co, role), [])
+        if len(cands) > 1:
+            here = _norm(cells.get("Location"))
+            cands = [c for c in cands if loc(c) == here] or cands
+        if len(cands) == 1:
+            if pid and pid != cands[0]["posting_id"]:
+                log.warning("Sheet: row '%s - %s' had another job's ID (sorted?): fixed", cells.get("Company"),
+                            cells.get("Role"))
+            return cands[0]["posting_id"]
+        if r is None and not cands:
+            return pid or None                           # not in the database (kept rows): as before
+        log.warning("Sheet: can't tell which job row '%s - %s' is; left unchanged", cells.get("Company"),
+                    cells.get("Role"))
+        return None
+    return resolve
+
+
 def read_owner_values(existing: dict[str, list[list[str]]],
-                      known: dict[str, dict] | None = None) -> tuple[dict[str, dict], dict[str, dict]]:
+                      known: dict[str, dict] | None = None,
+                      resolve=None) -> tuple[dict[str, dict], dict[str, dict]]:
     """Owner cells per Posting ID from the decision tabs (+ full rows, for rows to keep).
     A picked job shows in To review AND My applications: the copy whose cells differ from
     what was last saved is the one you just edited, so it wins."""
@@ -195,6 +240,10 @@ def read_owner_values(existing: dict[str, list[list[str]]],
         for raw in rows[1:]:
             raw = _pad(raw, len(rows[0]))
             pid = raw[idx["Posting ID"]]
+            if resolve is not None:
+                # sorting part of the Sheet can leave the hidden ID column behind: trust the
+                # row's own Company + Role (+ Location), not the ID, and skip rows we can't place
+                pid = resolve(pid, {h: (raw[i] or "") for h, i in idx.items()})
             if not pid:
                 continue
             vals = {h: raw[idx[h]].strip() for h in OWNER_HEADERS if h in idx}
@@ -329,7 +378,7 @@ def _sort_key(tab: str, row: dict):
 # --- sync -----------------------------------------------------------------
 def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Criteria,
                           ts: str) -> tuple[list[dict], dict]:
-    sheet_owner, full_rows = read_owner_values(existing, store.owner_states())
+    sheet_owner, full_rows = read_owner_values(existing, store.owner_states(), make_row_resolver(store))
     for pid, vals in sheet_owner.items():          # the Sheet is the source of truth for your columns
         store.save_owner_state(pid, vals, ts)
     store.commit()
@@ -526,10 +575,13 @@ def read_company_job_adds(existing: dict) -> list[str]:
         idx = {h: i for i, h in enumerate(rows[0])}
         if "Add" not in idx or "Posting ID" not in idx:
             continue
+        role_col = "Role" if "Role" in idx else "Program"
         for raw in rows[1:]:
             raw = _pad(raw, len(rows[0]))
             if (raw[idx["Add"]] or "").strip().lower() == "add" and raw[idx["Posting ID"]]:
-                out.append(raw[idx["Posting ID"]].strip())
+                cells = {h: (raw[i] or "") for h, i in idx.items()}
+                cells["Role"] = cells.get(role_col, "")
+                out.append((raw[idx["Posting ID"]].strip(), cells))
     return out
 
 
@@ -959,8 +1011,11 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
         store.save_company_owner(name, vals, ts)
         if name.strip().lower() not in known_companies:        # a company you typed in yourself
             store.note_target_company(name.strip(), "", "", "you added on the Sheet", ts)
-    for pid in read_company_job_adds(existing):                # jobs you added from Company jobs
-        store.add_forced(pid, ts)
+    resolve = make_row_resolver(store)
+    for pid, cells in read_company_job_adds(existing):         # jobs you added from Company jobs
+        pid = resolve(pid, cells)
+        if pid:
+            store.add_forced(pid, ts)
     for pid in load_picked_jobs():                             # jobs you asked to add directly
         if store.conn.execute("SELECT 1 FROM postings WHERE posting_id=?", (pid,)).fetchone():
             store.add_forced(pid, ts)
