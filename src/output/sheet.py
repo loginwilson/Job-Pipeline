@@ -230,6 +230,7 @@ def read_owner_values(existing: dict[str, list[list[str]]],
         k = known.get(pid) or {}
         return {"Interest": _pick_cell(k), "Status": k.get("status") or "", "Notes": k.get("notes") or "",
                 "Next step": k.get("next_step") or "", "Due": k.get("due") or ""}
+    review_score: dict[str, str] = {}
     for tab in (JOBS, PICKS):
         rows = existing.get(tab) or []
         if not rows:
@@ -248,10 +249,13 @@ def read_owner_values(existing: dict[str, list[list[str]]],
                 pid = resolve(pid, cells)
             if not pid:
                 continue
-            vals = {h: cells[h].strip() for h in OWNER_HEADERS if h in idx and h != "Decision"
-                    and not (tab == PICKS and h == "Interest")}      # you score on To review only
+            vals = {h: cells[h].strip() for h in OWNER_HEADERS if h in idx and h != "Decision"}
             if "Interest" in vals:
                 vals["Interest"] = _pick_norm(vals["Interest"])
+                if tab == JOBS:
+                    review_score[pid] = vals["Interest"]
+                elif not vals["Interest"] or vals["Interest"] == review_score.get(pid, vals["Interest"]):
+                    del vals["Interest"]     # Apply mirrors To review: only a score typed on Apply counts
             if pid in seen and not any(vals.values()):
                 continue                       # a stale duplicate row never wipes real entries
             seen.add(pid)
@@ -938,6 +942,8 @@ class FakeBackend:
             return ""
         if "formulaValue" in v:
             f = v["formulaValue"]
+            if f.startswith("=IFERROR(INDEX("):            # Apply's live score: Sheets shows the score
+                return f.rsplit(', "', 1)[1].rstrip('")')
             if f.startswith("=HYPERLINK("):
                 inner = f[len("=HYPERLINK("):-1]
                 text = inner.rsplit('","', 1)[-1].rstrip('"')

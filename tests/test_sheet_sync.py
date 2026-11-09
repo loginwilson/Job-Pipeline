@@ -114,7 +114,7 @@ def test_scores_go_to_apply_and_you_track_there(criteria, board, evals):
 
 
 def test_apply_shows_your_to_review_score_live(criteria, board, evals):
-    """You score on To review only; Apply's Interest is a live lookup of it."""
+    """Apply's Interest mirrors To review live; a score typed on Apply counts too."""
     store, sheet = Store(":memory:"), FakeBackend()
     run(store, sheet, board, evals, criteria, T1)
     a, b = [r[ID_COL] for r in tab(sheet, REVIEW)][:2]
@@ -123,11 +123,12 @@ def test_apply_shows_your_to_review_score_live(criteria, board, evals):
     run(store, sheet, board, evals, criteria, T2)
     f = sheet.formulas(PICKS, 0)[0]
     assert f.startswith("=IFERROR(INDEX('To review'!A:A, MATCH(O2, 'To review'!O:O, 0)), \"4\")")
-    put(sheet, REVIEW, a, "Interest", "Pass")                   # changed your mind
-    put(sheet, REVIEW, b, "Interest", "5")
+    put(sheet, PICKS, a, "Interest", "Pass")                    # changed your mind, on Apply
+    put(sheet, REVIEW, b, "Interest", "5")                      # re-scored on To review
     run(store, sheet, board, evals, criteria, T2)
     assert [r[ID_COL] for r in tab(sheet, APPLICATIONS)] == [b]
     assert [r[ID_COL] for r in tab(sheet, PASSED)] == [a]
+    assert {r[ID_COL]: r[INT] for r in tab(sheet, REVIEW)}[a] == "Pass"      # To review follows
 
 
 def test_follow_up_after_ten_days(criteria, board, evals):
