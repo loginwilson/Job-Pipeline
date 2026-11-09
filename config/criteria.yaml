@@ -92,6 +92,9 @@ salary:
 # Lower bound of a range counts ("2–4 years" → 2). Required OR preferred.
 experience:
   drop_at_or_above: 2   # 0–1 years only (your choice, Nov 8): a required 2+ years drops
+  # Nov 9: a posted salary midpoint above this, with no entry-level wording (new grad, 0-1 years,
+  # "Associate"/"Analyst" titles...), means an experienced hire even when no years are stated
+  senior_pay_midpoint: 200000
   # Experience asks with no number that still mean "several years" (drop; the line is shown in Dropped)
   unstated_senior_terms: [extensive experience, significant experience, deep experience, many years of experience, several years of experience, multiple years of experience, several years experience, spent years, seasoned professional, mentor junior, mentor less experienced, mentoring junior, mentor and develop junior, train and mentor less experienced]
   # With NO years stated, these mid-level titles drop unless the title also has an entry cue (your choice, Nov 8)

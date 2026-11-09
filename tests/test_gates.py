@@ -549,3 +549,18 @@ def test_a_job_site_is_never_the_employer(criteria):
     ev = Gates(criteria).evaluate(normalize_posting(raw, Company("Jobrapido", "jsearch", "jobrapido"), criteria,
                                                     LocationMatcher(criteria)))
     assert "not_a_real_opening" in {f.gate for f in ev.failures}
+
+
+def test_senior_pay_with_no_entry_wording_drops(criteria):
+    """Nov 9: Anthropic GTM S&O ($190-270K, no years stated) is an experienced hire."""
+    from src.pipeline.gates import Gates
+    g = Gates(criteria)
+    d = ["You will own strategy and operations across the business with leadership on key programs.",
+         "## Requirements", "- Strong analytical skills and clear communication with executives and partners.",
+         "- Comfort with ambiguity and a bias toward ownership in a fast-moving environment."]
+    gates = lambda t, pay, extra=(): {f.gate for f in g.evaluate(_p(criteria, t, d + list(extra), pay=pay)).failures}
+    assert "experience" in gates("GTM Strategy & Operations", "Annual Salary: $190,000 - $270,000 USD")
+    assert "experience" not in gates("Founding BizOps", "Base salary of $170K to $300K.",
+                                     ["- 0 to 5 years of experience in consulting or operations."])
+    assert "experience" not in gates("Strategy Associate", "Salary $190K - $250K")      # entry title
+    assert "experience" not in gates("Deployment Strategist", "Salary $140K - $240K")   # mid $190K

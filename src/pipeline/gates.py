@@ -294,6 +294,16 @@ class Gates:
             ev.fail("experience", f"'{vague[0].term}' (several years implied): {vague[0].line}")
             return
         exp = self.c.get("experience", default={}) or {}
+        cap = exp.get("senior_pay_midpoint")
+        mid = p.comp.midpoint_annual if p.comp.known and p.comp.period in (None, "year") else None
+        if cap and mid and mid > cap and not p.experience.clean_terms \
+                and not any(a.years < 2 for a in p.experience.asks) \
+                and not find_terms(p.title, exp.get("entry_title_cues") or [], first_only=True) \
+                and not PROGRAM_RX.search(p.title or ""):
+            # Nov 9 (Anthropic GTM S&O, $190-270K, "track record... presented to senior executives"):
+            # pay this high with no entry-level wording means an experienced hire
+            ev.fail("experience", f"pays {p.comp.display()} with no entry-level wording: an experienced hire")
+            return
         if not p.experience.asks and not p.experience.clean_terms:
             mid = find_terms(p.title, exp.get("no_years_mid_level_titles") or [], first_only=True)
             if mid and not find_terms(p.title, exp.get("entry_title_cues") or [], first_only=True):
