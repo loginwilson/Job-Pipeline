@@ -465,7 +465,8 @@ def _view_tab(meta: dict, tab: str, condition: str, sort_desc: bool) -> list[dic
     rows = f"'{JOBS}'!A2:{last}"
     body = f"FILTER({rows}, {condition})"
     if sort_desc:
-        body = f"SORT({body}, 1, FALSE)"
+        key = f"FILTER(VALUE('{JOBS}'!A2:A), {condition})"     # sort by number, typed as text or not
+        body = f"SORT({body}, {key}, FALSE)"
     formula = f"={{'{JOBS}'!A1:{last}1; IFERROR({body}, \"\")}}"
     col = {h: i for i, h in enumerate(HEADERS)}
     reqs = [
