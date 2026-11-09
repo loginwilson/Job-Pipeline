@@ -1,16 +1,15 @@
 """Google Sheet sync - the Sheet is a view of SQLite; your columns are yours.
 
-Four tabs (Nov 9: kept simple):
-  To review  every job, once. Score it in Interest: Pass, or 1-5.
-  Apply      the jobs you scored 1-5, best first. Track each here: Status, Next step,
-             Due, Notes ("Applied on" fills itself the first time Status = Applied).
-  Passed     a live view of your passes.
+Four tabs (Nov 9: you type in ONE place; everything else follows instantly):
+  To review  every job, once. Score it (Pass / 1-5) and track it (Status, Next step, Due,
+             Notes). The hourly run only adds new postings here ("Applied on" fills itself).
+  Apply      a live formula view: your 1-5s, best first, finished applications last.
+  Passed     a live formula view of your passes.
   Contacts   yours: people at the companies on Apply (Company / Job pick from Apply).
   (+ hidden back office: Dropped, Unparsed alerts, Funnel, Board health)
 
-Your cells are read from To review and Apply by Company + Role (+ Location), saved in the
-database, and never overwritten. A new score shows on Apply on the next run.
-Per run: ONE read + ONE spreadsheets.batchUpdate.
+Your cells are read from To review by Company + Role (+ Location), saved in the database,
+and never overwritten. Per run: ONE read + ONE spreadsheets.batchUpdate.
 """
 from __future__ import annotations
 
@@ -33,15 +32,15 @@ log = logging.getLogger(__name__)
 JOBS, PICKS, PASSED = "To review", "Apply", "Passed"
 RENAMES = {"Jobs": JOBS, "My picks": PICKS}                    # tabs from the first one-table layout
 REVIEW = JOBS
-# To review: score only (Pass / 1-5); what you scan first, the rest to the right
-HEADERS = ["Interest", "Company", "Role", "Location", "Salary", "Experience ask", "Flags", "Field",
-           "Extra comp", "Visa", "Posted", "First seen", "Source", "Link", "Posting ID"]
-# Apply: your tracking columns first ("Contacts" counts your Contacts rows for the company)
-APPLY_HEADERS = ["Interest", "Status", "Applied on", "Next step", "Due", "Contacts", "Company", "Role",
-                 "Location", "Salary", "Experience ask", "Flags", "Notes", "Link", "Posting ID"]
+# To review: the one table you type in (score + tracking), the posting details to the right
+HEADERS = ["Interest", "Status", "Next step", "Due", "Notes", "Company", "Role", "Location", "Salary",
+           "Experience ask", "Flags", "Field", "Extra comp", "Visa", "Posted", "First seen", "Source",
+           "Applied on", "Link", "Posting ID"]
+# Apply: a live, sorted view of your 1-5s (a formula - it changes the moment you type)
+APPLY_HEADERS = ["Interest", "Status", "Applied on", "Next step", "Due", "Notes", "Contacts", "Company", "Role",
+                 "Location", "Salary", "Experience ask", "Flags", "Link"]
 OWNER_HEADERS = ("Decision", "Interest", "Status", "Notes", "Next step", "Due")
 ID_COL = HEADERS.index("Posting ID")
-APPLY_ID_COL = APPLY_HEADERS.index("Posting ID")
 PICK_OPTIONS = ["Pass", "1", "2", "3", "4", "5"]      # the Interest column
 STATUS_OPTIONS = ["Not started", "Drafting", "Applied", "Networking", "Interviewing", "Offer",
                   "Rejected", "Withdrawn", "No response"]
@@ -255,7 +254,7 @@ def read_owner_values(existing: dict[str, list[list[str]]],
                 if tab == JOBS:
                     review_score[pid] = vals["Interest"]
                 elif not vals["Interest"] or vals["Interest"] == review_score.get(pid, vals["Interest"]):
-                    del vals["Interest"]     # Apply mirrors To review: only a score typed on Apply counts
+                    del vals["Interest"]     # the old written Apply (before Nov 9's view): only real edits
             if pid in seen and not any(vals.values()):
                 continue                       # a stale duplicate row never wipes real entries
             seen.add(pid)
@@ -398,7 +397,7 @@ def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Cr
     db_ids = {r["posting_id"] for r in rows}
     for pid, vals in sheet_owner.items():          # touched rows that left the DB view are kept
         if pid not in db_ids and any(v for k, v in vals.items() if k != "Decision" or v != "Pending"):
-            cells = {h: full_rows[pid].get(h, "") for h in set(HEADERS) | set(APPLY_HEADERS)}
+            cells = {h: full_rows[pid].get(h, "") for h in HEADERS}
             cells.update({"Interest": _pick_cell(states.get(pid) or {}), "Status": vals.get("Status", ""),
                           "Notes": vals.get("Notes", ""), "Next step": vals.get("Next step", ""),
                           "Due": vals.get("Due", "")})
@@ -426,44 +425,69 @@ def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Cr
     tab_rows = [r for r in new + kept if not scored(r)] + [r for r in new + kept if scored(r)]
     grid = [HEADERS] + [[r["cells"].get(h, "") for h in HEADERS] for r in tab_rows]
     requests = _grid_tab(meta[JOBS], HEADERS, grid, len(existing.get(JOBS) or []))
-    # Apply: your 1-5s, best first, finished ones last
-    picks = sorted([r for r in tab_rows if _interest(r["cells"].get("Interest") or "") > 0],
-                   key=lambda r: _sort_key(PICKS, r))
-    company_col = _col_letter(APPLY_HEADERS.index("Company"))
-    aid, rid = _col_letter(APPLY_HEADERS.index("Posting ID")), _col_letter(ID_COL)
-    agrid = [APPLY_HEADERS]
-    for n, r in enumerate(picks, start=2):
-        c = dict(r["cells"])
-        c["Contacts"] = f'=IF(COUNTIF(Contacts!A:A,{company_col}{n})=0,"",COUNTIF(Contacts!A:A,{company_col}{n}))'
-        # your score lives on To review: shown here live (a Pass greys the row at once)
-        c["Interest"] = (f"=IFERROR(INDEX('{JOBS}'!A:A, MATCH({aid}{n}, '{JOBS}'!{rid}:{rid}, 0)), "
-                         f"\"{c.get('Interest', '')}\")")
-        agrid.append([c.get(h, "") for h in APPLY_HEADERS])
-    blank = [""] * len(APPLY_HEADERS)      # a full blank row, so a longer old list never shows through
-    agrid += [blank, [_JUST_SCORED] + blank[1:], [_live_picks(len(picks) + 1)] + blank[1:]]
-    requests += _grid_tab(meta[PICKS], APPLY_HEADERS, agrid, len(existing.get(PICKS) or []), room=300,
-                          filter_rows=len(picks) + 1)
+    picks = [r for r in tab_rows if _interest(r["cells"].get("Interest") or "") > 0]
     passed = sum(1 for r in tab_rows if (r["cells"].get("Interest") or "") == "Pass")
     return requests, {"rows": len(rows), "tabs": {JOBS: len(tab_rows), PICKS: len(picks), PASSED: passed},
                       "new": len(new)}
 
 
-_JUST_SCORED = "Just scored on To review (live). Each moves up, with Status etc., on the next hourly run"
-
-
-def _live_picks(last_row: int) -> str:
-    """Apply's bottom section: To review rows you scored 1-5 that aren't in the list above yet,
-    in Apply's column order, so a new score shows the moment you type it."""
+def _apply_view(meta: dict) -> list[dict]:
+    """Apply: To review's 1-5s, best first, in Apply's column order - one live formula."""
+    sid = meta[PICKS]["id"]
     last = _col_letter(len(HEADERS) - 1)
-    rid = _col_letter(ID_COL)
-    aid = _col_letter(APPLY_HEADERS.index("Posting ID"))
-    score = f"IFERROR(VALUE('{JOBS}'!A2:A),0)"
-    new = f"ISNA(MATCH('{JOBS}'!{rid}2:{rid}, '{PICKS}'!{aid}$2:{aid}${max(last_row, 2)}, 0))"
+    c = lambda h: f"CHOOSECOLS(g, {HEADERS.index(h) + 1})"
     cols = []
     for h in APPLY_HEADERS:
-        cols.append(f"CHOOSECOLS(g, {HEADERS.index(h) + 1})" if h in HEADERS else 'IF(SEQUENCE(ROWS(g)), "")')
-    return (f"=IFERROR(LET(f, FILTER('{JOBS}'!A2:{last}, {score}>=1, {new}), "
-            f"g, SORT(f, VALUE(CHOOSECOLS(f, 1)), FALSE), HSTACK({', '.join(cols)})), \"\")")
+        if h == "Contacts":
+            cols.append(f'ARRAYFORMULA(IF(COUNTIF(Contacts!A:A, {c("Company")})=0, "", '
+                        f'COUNTIF(Contacts!A:A, {c("Company")})))')
+        elif h == "Role":
+            cols.append(f'ARRAYFORMULA(IF({c("Link")}="", {c("Role")}, HYPERLINK({c("Link")}, {c("Role")})))')
+        else:
+            cols.append(c(h))
+    score = f"IFERROR(VALUE('{JOBS}'!A2:A), 0)"
+    formula = (f"=IFERROR(LET("
+               f"f, FILTER('{JOBS}'!A2:{last}, {score}>=1), "
+               f"g, SORT(f, ARRAYFORMULA(REGEXMATCH(CHOOSECOLS(f, {HEADERS.index('Status') + 1}), "
+               f"\"^({'|'.join(sorted(ENDED))})$\")), TRUE, ARRAYFORMULA(VALUE(CHOOSECOLS(f, 1))), FALSE), "
+               f"HSTACK({', '.join(cols)})), \"\")")      # finished applications last
+    reqs = _clear_tab(sid) + [
+        {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
+            "rowCount": 2000, "columnCount": max(meta[PICKS].get("cols", 26), len(APPLY_HEADERS)),
+            "frozenRowCount": 1}},
+            "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
+        {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
+                         "rows": [{"values": [_cell(h) for h in APPLY_HEADERS]}, {"values": [_cell(formula)]}],
+                         "fields": "userEnteredValue"}},
+        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
+                        "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
+                        "fields": "userEnteredFormat.textFormat.bold"}},
+    ]
+    col = {h: _col_letter(i) for i, h in enumerate(APPLY_HEADERS)}
+    full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(APPLY_HEADERS)}
+    rules = [(f'=OR(' + ",".join(f'${col["Status"]}2="{x}"' for x in sorted(ENDED)) + ')',
+              {"textFormat": {"foregroundColor": GRAY}}),
+             (f'=REGEXMATCH(${col["Flags"]}2,"Closed")', {"textFormat": {"foregroundColor": GRAY}}),
+             (f'=REGEXMATCH(${col["Flags"]}2,"Follow up")', {"backgroundColor": YELLOW}),
+             (_due_formula(col["Due"]), {"backgroundColor": YELLOW}),
+             (f'=VALUE(0&$A2)=5', {"backgroundColor": GREEN_5}), (f'=VALUE(0&$A2)=4', {"backgroundColor": GREEN_4}),
+             (f'=VALUE(0&$A2)=3', {"backgroundColor": GREEN_3}),
+             (f'=IFERROR(VALUE(0&$A2)>=1,FALSE)', {"backgroundColor": GREEN_1})]
+    if meta[PICKS].get("cf_formulas") != [f for f, _ in rules]:
+        reqs += [{"deleteConditionalFormatRule": {"sheetId": sid, "index": 0}}
+                 for _ in range(int(meta[PICKS].get("cf_count", 0)))]
+        for i, (f, fmt) in enumerate(rules):
+            reqs.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [full], "booleanRule": {
+                "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": f}]}, "format": fmt}}}})
+    return reqs
+
+
+def _clear_tab(sid: int) -> list[dict]:
+    """Empty a tab (values, dropdowns, filter) so a formula can fill it."""
+    whole = {"sheetId": sid}
+    return [{"updateCells": {"range": whole, "fields": "userEnteredValue"}},
+            {"setDataValidation": {"range": whole}},
+            {"clearBasicFilter": {"sheetId": sid}}]
 
 
 def _view_tab(meta: dict, tab: str, condition: str) -> list[dict]:
@@ -486,8 +510,7 @@ def _view_tab(meta: dict, tab: str, condition: str) -> list[dict]:
     ]
 
 
-def _grid_tab(m: dict, headers: list[str], grid: list[list], existing_len: int, room: int = 20,
-              filter_rows: int | None = None) -> list[dict]:
+def _grid_tab(m: dict, headers: list[str], grid: list[list], existing_len: int, room: int = 20) -> list[dict]:
     """To review / Apply: values, dropdowns, filter, hidden ID, colours."""
     sid = m["id"]
     # the grid is resized to the rows plus some room (shrinking deletes the rest); old rows
@@ -508,13 +531,13 @@ def _grid_tab(m: dict, headers: list[str], grid: list[list], existing_len: int, 
                         "fields": "userEnteredFormat.textFormat.bold"}},
         {"setDataValidation": {"range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": need_rows,
                                          "startColumnIndex": 0, "endColumnIndex": len(headers)}}},
-        _validation(sid, col["Interest"], PICK_OPTIONS, filter_rows or need_rows),
+        _validation(sid, col["Interest"], PICK_OPTIONS, need_rows),
     ]
     if "Status" in col:
-        reqs.append(_validation(sid, col["Status"], STATUS_OPTIONS, filter_rows or need_rows))
+        reqs.append(_validation(sid, col["Status"], STATUS_OPTIONS, need_rows))
     reqs += [
         {"setBasicFilter": {"filter": {"range": {"sheetId": sid, "startRowIndex": 0,
-                                                 "endRowIndex": filter_rows or len(grid),
+                                                 "endRowIndex": len(grid),
                                                  "startColumnIndex": 0, "endColumnIndex": len(headers)}}}},
         {"updateDimensionProperties": {"range": {"sheetId": sid, "dimension": "COLUMNS",
                                                  "startIndex": id_col, "endIndex": id_col + 1},
@@ -593,7 +616,7 @@ def _contacts_tab(meta: dict) -> list[dict]:
     sid = m["id"]
     rows = max(m.get("rows", 1000), 500)
     col = {h: i for i, h in enumerate(CONTACT_HEADERS)}
-    ac = {h: _col_letter(APPLY_HEADERS.index(h)) for h in ("Company", "Role")}
+    ac = {h: _col_letter(APPLY_HEADERS.index(h)) for h in ("Company", "Role")}     # Apply's view columns
     reqs = [
         {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
             "rowCount": rows, "columnCount": max(m.get("cols", 26), len(CONTACT_HEADERS)), "frozenRowCount": 1}},
@@ -734,6 +757,7 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     for tab, (header, rows) in other_tab_rows(store, criteria, ts, unparsed).items():
         per_tab[tab] = _simple_tab(meta, tab, header, rows, len(existing.get(tab, [])))
     per_tab[CONTACTS] = _contacts_tab(meta)
+    per_tab[PICKS] = _apply_view(meta)
     per_tab[PASSED] = _view_tab(meta, PASSED, f"'{JOBS}'!A2:A=\"Pass\"")
     # A rewrite makes an open Sheet reload and recalculate (it froze on big tabs), so a tab
     # whose content is the same as last time is left alone.
@@ -906,7 +930,10 @@ class FakeBackend:
         self.calls.append(requests)
         for req in requests:
             (kind, body), = req.items()
-            if kind == "updateCells":
+            if kind == "updateCells" and "range" in body:          # clear a whole tab
+                tab = self._tab_by_id(body["range"]["sheetId"])
+                tab["grid"] = []
+            elif kind == "updateCells":
                 tab = self._tab_by_id(body["start"]["sheetId"])
                 r0 = body["start"]["rowIndex"]
                 for i, row in enumerate(body["rows"]):

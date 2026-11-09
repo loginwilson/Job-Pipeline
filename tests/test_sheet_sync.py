@@ -12,7 +12,7 @@ from src.sources import load_fixture
 from src.store.db import Store
 
 REVIEW, APPLICATIONS = JOBS, PICKS
-PASSED = "__view: passed"          # a live formula view of To review: computed here as the formula does
+PASSED = "__view: passed"          # Apply and Passed are live formula views of To review
 T1, T2 = "2026-11-05T10:17:00+00:00", "2026-11-05T11:17:00+00:00"
 T_LATER = "2026-11-16T11:17:00+00:00"        # 11 days after T1
 # every tab's rows come back in one column order U (To review's columns, then Apply's extras)
@@ -43,21 +43,18 @@ def run(store, sheet, board, evals, criteria, ts):
 
 
 def tab(sheet, name):
-    if name == PASSED:
-        return [r for r in tab(sheet, JOBS) if r[INT] == "Pass"]
+    if name in (PICKS, PASSED):                  # live formula views: computed here as the formula does
+        jobs = tab(sheet, JOBS)
+        if name == PASSED:
+            return [r for r in jobs if r[INT] == "Pass"]
+        picks = [r for r in jobs if r[INT].replace(".0", "").isdigit() and int(float(r[INT])) >= 1]
+        ended = {"Rejected", "Withdrawn", "No response"}
+        return sorted(picks, key=lambda r: (r[STATUS] in ended, -int(float(r[INT]))))
     rows = sheet.read([name])[name]
     if not rows:
         return []
     head = rows[0]
-    out = []
-    for r in rows[1:]:
-        if name == PICKS and not any(r):
-            break                      # the live "just scored" section starts after a blank row
-        d = dict(zip(head, r + [""] * (len(head) - len(r))))
-        if d.get("Interest", "").startswith("=IFERROR(INDEX("):
-            d["Interest"] = d["Interest"].rsplit(', "', 1)[1].rstrip('")')   # Sheets shows the live score
-        out.append([d.get(h, "") for h in U])
-    return out
+    return [[dict(zip(head, r + [""] * (len(head) - len(r)))).get(h, "") for h in U] for r in rows[1:]]
 
 
 def row_index(sheet, name, pid):
@@ -80,7 +77,7 @@ def test_new_postings_land_in_review(criteria, board, evals):
     assert set(sheet.tabs) == set(ALL_TABS) and len(sheet.calls) == 1       # one write per run
     assert [t for t in sorted(sheet.tabs, key=lambda t: sheet.tabs[t]["index"])][:4] == \
         ["To review", "Apply", "Passed", "Contacts"]
-    assert sheet.read([PICKS])[PICKS][0] == AH
+    assert sheet.read([PICKS])[PICKS][0] == AH and sheet.read([PICKS])[PICKS][1][0].startswith("=IFERROR(LET(")
     assert sheet.tabs["Passed"]["grid"][0][0]["formulaValue"].startswith("={'To review'!A1:")   # a live view
 
 
@@ -97,10 +94,10 @@ def test_scores_go_to_apply_and_you_track_there(criteria, board, evals):
     assert [r[ID_COL] for r in tab(sheet, APPLICATIONS)] == [a, d, c]          # highest Interest first
     assert [r[ID_COL] for r in tab(sheet, PASSED)] == [b]
     # you track on Apply
-    put(sheet, PICKS, a, "Notes", "Coffee chat")
-    put(sheet, PICKS, c, "Status", "Applied")
-    put(sheet, PICKS, d, "Status", "Rejected")
-    put(sheet, PICKS, a, "Next step", "Email Sam")
+    put(sheet, REVIEW, a, "Notes", "Coffee chat")
+    put(sheet, REVIEW, c, "Status", "Applied")
+    put(sheet, REVIEW, d, "Status", "Rejected")
+    put(sheet, REVIEW, a, "Next step", "Email Sam")
     run(store, sheet, board, evals, criteria, T2)
     apps = tab(sheet, APPLICATIONS)
     assert [r[ID_COL] for r in apps] == [a, c, d]                              # finished ones last
@@ -113,31 +110,13 @@ def test_scores_go_to_apply_and_you_track_there(criteria, board, evals):
     assert tab(sheet, APPLICATIONS)[0][NOTES] == "Coffee chat"
 
 
-def test_apply_shows_your_to_review_score_live(criteria, board, evals):
-    """Apply's Interest mirrors To review live; a score typed on Apply counts too."""
-    store, sheet = Store(":memory:"), FakeBackend()
-    run(store, sheet, board, evals, criteria, T1)
-    a, b = [r[ID_COL] for r in tab(sheet, REVIEW)][:2]
-    put(sheet, REVIEW, a, "Interest", "4")
-    put(sheet, REVIEW, b, "Interest", "2")
-    run(store, sheet, board, evals, criteria, T2)
-    f = sheet.formulas(PICKS, 0)[0]
-    assert f.startswith("=IFERROR(INDEX('To review'!A:A, MATCH(O2, 'To review'!O:O, 0)), \"4\")")
-    put(sheet, PICKS, a, "Interest", "Pass")                    # changed your mind, on Apply
-    put(sheet, REVIEW, b, "Interest", "5")                      # re-scored on To review
-    run(store, sheet, board, evals, criteria, T2)
-    assert [r[ID_COL] for r in tab(sheet, APPLICATIONS)] == [b]
-    assert [r[ID_COL] for r in tab(sheet, PASSED)] == [a]
-    assert {r[ID_COL]: r[INT] for r in tab(sheet, REVIEW)}[a] == "Pass"      # To review follows
-
-
 def test_follow_up_after_ten_days(criteria, board, evals):
     store, sheet = Store(":memory:"), FakeBackend()
     run(store, sheet, board, evals, criteria, T1)
     pid = tab(sheet, REVIEW)[0][ID_COL]
     put(sheet, REVIEW, pid, "Interest", "3")
     run(store, sheet, board, evals, criteria, T1)
-    put(sheet, PICKS, pid, "Status", "Applied")
+    put(sheet, REVIEW, pid, "Status", "Applied")
     run(store, sheet, board, evals, criteria, T2)
     assert "Follow up" not in tab(sheet, APPLICATIONS)[0][FLAGS]
     run(store, sheet, board, evals, criteria, T_LATER)
@@ -151,7 +130,7 @@ def test_owner_values_restored_from_database(criteria, board, evals):
     pid = tab(sheet, REVIEW)[0][ID_COL]
     put(sheet, REVIEW, pid, "Interest", "4")
     run(store, sheet, board, evals, criteria, T2)
-    put(sheet, PICKS, pid, "Status", "Drafting")
+    put(sheet, REVIEW, pid, "Status", "Drafting")
     run(store, sheet, board, evals, criteria, T2)
     fresh = FakeBackend()                                    # tabs deleted / new Sheet
     run(store, fresh, board, evals, criteria, T2)
@@ -164,12 +143,12 @@ def test_hyperlinks_and_formatting(criteria, board, evals):
     run(store, sheet, board, evals, criteria, T1)
     assert all(f.startswith('=HYPERLINK("https://jobs.lever.co/') for f in sheet.formulas(REVIEW, H.index("Role")))
     t = sheet.tabs[JOBS]
-    assert t["frozen"] == 1 and len(t["cf"]) == 6
+    assert t["frozen"] == 1 and len(t["cf"]) == 9
     kinds = [next(iter(r)) for r in t["other"]]
-    assert kinds.count("setDataValidation") == 2 and "setBasicFilter" in kinds
-    assert len(sheet.tabs["Apply"]["cf"]) == 9 and sheet.tabs["Passed"]["frozen"] == 1
+    assert kinds.count("setDataValidation") == 3 and "setBasicFilter" in kinds
+    assert len(sheet.tabs["Apply"]["cf"]) == 8 and sheet.tabs["Passed"]["frozen"] == 1
     run(store, sheet, board, evals, criteria, T2)
-    assert len(sheet.tabs[REVIEW]["cf"]) == 6                # rules not duplicated
+    assert len(sheet.tabs[REVIEW]["cf"]) == 9                # rules not duplicated
 
 
 def test_closed_postings_leave_review_but_stay_in_applications(criteria, board, payload):
@@ -194,7 +173,7 @@ def test_touched_row_never_deleted(criteria, board, evals):
     pid = tab(sheet, REVIEW)[0][ID_COL]
     put(sheet, REVIEW, pid, "Interest", "2")
     run(store, sheet, board, evals, criteria, T1)
-    put(sheet, PICKS, pid, "Notes", "keep me")
+    put(sheet, REVIEW, pid, "Notes", "keep me")
     store.conn.execute("UPDATE scores SET passed=0 WHERE posting_id=?", (pid,))   # e.g. criteria tightened
     store.commit()
     sync_all(sheet, store, criteria, T2)
@@ -212,31 +191,15 @@ def test_contacts_link_to_jobs_on_apply_and_old_tabs_go(criteria, board, evals):
     assert sheet.read(["Contacts"])["Contacts"][0] == CONTACT_HEADERS
     rules = [r["setDataValidation"]["rule"]["condition"] for r in sheet.tabs["Contacts"]["other"]
              if "setDataValidation" in r]
-    assert {"type": "ONE_OF_RANGE", "values": [{"userEnteredValue": "='Apply'!G2:G"}]} in rules   # Company
-    assert {"type": "ONE_OF_RANGE", "values": [{"userEnteredValue": "='Apply'!H2:H"}]} in rules   # Job
+    assert {"type": "ONE_OF_RANGE", "values": [{"userEnteredValue": "='Apply'!H2:H"}]} in rules   # Company
+    assert {"type": "ONE_OF_RANGE", "values": [{"userEnteredValue": "='Apply'!I2:I"}]} in rules   # Job
     pid = tab(sheet, REVIEW)[0][ID_COL]
     put(sheet, REVIEW, pid, "Interest", "4")
     for col, v in enumerate(["Example Co", "", "Sasha", "Ops", "NYU alum"]):
         sheet.set_cell("Contacts", 1, col, v)
     run(store, sheet, board, evals, criteria, T2)
     assert sheet.read(["Contacts"])["Contacts"][1][2] == "Sasha"                 # your row untouched
-    count = sheet.formulas(PICKS, AH.index("Contacts"))[0]
-    assert count.startswith('=IF(COUNTIF(Contacts!A:A,G2)=0')
-
-
-def test_apply_shows_new_scores_live_until_the_next_run(criteria, board, evals):
-    store, sheet = Store(":memory:"), FakeBackend()
-    run(store, sheet, board, evals, criteria, T1)
-    pid = tab(sheet, REVIEW)[0][ID_COL]
-    put(sheet, REVIEW, pid, "Interest", "4")
-    run(store, sheet, board, evals, criteria, T2)
-    raw = sheet.read([PICKS])[PICKS]
-    n = len(tab(sheet, PICKS))                                   # 1 job in the list
-    assert raw[n + 2][0].startswith("Just scored on To review")
-    live = raw[n + 3][0]
-    # To review rows scored 1-5 whose ID isn't in Apply's list (rows 2..n+1), in Apply's columns
-    assert live.startswith("=IFERROR(LET(f, FILTER('To review'!A2:O") and f"'Apply'!O$2:O${n + 1}" in live
-    assert live.count("CHOOSECOLS(g,") == sum(h in H for h in AH)
+    assert "COUNTIF(Contacts!A:A, CHOOSECOLS(g, 6))" in sheet.tabs[PICKS]["grid"][1][0]["formulaValue"]
 
 
 def test_a_job_you_marked_keeps_its_link_when_rules_change(criteria):
@@ -291,7 +254,7 @@ def test_one_pick_column_pass_and_numbers(criteria, board, evals):
     assert review[a][INT] == "5" and review[b][INT] == "Pass" and review[c][INT] == "3" and review[d][INT] == "3"
     assert [r[ID_COL] for r in tab(sheet, APPLICATIONS)] == [a, c, d]
     assert [r[ID_COL] for r in tab(sheet, PASSED)] == [b]
-    assert sheet.read([REVIEW])[REVIEW][0][:3] == ["Interest", "Company", "Role"]
+    assert sheet.read([REVIEW])[REVIEW][0][:3] == ["Interest", "Status", "Next step"]
 
 
 def test_other_tabs_and_funnel(criteria, board, evals):
@@ -433,16 +396,15 @@ def test_unscored_jobs_stay_on_top_and_old_tab_names_are_renamed(criteria, board
     assert "To review" in old.tabs and "Jobs" not in old.tabs
 
 
-def test_a_shorter_apply_list_leaves_no_stale_row(criteria, board, evals):
-    """Nov 9: Apply lost a row and the old last row (FSH) showed through the blank separator."""
+
+
+def test_apply_and_passed_are_live_views_of_to_review(criteria, board, evals):
+    """Nov 9: you type only on To review; Apply (sorted 1-5s) and Passed follow instantly."""
     store, sheet = Store(":memory:"), FakeBackend()
     run(store, sheet, board, evals, criteria, T1)
-    a, b = [r[ID_COL] for r in tab(sheet, REVIEW)][:2]
-    put(sheet, REVIEW, a, "Interest", "4")
-    put(sheet, REVIEW, b, "Interest", "3")
-    run(store, sheet, board, evals, criteria, T2)
-    put(sheet, REVIEW, b, "Interest", "Pass")
-    run(store, sheet, board, evals, criteria, T2)
-    raw = sheet.read([PICKS])[PICKS]
-    assert [r[ID_COL] for r in tab(sheet, PICKS)] == [a]
-    assert not any(raw[2]) and raw[3][0].startswith("Just scored")
+    f = sheet.tabs[PICKS]["grid"][1][0]["formulaValue"]
+    assert sheet.read([PICKS])[PICKS][0][:3] == ["Interest", "Status", "Applied on"]
+    assert "FILTER('To review'!A2:T, IFERROR(VALUE('To review'!A2:A), 0)>=1)" in f
+    assert "ARRAYFORMULA(VALUE(CHOOSECOLS(f, 1))), FALSE)" in f and "COUNTIF(Contacts!A:A" in f
+    assert len(sheet.tabs[PICKS]["grid"]) == 2                    # header + one formula that fills the rest
+    assert sheet.tabs["Passed"]["grid"][0][0]["formulaValue"].startswith("={'To review'!A1:")
