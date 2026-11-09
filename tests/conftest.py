@@ -29,6 +29,7 @@ def criteria():
     data = copy.deepcopy(load_criteria().data)
     data.pop("field_fit", None)
     data.pop("description_min_words", None)
+    data["salary"].pop("drop_unknown", None)          # tested on its own (test_unknown_salary_rule)
     data["experience"].pop("no_years_mid_level_titles", None)
     return Criteria(data)
 

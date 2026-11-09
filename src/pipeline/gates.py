@@ -49,6 +49,10 @@ class Evaluation:
 class Gates:
     def __init__(self, criteria: Criteria):
         self.c = criteria
+        from ..config import CONFIG_DIR, load_yaml
+        path = CONFIG_DIR / "target_companies.yaml"
+        data = (load_yaml(path) or {}) if path.exists() else {}
+        self.targets = {str(c.get("name", "")).strip().lower() for c in data.get("companies") or []}
 
     def evaluate(self, p: Posting) -> Evaluation:
         ev = Evaluation(posting=p)
@@ -249,6 +253,13 @@ class Gates:
             basis = (p.raw.raw.get("pay_basis") if p.raw and isinstance(p.raw.raw, dict) else None)
             if basis == "hour" and sal.get("hourly_without_amount_is_below_floor"):
                 ev.fail("salary", f"paid hourly, no amount posted (below the {floor:,} floor): {p.title}")
+                return
+            keep = sal.get("unknown_keep_flags") or []
+            if (sal.get("drop_unknown") and p.description_lines          # never on the title-only first pass
+                    and not any(f.startswith(k) for f in ev.flags for k in keep)
+                    and not PROGRAM_RX.search(p.title or "")
+                    and (p.company or "").strip().lower() not in self.targets):
+                ev.fail("salary", "no salary posted, and not a target company, grad program or your edge")
                 return
             ev.flag("Salary unknown")
             return

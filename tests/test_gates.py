@@ -520,3 +520,18 @@ def test_grad_programs_pass_at_90k(evaluate):
     assert "salary" not in gates("The Wolf Graduate Program (2027)", "$90,000")
     assert "salary" in gates("Business Operations Associate", "$90,000")       # other roles: $100K as before
     assert "salary" in gates("Rotational Development Program", "$80,000")
+
+
+def test_unknown_salary_rule(criteria):
+    """Nov 9: no pay posted -> dropped, unless a target company, a grad program or your edge."""
+    import copy
+    from src.config import Criteria
+    from src.pipeline.gates import Gates
+    data = copy.deepcopy(criteria.data)
+    data["salary"]["drop_unknown"] = True
+    g = Gates(Criteria(data))
+    no_pay = lambda t: g.evaluate(_p(criteria, t, ["Great benefits and a strong team."], pay=""))
+    assert "salary" in {f.gate for f in no_pay("Operations Analyst").failures}
+    assert "salary" not in {f.gate for f in no_pay("2027 Operations Development Program").failures}
+    g.targets.add("x")                                      # a company on your target list
+    assert "salary" not in {f.gate for f in no_pay("Operations Analyst").failures}
