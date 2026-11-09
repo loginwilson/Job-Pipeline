@@ -1,25 +1,16 @@
-"""Google Sheet sync — the Sheet is a view of SQLite; your columns are yours.
+"""Google Sheet sync - the Sheet is a view of SQLite; your columns are yours.
 
-Triage system (no automatic scoring):
-  Decision   Pending / Apply / Pass       — do I want it?
-  Interest   1–5 (Apply only)              — how much? 4–5 = all-in effort
-  Status     Not started → Drafting → Applied → Networking → Interviewing → Offer,
-             or Rejected / Withdrawn / No response
-  Notes      free text
-The pipeline fills "Applied on" the first time it sees Status = Applied and
-flags "Follow up" when an application hasn't moved for
-criteria.tracking.follow_up_after_days.
+Four tabs (Nov 9: kept simple):
+  To review  every job, once. Score it in Interest: Pass, or 1-5.
+  Apply      the jobs you scored 1-5, best first. Track each here: Status, Next step,
+             Due, Notes ("Applied on" fills itself the first time Status = Applied).
+  Passed     a live view of your passes.
+  Contacts   yours: people at the companies on Apply (Company / Job pick from Apply).
+  (+ hidden back office: Dropped, Unparsed alerts, Funnel, Board health)
 
-Tabs:
-  To review        Decision = Pending (new postings land here), newest first
-  My applications  Decision = Apply, Interest 5→1, active statuses before ended ones
-  Passed           Decision = Pass — archive, change your mind any time
-  Dropped / Unparsed alerts / Funnel / Board health
-A row moves to its tab on the next run after you change Decision. Owner
-values are read from all three tabs by Posting ID (header names, not column
-letters), saved in the database, and never overwritten.
-
-Per run: ONE read + ONE spreadsheets.batchUpdate. Tabs are created on first run.
+Your cells are read from To review and Apply by Company + Role (+ Location), saved in the
+database, and never overwritten. A new score shows on Apply on the next run.
+Per run: ONE read + ONE spreadsheets.batchUpdate.
 """
 from __future__ import annotations
 
@@ -39,27 +30,26 @@ from ..textmatch import parse_when
 
 log = logging.getLogger(__name__)
 
-# One table (Nov 8 rebuild): every job lives ONCE, on Jobs; My picks and Passed are live
-# formula views of it, so they update the moment you type - no copies to keep in sync.
-JOBS, PICKS, PASSED = "To review", "Apply", "Passed"     # your names (Nov 8)
+JOBS, PICKS, PASSED = "To review", "Apply", "Passed"
 RENAMES = {"Jobs": JOBS, "My picks": PICKS}                    # tabs from the first one-table layout
-OLD_JOB_TABS = ["To review", "My applications", "Passed"]      # the copy-based layout, removed once
-REVIEW = APPLICATIONS = JOBS                                   # older names some code still uses
-DECISION_TABS = [JOBS]
-# one pick column: Pass / 1-5 (your Nov 8 choice); what you scan first, the rest to the right
-HEADERS = ["Interest", "Status", "Next step", "Due", "Applied on", "Company", "Role", "Location", "Salary",
-           "Experience ask", "Flags", "Notes", "Field", "Extra comp", "Visa", "Posted", "First seen", "Source",
-           "Link", "Posting ID"]
+REVIEW = JOBS
+# To review: score only (Pass / 1-5); what you scan first, the rest to the right
+HEADERS = ["Interest", "Company", "Role", "Location", "Salary", "Experience ask", "Flags", "Field",
+           "Extra comp", "Visa", "Posted", "First seen", "Source", "Link", "Posting ID"]
+# Apply: your tracking columns first ("Contacts" counts your Contacts rows for the company)
+APPLY_HEADERS = ["Interest", "Status", "Applied on", "Next step", "Due", "Contacts", "Company", "Role",
+                 "Location", "Salary", "Experience ask", "Flags", "Notes", "Link", "Posting ID"]
 OWNER_HEADERS = ("Decision", "Interest", "Status", "Notes", "Next step", "Due")
 ID_COL = HEADERS.index("Posting ID")
-DECISION_OPTIONS = ["Pending", "Apply", "Pass"]
-INTEREST_OPTIONS = ["1", "2", "3", "4", "5"]
-PICK_OPTIONS = ["Pass", "1", "2", "3", "4", "5"]      # the job tabs' Interest column
+APPLY_ID_COL = APPLY_HEADERS.index("Posting ID")
+PICK_OPTIONS = ["Pass", "1", "2", "3", "4", "5"]      # the Interest column
 STATUS_OPTIONS = ["Not started", "Drafting", "Applied", "Networking", "Interviewing", "Offer",
                   "Rejected", "Withdrawn", "No response"]
 ENDED = {"Rejected", "Withdrawn", "No response"}
 STATUS_ORDER = {"Offer": 0, "Interviewing": 1, "Networking": 2, "Applied": 3, "Drafting": 4,
                 "Not started": 5, "": 5, "Rejected": 7, "Withdrawn": 8, "No response": 9}
+TARGET_STATUSES = {"Target", "Networking", "Coffee chat", "Referred", "Applied", "Interviewing", "Offer",
+                   "Watching"}      # company statuses you set on the old Companies tab (kept in the database)
 PASS_WORDS = {"pass", "veto"}
 GREEN = {"red": 0.85, "green": 0.94, "blue": 0.83}
 YELLOW = {"red": 1.0, "green": 0.95, "blue": 0.75}
@@ -160,7 +150,7 @@ def route(owner: dict) -> str:
     if d in PASS_WORDS:
         return PASSED
     if d in ("apply", "all-in") or owner.get("Interest") or (owner.get("Status") or "") not in ("", "Not started"):
-        return APPLICATIONS
+        return PICKS
     return REVIEW
 
 
@@ -216,52 +206,62 @@ def make_row_resolver(store: Store):
     return resolve
 
 
+
+def _pick_norm(v) -> str:
+    """'3', '3.0' or 3 -> '3'; anything else as typed."""
+    v = str(v or "").strip()
+    try:
+        f = float(v)
+        return str(int(f)) if f.is_integer() else v
+    except ValueError:
+        return v
+
+
 def read_owner_values(existing: dict[str, list[list[str]]],
                       known: dict[str, dict] | None = None,
                       resolve=None) -> tuple[dict[str, dict], dict[str, dict]]:
-    """Owner cells per Posting ID from the decision tabs (+ full rows, for rows to keep).
-    A picked job shows in To review AND My applications: the copy whose cells differ from
-    what was last saved is the one you just edited, so it wins."""
+    """Your cells per posting, from To review and Apply. Each column is taken from wherever it
+    differs from what was saved last run (that's the one you just edited)."""
+    known = known or {}
     owner: dict[str, dict] = {}
     full: dict[str, dict] = {}
-    known = known or {}
 
     def saved(pid: str) -> dict:
         k = known.get(pid) or {}
-        return {"Decision": k.get("decision") or "", "Interest": k.get("interest") or "",
-                "Status": k.get("status") or "", "Notes": k.get("notes") or "",
+        return {"Interest": _pick_cell(k), "Status": k.get("status") or "", "Notes": k.get("notes") or "",
                 "Next step": k.get("next_step") or "", "Due": k.get("due") or ""}
-
-    def same(a: dict, b: dict) -> bool:
-        return all((a.get(h) or "").strip() == (b.get(h) or "").strip() for h in OWNER_HEADERS
-                   if not (h == "Decision" and {(a.get(h) or "Pending"), (b.get(h) or "Pending")} <= {"", "Pending"}))
-    for tab in DECISION_TABS:
+    for tab in (JOBS, PICKS):
         rows = existing.get(tab) or []
         if not rows:
             continue
         idx = {h: i for i, h in enumerate(rows[0])}
         if "Posting ID" not in idx:
             continue
+        seen: set[str] = set()
         for raw in rows[1:]:
             raw = _pad(raw, len(rows[0]))
-            pid = raw[idx["Posting ID"]]
+            cells = {h: (raw[i] or "") for h, i in idx.items()}
+            pid = cells["Posting ID"]
             if resolve is not None:
                 # sorting part of the Sheet can leave the hidden ID column behind: trust the
                 # row's own Company + Role (+ Location), not the ID, and skip rows we can't place
-                pid = resolve(pid, {h: (raw[i] or "") for h, i in idx.items()})
+                pid = resolve(pid, cells)
             if not pid:
                 continue
-            vals = {h: raw[idx[h]].strip() for h in OWNER_HEADERS if h in idx}
-            if "Decision" not in idx:
-                vals = _from_pick(vals)
-            if pid in owner:
-                if not any(vals.values()):
-                    continue   # a stale duplicate never wipes real entries
-                if pid in known and same(vals, saved(pid)) and not same(owner[pid], saved(pid)):
-                    continue   # the other copy is the one you edited
-            owner[pid] = vals
-            full[pid] = {h: raw[i] for h, i in idx.items()}
-    return owner, full
+            vals = {h: cells[h].strip() for h in OWNER_HEADERS if h in idx and h != "Decision"}
+            if "Interest" in vals:
+                vals["Interest"] = _pick_norm(vals["Interest"])
+            if pid in seen and not any(vals.values()):
+                continue                       # a stale duplicate row never wipes real entries
+            seen.add(pid)
+            base = saved(pid)
+            cur = owner.setdefault(pid, dict(base))
+            for h, v in vals.items():
+                if v != (base.get(h) or "").strip() or pid not in known:
+                    cur[h] = v
+            if tab == JOBS or pid not in full:
+                full[pid] = cells
+    return {pid: _from_pick(v) for pid, v in owner.items()}, full
 
 
 # --- row building ---------------------------------------------------------
@@ -370,7 +370,7 @@ def _preference_rank(flags: str) -> int:
 
 def _sort_key(tab: str, row: dict):
     c = row["cells"]
-    if tab == APPLICATIONS:
+    if tab == PICKS:
         return (c["Status"] in ENDED, -_interest(c["Interest"]), STATUS_ORDER.get(c["Status"], 6),
                 row["closed"], _neg_date(row["first_seen"]))
     # your edge (AI x hospitality / real estate) first, then newest finds (by day), then NYC
@@ -381,60 +381,29 @@ def _sort_key(tab: str, row: dict):
 
 
 # --- sync -----------------------------------------------------------------
-def restore_picks_once(store: Store, ts: str) -> int:
-    """config/restore_picks.yaml: scores to put back once (matched by company + role, never by
-    the hidden ID). Only jobs you haven't scored since are filled. Returns how many were set."""
-    from ..config import CONFIG_DIR, load_yaml
-    path = CONFIG_DIR / "restore_picks.yaml"
-    if not path.exists():
-        return 0
-    data = load_yaml(path) or {}
-    marker = "__restore_" + hashlib.sha1(json.dumps(data, sort_keys=True).encode()).hexdigest()[:10]
-    if store.conn.execute("SELECT 1 FROM sheet_tabs WHERE tab=?", (marker,)).fetchone():
-        return 0
-    by_name: dict[tuple, list[str]] = {}
-    for r in store.conn.execute("SELECT posting_id, company, title FROM postings WHERE merged_into IS NULL"):
-        by_name.setdefault((_norm(r["company"]), _norm(r["title"])), []).append(r["posting_id"])
-    states = store.owner_states()
-    n = 0
-    for e in data.get("picks") or []:
-        v = str(e.get("interest") or "").strip()
-        for pid in by_name.get((_norm(e.get("company")), _norm(e.get("role"))), []):
-            st = states.get(pid) or {}
-            if (st.get("interest") or "") or (st.get("decision") or "Pending") not in ("", "Pending"):
-                continue                                  # you've scored it since: yours wins
-            dec = "Pass" if v.lower() == "pass" else "Apply"
-            store.save_owner_state(pid, {"Decision": dec, "Interest": "" if dec == "Pass" else v,
-                                         "Status": st.get("status") or "", "Notes": st.get("notes") or "",
-                                         "Next step": st.get("next_step") or "", "Due": st.get("due") or ""}, ts)
-            n += 1
-    store.conn.execute("INSERT OR REPLACE INTO sheet_tabs (tab, content_hash, written_at) VALUES (?, '', ?)",
-                       (marker, ts))
-    log.info("Restored %d scores from config/restore_picks.yaml", n)
-    return n
-
-
 def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Criteria,
                           ts: str) -> tuple[list[dict], dict]:
     resolve = make_row_resolver(store)
     sheet_owner, full_rows = read_owner_values(existing, store.owner_states(), resolve)
     for pid, vals in sheet_owner.items():          # the Sheet is the source of truth for your columns
         store.save_owner_state(pid, vals, ts)
-    restore_picks_once(store, ts)
     store.commit()
     states = store.owner_states()
     rows = build_rows(store, criteria, ts, states)
     db_ids = {r["posting_id"] for r in rows}
     for pid, vals in sheet_owner.items():          # touched rows that left the DB view are kept
         if pid not in db_ids and any(v for k, v in vals.items() if k != "Decision" or v != "Pending"):
-            cells = {h: full_rows[pid].get(h, "") for h in HEADERS}
+            cells = {h: full_rows[pid].get(h, "") for h in set(HEADERS) | set(APPLY_HEADERS)}
+            cells.update({"Interest": _pick_cell(states.get(pid) or {}), "Status": vals.get("Status", ""),
+                          "Notes": vals.get("Notes", ""), "Next step": vals.get("Next step", ""),
+                          "Due": vals.get("Due", "")})
             known = store.conn.execute("SELECT title, url FROM postings WHERE posting_id=?", (pid,)).fetchone()
             if known and known["url"]:
                 cells["Role"] = hyperlink(known["url"], known["title"] or cells.get("Role", ""))
                 cells["Link"] = known["url"]
             rows.append({"posting_id": pid, "closed": True, "first_seen": "", "cells": cells})
 
-    # keep YOUR row order (however you sorted); new finds go on top, best first
+    # To review keeps YOUR row order (however you sorted); new finds go on top, best first
     order: list[str] = []
     jr = existing.get(JOBS) or []
     if jr:
@@ -451,25 +420,28 @@ def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Cr
     scored = lambda r: bool((r["cells"].get("Interest") or "").strip())
     tab_rows = [r for r in new + kept if not scored(r)] + [r for r in new + kept if scored(r)]
     grid = [HEADERS] + [[r["cells"].get(h, "") for h in HEADERS] for r in tab_rows]
-    requests = _decision_tab(meta[JOBS], grid, len(existing.get(JOBS) or []))
-    picks = sum(1 for r in tab_rows if _interest(r["cells"].get("Interest") or "") > 0)
+    requests = _grid_tab(meta[JOBS], HEADERS, grid, len(existing.get(JOBS) or []))
+    # Apply: your 1-5s, best first, finished ones last
+    picks = sorted([r for r in tab_rows if _interest(r["cells"].get("Interest") or "") > 0],
+                   key=lambda r: _sort_key(PICKS, r))
+    company_col = _col_letter(APPLY_HEADERS.index("Company"))
+    agrid = [APPLY_HEADERS]
+    for n, r in enumerate(picks, start=2):
+        c = dict(r["cells"])
+        c["Contacts"] = f'=IF(COUNTIF(Contacts!A:A,{company_col}{n})=0,"",COUNTIF(Contacts!A:A,{company_col}{n}))'
+        agrid.append([c.get(h, "") for h in APPLY_HEADERS])
+    requests += _grid_tab(meta[PICKS], APPLY_HEADERS, agrid, len(existing.get(PICKS) or []))
     passed = sum(1 for r in tab_rows if (r["cells"].get("Interest") or "") == "Pass")
-    return requests, {"rows": len(rows), "tabs": {JOBS: len(tab_rows), PICKS: picks, PASSED: passed},
+    return requests, {"rows": len(rows), "tabs": {JOBS: len(tab_rows), PICKS: len(picks), PASSED: passed},
                       "new": len(new)}
 
 
-def _view_tab(meta: dict, tab: str, condition: str, sort_desc: bool) -> list[dict]:
-    """My picks / Passed: one formula that shows matching Jobs rows live."""
+def _view_tab(meta: dict, tab: str, condition: str) -> list[dict]:
+    """Passed: one formula that shows matching To review rows live."""
     sid = meta[tab]["id"]
     last = _col_letter(len(HEADERS) - 1)
-    rows = f"'{JOBS}'!A2:{last}"
-    body = f"FILTER({rows}, {condition})"
-    if sort_desc:
-        key = f"FILTER(VALUE('{JOBS}'!A2:A), {condition})"     # sort by number, typed as text or not
-        body = f"SORT({body}, {key}, FALSE)"
-    formula = f"={{'{JOBS}'!A1:{last}1; IFERROR({body}, \"\")}}"
-    col = {h: i for i, h in enumerate(HEADERS)}
-    reqs = [
+    formula = f"={{'{JOBS}'!A1:{last}1; IFERROR(FILTER('{JOBS}'!A2:{last}, {condition}), \"\")}}"
+    return [
         {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
             "rowCount": 2000, "columnCount": max(meta[tab].get("cols", 26), len(HEADERS)), "frozenRowCount": 1}},
             "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
@@ -482,67 +454,20 @@ def _view_tab(meta: dict, tab: str, condition: str, sort_desc: bool) -> list[dic
                                                  "startIndex": ID_COL, "endIndex": ID_COL + 1},
                                        "properties": {"hiddenByUser": True}, "fields": "hiddenByUser"}},
     ]
-    if tab == PICKS:
-        interest = _col_letter(col["Interest"])
-        full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}
-        rules = [(f'=VALUE(0&${interest}2)=5', GREEN_5), (f'=VALUE(0&${interest}2)=4', GREEN_4),
-                 (f'=VALUE(0&${interest}2)=3', GREEN_3), (f'=IFERROR(VALUE(0&${interest}2)>=1,FALSE)', GREEN_1)]
-        if meta[tab].get("cf_formulas") != [f for f, _ in rules]:
-            reqs += [{"deleteConditionalFormatRule": {"sheetId": sid, "index": 0}}
-                     for _ in range(int(meta[tab].get("cf_count", 0)))]
-            for i, (f, colour) in enumerate(rules):
-                reqs.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [full], "booleanRule": {
-                    "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": f}]},
-                    "format": {"backgroundColor": colour}}}}})
-    return reqs
 
 
-BACKUP = "Before reset"
-
-
-def reset_scores_once(backend, store: Store, ts: str) -> None:
-    """Nov 8: you asked to wipe the scoring and start fresh in the one-table layout. Your old
-    picks / passes are kept on a 'Before reset' tab; the old copy-based tabs are removed."""
-    if store.conn.execute("SELECT 1 FROM sheet_tabs WHERE tab='__one_table_v1'").fetchone():
-        return
-    store.conn.execute("CREATE TABLE IF NOT EXISTS reset_backup (company TEXT, title TEXT, url TEXT, "
-                       "pick TEXT, status TEXT, notes TEXT)")
-    store.conn.execute("DELETE FROM reset_backup")
-    for r in store.conn.execute(
-            "SELECT p.company, p.title, p.url, o.decision, o.interest, o.status, o.notes FROM owner_state o "
-            "JOIN postings p USING(posting_id) WHERE COALESCE(o.decision,'') NOT IN ('', 'Pending') "
-            "OR COALESCE(o.interest,'')<>'' OR COALESCE(o.status,'')<>'' OR COALESCE(o.notes,'')<>''").fetchall():
-        pick = "Pass" if (r["decision"] or "").lower() in PASS_WORDS else (r["interest"] or r["decision"] or "")
-        store.conn.execute("INSERT INTO reset_backup VALUES (?,?,?,?,?,?)",
-                           (r["company"], r["title"], r["url"], pick, r["status"] or "", r["notes"] or ""))
-    store.conn.execute("DELETE FROM owner_state")
-    store.conn.execute("DELETE FROM sheet_tabs")
-    store.conn.execute("INSERT INTO sheet_tabs (tab, content_hash, written_at) VALUES ('__one_table_v1', '', ?)",
-                       (ts,))
-    store.commit()
-    if hasattr(backend, "delete_tabs"):
-        backend.delete_tabs(OLD_JOB_TABS)
-
-
-def backup_rows(store: Store) -> list[list]:
-    try:
-        rows = store.conn.execute("SELECT * FROM reset_backup ORDER BY pick='Pass', pick DESC, company").fetchall()
-    except Exception:
-        return []
-    return [[r["pick"], r["status"], r["company"], hyperlink(r["url"], r["title"]) if r["url"] else r["title"],
-             r["notes"]] for r in rows]
-
-
-def _decision_tab(m: dict, grid: list[list], existing_len: int) -> list[dict]:
+def _grid_tab(m: dict, headers: list[str], grid: list[list], existing_len: int) -> list[dict]:
+    """To review / Apply: values, dropdowns, filter, hidden ID, colours."""
     sid = m["id"]
     # the grid is resized to the rows plus a little room (shrinking deletes the rest); old rows
     # inside that room are blanked
     need_rows = len(grid) + 20
-    padded = grid + [[""] * len(HEADERS)] * (min(existing_len, need_rows) - len(grid))
-    col = {h: i for i, h in enumerate(HEADERS)}
+    padded = grid + [[""] * len(headers)] * (min(existing_len, need_rows) - len(grid))
+    col = {h: i for i, h in enumerate(headers)}
+    id_col = col["Posting ID"]
     reqs: list[dict] = [
         {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
-            "rowCount": need_rows, "columnCount": max(m.get("cols", 26), len(HEADERS)), "frozenRowCount": 1}},
+            "rowCount": need_rows, "columnCount": max(m.get("cols", 26), len(headers)), "frozenRowCount": 1}},
             "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
         {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
                          "rows": [{"values": [_cell(v) for v in row]} for row in padded],
@@ -551,28 +476,34 @@ def _decision_tab(m: dict, grid: list[list], existing_len: int) -> list[dict]:
                         "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
                         "fields": "userEnteredFormat.textFormat.bold"}},
         {"setDataValidation": {"range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": need_rows,
-                                         "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}}},
+                                         "startColumnIndex": 0, "endColumnIndex": len(headers)}}},
         _validation(sid, col["Interest"], PICK_OPTIONS, need_rows),
-        _validation(sid, col["Status"], STATUS_OPTIONS, need_rows),
+    ]
+    if "Status" in col:
+        reqs.append(_validation(sid, col["Status"], STATUS_OPTIONS, need_rows))
+    reqs += [
         {"setBasicFilter": {"filter": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": len(grid),
-                                                 "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}}}},
+                                                 "startColumnIndex": 0, "endColumnIndex": len(headers)}}}},
         {"updateDimensionProperties": {"range": {"sheetId": sid, "dimension": "COLUMNS",
-                                                 "startIndex": ID_COL, "endIndex": ID_COL + 1},
+                                                 "startIndex": id_col, "endIndex": id_col + 1},
                                        "properties": {"hiddenByUser": True}, "fields": "hiddenByUser"}},
     ]
-    full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(HEADERS)}
+    full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(headers)}
     flags, interest = _col_letter(col["Flags"]), _col_letter(col["Interest"])
-    # first matching rule wins: closed grey, follow-up yellow, then your picks in greens by Interest
-    rules = [
-        (f'=${interest}2="Pass"', {"textFormat": {"foregroundColor": GRAY}}),
-        (f'=REGEXMATCH(${flags}2,"Closed")', {"textFormat": {"foregroundColor": GRAY}}),
-        (f'=REGEXMATCH(${flags}2,"Follow up")', {"backgroundColor": YELLOW}),
-        (_due_formula(_col_letter(col["Due"])), {"backgroundColor": YELLOW}),
-        (f'=VALUE(0&${interest}2)=5', {"backgroundColor": GREEN_5}),
-        (f'=VALUE(0&${interest}2)=4', {"backgroundColor": GREEN_4}),
-        (f'=VALUE(0&${interest}2)=3', {"backgroundColor": GREEN_3}),
-        (f'=IFERROR(VALUE(0&${interest}2)>=1,FALSE)', {"backgroundColor": GREEN_1}),
-    ]
+    # first matching rule wins: passed / closed / finished grey, follow-up / due yellow, then greens
+    rules = [(f'=${interest}2="Pass"', {"textFormat": {"foregroundColor": GRAY}}),
+             (f'=REGEXMATCH(${flags}2,"Closed")', {"textFormat": {"foregroundColor": GRAY}})]
+    if "Status" in col:
+        status = _col_letter(col["Status"])
+        rules.append((f'=OR(' + ",".join(f'${status}2="{s}"' for s in sorted(ENDED)) + ')',
+                      {"textFormat": {"foregroundColor": GRAY}}))
+        rules.append((f'=REGEXMATCH(${flags}2,"Follow up")', {"backgroundColor": YELLOW}))
+    if "Due" in col:
+        rules.append((_due_formula(_col_letter(col["Due"])), {"backgroundColor": YELLOW}))
+    rules += [(f'=VALUE(0&${interest}2)=5', {"backgroundColor": GREEN_5}),
+              (f'=VALUE(0&${interest}2)=4', {"backgroundColor": GREEN_4}),
+              (f'=VALUE(0&${interest}2)=3', {"backgroundColor": GREEN_3}),
+              (f'=IFERROR(VALUE(0&${interest}2)>=1,FALSE)', {"backgroundColor": GREEN_1})]
     if m.get("cf_formulas") != [f for f, _ in rules]:
         for _ in range(int(m.get("cf_count", 1 if m.get("has_cf") else 0))):
             reqs.append({"deleteConditionalFormatRule": {"sheetId": sid, "index": 0}})
@@ -592,211 +523,57 @@ def _validation(sid: int, col: int, options: list[str], rows: int) -> dict:
                  "showCustomUi": True, "strict": False}}}
 
 
+
+
 # --- the other tabs (rewritten in full each run) ---------------------------
 DROPPED, UNPARSED, FUNNEL, HEALTH = "Dropped", "Unparsed alerts", "Funnel", "Board health"
-COMPANIES, COMPANY_JOBS, PROGRAMS = "Companies", "Company jobs", "Grad programs"
-HOME, CONTACTS_TAB = "Home", "Contacts"
-BACK_OFFICE = [DROPPED, UNPARSED, FUNNEL, HEALTH]      # Passed stays visible: you like seeing your passes
-# your hub first, then the inboxes you browse, then the back office
-ALL_TABS = [HOME, JOBS, PICKS, PASSED, COMPANIES, CONTACTS_TAB, PROGRAMS, COMPANY_JOBS, "Before reset",
-            DROPPED, UNPARSED, FUNNEL, HEALTH]
+CONTACTS = CONTACTS_TAB = "Contacts"
+BACK_OFFICE = [DROPPED, UNPARSED, FUNNEL, HEALTH]      # hidden once; unhide any time
+ALL_TABS = [JOBS, PICKS, PASSED, CONTACTS, DROPPED, UNPARSED, FUNNEL, HEALTH]
+REMOVED_TABS = ["Home", "Companies", "Grad programs", "Company jobs", "Before reset"]   # Nov 9: not needed
 
-# --- grad programs: their own view with lighter rules ---------------------------
 from ..pipeline.programs import PROGRAM_RX  # noqa: E402  (new grad / rotational program titles)
-PROGRAM_HEADERS = ["Add", "Company", "Program", "Where it stands", "Location", "Salary", "Experience ask",
-                   "Posting ID"]
-# a program is hidden only for these: things you can't change (skills, degree, citizenship,
-# internship, starting before you graduate); pay, title, location and stated years are notes
-_PROGRAM_BLOCKERS = {"technical", "credentials", "work_authorization", "start_date", "employment_type",
-                     "specialist", "seniority", "not_related_to_degree", "no_description", "not_a_real_opening"}
-_PROGRAM_FIELD_BLOCKERS = ("tech", "design", "product", "banking markets", "legal", "accounting", "hr people",
-                           "pure data", "investment banking")
-
-
-_PROGRAM_HARD_TITLE = re.compile(r"\b(?:full[- ]stack|software|developer|engineer(?:ing)?|technician|data scientist|"
-                                 r"machine learning|quant|trader|designer)\b", re.I)
-_ABROAD = re.compile(r"\b(?:United Kingdom|England|London|Korea|Seoul|Hong Kong|Singapore|India|Germany|France|"
-                     r"Japan|China|Australia|Brazil|Brasil|Mexico|Ireland|Netherlands|Amsterdam|Spain|Israel|Poland|"
-                     r"Dubai|UAE|Switzerland|Sweden|Italy|Philippines|Taiwan)\b", re.I)
 
 
 def is_program(title: str) -> bool:
     return bool(PROGRAM_RX.search(title or ""))
 
 
-def program_rows(store: Store) -> list[list]:
-    tracked = {r["posting_id"] for r in store.pipeline_rows()}
-    out = []
-    for r in store.conn.execute(
-            "SELECT p.posting_id, p.company, p.title, p.url, s.passed, s.failures, s.display FROM postings p "
-            "JOIN scores s USING(posting_id) WHERE p.closed_at IS NULL AND p.merged_into IS NULL"):
-        if not is_program(r["title"]):
-            continue
-        d = json.loads(r["display"] or "{}")
-        fails = json.loads(r["failures"] or "[]")
-        if r["posting_id"] in tracked:
-            where = "✅ On Jobs" if r["passed"] else "✅ Your pick (on Jobs)"
-            rank = 0
-        else:
-            if any(f.get("gate") in _PROGRAM_BLOCKERS for f in fails):
-                continue
-            if any(f.get("gate") == "field" and str(f.get("matched") or "").startswith(_PROGRAM_FIELD_BLOCKERS)
-                   for f in fails):
-                continue
-            if _PROGRAM_HARD_TITLE.search(r["title"] or ""):
-                continue          # engineering / technician programs
-            if any(f.get("gate") == "location" and _ABROAD.search(str(f.get("matched") or "")) for f in fails):
-                continue          # outside the US and Canada
-            notes = "; ".join(f"{_GATE_WORDS.get(f.get('gate'), f.get('gate'))}: {str(f.get('matched') or '')[:70]}"
-                              for f in fails)
-            where = "Outside your usual rules: " + notes
-            rank = 1
-        out.append((rank, (r["company"] or "").lower(), ["", r["company"], hyperlink(r["url"], r["title"]), where,
-                                                          d.get("location", ""), d.get("salary", ""),
-                                                          d.get("experience", ""), r["posting_id"]]))
-    return [row for _, _, row in sorted(out, key=lambda x: (x[0], x[1], str(x[2][2])))]
-
-
-def _programs_tab(meta: dict, rows: list[list], existing_len: int) -> list[dict]:
-    m = meta[PROGRAMS]
-    sid = m["id"]
-    grid = [PROGRAM_HEADERS] + rows
-    need = len(grid) + 20
-    padded = grid + [[""] * len(PROGRAM_HEADERS)] * (min(existing_len, need) - len(grid))
-    return [
-        {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
-            "rowCount": need, "columnCount": max(m.get("cols", 26), len(PROGRAM_HEADERS)), "frozenRowCount": 1}},
-            "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
-        {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
-                         "rows": [{"values": [_cell(v) for v in _pad(r, len(PROGRAM_HEADERS))]} for r in padded],
-                         "fields": "userEnteredValue"}},
-        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
-                        "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
-                        "fields": "userEnteredFormat.textFormat.bold"}},
-        _validation(sid, 0, ["Add"], need),
-    ]
-COMPANY_JOB_HEADERS = ["Add", "Company", "Role", "Passes your rules?", "Location", "Salary", "Experience ask",
-                       "Posting ID"]
-_GATE_WORDS = {"field": "not your field", "experience": "experience", "salary": "pay below your minimum",
-               "location": "location", "technical": "technical skill", "credentials": "credential / degree",
-               "seniority": "too senior", "employment_type": "job type", "start_date": "start date",
-               "work_authorization": "work authorization", "specialist": "specialist job",
-               "no_description": "no description", "not_related_to_degree": "not related to your degree (OPT)",
-               "not_a_real_opening": "not a real opening"}
-
-
-def read_company_job_adds(existing: dict) -> list[str]:
-    """Posting IDs you marked 'Add' on the Company jobs or Grad programs tab."""
-    out = []
-    for tab in (COMPANY_JOBS, PROGRAMS):
-        rows = existing.get(tab) or []
-        if not rows:
-            continue
-        idx = {h: i for i, h in enumerate(rows[0])}
-        if "Add" not in idx or "Posting ID" not in idx:
-            continue
-        role_col = "Role" if "Role" in idx else "Program"
-        for raw in rows[1:]:
-            raw = _pad(raw, len(rows[0]))
-            if (raw[idx["Add"]] or "").strip().lower() == "add" and raw[idx["Posting ID"]]:
-                cells = {h: (raw[i] or "") for h, i in idx.items()}
-                cells["Role"] = cells.get(role_col, "")
-                out.append((raw[idx["Posting ID"]].strip(), cells))
-    return out
-
-
-def company_job_rows(store: Store, cap: int = 1500) -> list[list]:
-    """Every open job at a company you marked Target-type (or Interest 4-5) that isn't already
-    on your job tabs - with why the rules left it out. Pick Add to put it in My applications."""
-    owner = store.company_owner()
-    picked = {c.strip().lower() for c, o in owner.items()
-              if (o.get("status") or "") in TARGET_STATUSES or _interest(o.get("interest") or "") >= 4}
-    out = []
-    for r in store.company_job_rows(picked):
-        d = json.loads(r["display"] or "{}")
-        why = (_GATE_WORDS.get(r["gate"] or "", r["gate"] or "not checked yet")
-               + (f": {str(r['matched'] or '')[:90]}" if r["matched"] else ""))
-        out.append(["", r["company"], hyperlink(r["url"], r["title"]), "No: " + why,
-                    d.get("location", ""), d.get("salary", ""), d.get("experience", ""), r["posting_id"]])
-    # closest misses first: experience / pay / location before field and technical drops
-    order = {"experience": 0, "salary": 1, "location": 2, "start_date": 3, "credentials": 4}
-    by_id = {r["posting_id"]: r for r in store.company_job_rows(picked)}
-    out.sort(key=lambda row: (row[1].lower(), order.get(by_id[row[7]]["gate"] or "", 9), str(row[2])))
-    return out[:cap]
-
-
-def _company_jobs_tab(meta: dict, rows: list[list], existing_len: int) -> list[dict]:
-    m = meta[COMPANY_JOBS]
-    sid = m["id"]
-    grid = [COMPANY_JOB_HEADERS] + rows
-    need = len(grid) + 20
-    padded = grid + [[""] * len(COMPANY_JOB_HEADERS)] * (min(existing_len, need) - len(grid))
-    return [
-        {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
-            "rowCount": need, "columnCount": max(m.get("cols", 26), len(COMPANY_JOB_HEADERS)), "frozenRowCount": 1}},
-            "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
-        {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
-                         "rows": [{"values": [_cell(v) for v in _pad(r, len(COMPANY_JOB_HEADERS))]} for r in padded],
-                         "fields": "userEnteredValue"}},
-        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
-                        "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
-                        "fields": "userEnteredFormat.textFormat.bold"}},
-        _validation(sid, 0, ["Add"], need),
-    ]
-
-# --- pipeline 2: the Companies tab (your hub) ---------------------------------
-COMPANY_HEADERS = ["Interest", "Status", "Company", "Fit", "Next step", "Due", "Connections", "Last contact",
-                   "Your picks", "Roles that fit you", "Grad programs", "A role that fits", "Open roles",
-                   "What they do", "Careers page", "Contact", "Notes", "Source", "First seen"]
-COMPANY_OWNER = ("Interest", "Status", "Next step", "Due", "Contact", "Notes")
-# your relationship with the company, from first look to offer
-COMPANY_STATUS = ["Researching", "Target", "Networking", "Coffee chat", "Referred", "Applied", "Interviewing",
-                  "Offer", "Watching", "Not for me"]
-_COMPANY_STAGE = {s: i for i, s in enumerate(["Offer", "Interviewing", "Applied", "Referred", "Coffee chat",
-                                               "Networking", "Talking", "Reached out", "Target"])}
-TARGET_STATUSES = {"Target", "Networking", "Coffee chat", "Referred", "Applied", "Interviewing", "Offer",
-                   "Reached out", "Talking"}       # last two: earlier names, still honoured
-_FIT_RANK = {"AI × hospitality": 0, "AI × real estate": 0, "hospitality": 1, "real estate": 1, "AI-forward": 2}
-
-# --- Contacts tab: yours entirely (the pipeline reads it, never rewrites your rows) ---
-CONTACTS = "Contacts"
-CONTACT_HEADERS = ["Company", "Name", "Role / team", "How you're connected", "LinkedIn", "Status",
+# --- Contacts tab: yours entirely (the pipeline sets the header and dropdowns, never your rows) ---
+CONTACT_HEADERS = ["Company", "Job", "Name", "Role / team", "How you're connected", "LinkedIn", "Status",
                    "Last contact", "Next step", "Due", "Notes"]
 CONTACT_STATUS = ["To reach out", "Messaged", "Replied", "Coffee chat scheduled", "Coffee chat done",
                   "Referred", "Thank-you sent", "Keep in touch", "No reply"]
-CONTACT_NUDGE_DAYS = 7      # Messaged with no reply for this long -> follow up
+CONTACT_NUDGE_DAYS = 7      # Messaged with no reply for this long -> yellow
 
 
-def read_contacts(existing: dict) -> list[dict]:
-    rows = existing.get(CONTACTS) or []
-    if not rows:
-        return []
-    idx = {h: i for i, h in enumerate(rows[0])}
-    out = []
-    for raw in rows[1:]:
-        raw = _pad(raw, len(rows[0]))
-        c = {h: (raw[idx[h]] or "").strip() for h in CONTACT_HEADERS if h in idx}
-        if c.get("Company") or c.get("Name"):
-            out.append(c)
-    return out
+def _range_validation(sid: int, col: int, source: str, rows: int) -> dict:
+    return {"setDataValidation": {
+        "range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": rows, "startColumnIndex": col,
+                  "endColumnIndex": col + 1},
+        "rule": {"condition": {"type": "ONE_OF_RANGE", "values": [{"userEnteredValue": source}]},
+                 "showCustomUi": True, "strict": False}}}
 
 
-def _contacts_tab(meta: dict, existing_len: int) -> list[dict]:
-    """Header, dropdown and colours only - your rows are never touched."""
+def _contacts_tab(meta: dict) -> list[dict]:
+    """Header, dropdowns (Company / Job from Apply) and colours only - your rows are never touched."""
     m = meta[CONTACTS]
     sid = m["id"]
+    rows = max(m.get("rows", 1000), 500)
     col = {h: i for i, h in enumerate(CONTACT_HEADERS)}
+    ac = {h: _col_letter(APPLY_HEADERS.index(h)) for h in ("Company", "Role")}
     reqs = [
         {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
-            "rowCount": max(m.get("rows", 1000), 500), "columnCount": max(m.get("cols", 26), len(CONTACT_HEADERS)),
-            "frozenRowCount": 1}},
+            "rowCount": rows, "columnCount": max(m.get("cols", 26), len(CONTACT_HEADERS)), "frozenRowCount": 1}},
             "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
         {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
                          "rows": [{"values": [_cell(h) for h in CONTACT_HEADERS]}], "fields": "userEnteredValue"}},
         {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
                         "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
                         "fields": "userEnteredFormat.textFormat.bold"}},
-        _validation(sid, col["Status"], CONTACT_STATUS, max(m.get("rows", 1000), 500)),
+        _range_validation(sid, col["Company"], f"='{PICKS}'!{ac['Company']}2:{ac['Company']}", rows),
+        _range_validation(sid, col["Job"], f"='{PICKS}'!{ac['Role']}2:{ac['Role']}", rows),
+        _validation(sid, col["Status"], CONTACT_STATUS, rows),
     ]
     status, last, due = (_col_letter(col[h]) for h in ("Status", "Last contact", "Due"))
     rules = [
@@ -813,228 +590,6 @@ def _contacts_tab(meta: dict, existing_len: int) -> list[dict]:
             reqs.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [full], "booleanRule": {
                 "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": formula}]},
                 "format": fmt}}}})
-    return reqs
-
-
-def read_company_owner(existing: dict) -> dict[str, dict]:
-    rows = existing.get(COMPANIES) or []
-    if not rows:
-        return {}
-    idx = {h: i for i, h in enumerate(rows[0])}
-    if "Company" not in idx:
-        return {}
-    out = {}
-    for raw in rows[1:]:
-        raw = _pad(raw, len(rows[0]))
-        name = (raw[idx["Company"]] or "").strip()
-        if name:
-            out[name] = {h: (raw[idx[h]] or "").strip() for h in COMPANY_OWNER if h in idx}
-    return out
-
-
-def home_grid(store: Store, contacts: list[dict], crows: list[list], ts: str) -> tuple[list, list[list]]:
-    """One screen: what to do, where you stand, the companies that stand out, what's new."""
-    today = parse_when(ts).date()
-    week = today + timedelta(days=7)
-    W = 6
-    rows: list[list] = []
-    def section(title, header=None):
-        rows.append([""] * W)
-        rows.append([title] + [""] * (W - 1))
-        if header:
-            rows.append(header + [""] * (W - len(header)))
-
-    # --- to do ---
-    todo = []           # (sort day, due text, what, where, from)
-    for r in store.conn.execute(
-            "SELECT o.next_step, o.due, o.status, o.status_changed_at, p.company, p.title FROM owner_state o "
-            "JOIN postings p USING(posting_id)"):
-        d = parse_day(r["due"])
-        if r["next_step"] or d:
-            todo.append((d or week, d, r["next_step"] or "(next step)", f"{r['company']} - {r['title']}", "Jobs"))
-        if (r["status"] or "") == "Applied" and r["status_changed_at"]:
-            changed = parse_when(r["status_changed_at"]).date()
-            if (today - changed).days >= 10:
-                todo.append((today, None, f"Follow up on your application (applied {changed.isoformat()})",
-                             f"{r['company']} - {r['title']}", "Jobs"))
-    for name, o in store.company_owner().items():
-        d = parse_day(o.get("due"))
-        if o.get("next_step") or d:
-            todo.append((d or week, d, o.get("next_step") or "(next step)", name, "Companies"))
-    for c in contacts:
-        d = parse_day(c.get("Due"))
-        who = f"{c.get('Name') or '?'} @ {c.get('Company') or '?'}"
-        if c.get("Next step") or d:
-            todo.append((d or week, d, c.get("Next step") or "(next step)", who, "Contacts"))
-        last = parse_day(c.get("Last contact"))
-        if c.get("Status") == "Messaged" and last and (today - last).days >= CONTACT_NUDGE_DAYS:
-            todo.append((today, None, f"No reply since {last.isoformat()} - nudge or try someone else", who, "Contacts"))
-    todo = sorted([t for t in todo if t[0] <= week], key=lambda t: (t[0], t[2]))[:30]
-    section("TO DO  (overdue and due this week first)", ["Due", "What", "Where", "From"])
-    for day, d, what, where, frm in todo:
-        flag = "OVERDUE " if d and d < today else ("TODAY " if d == today else "")
-        rows.append([flag + (d.isoformat() if d else "now"), what, where, frm, "", ""])
-    if not todo:
-        rows.append(["", "Nothing due. Add a Next step + Due on a job, company or contact to see it here.", "", "", "", ""])
-
-    # --- where you stand ---
-    jobs = {"Shortlisted": 0, "Preparing": 0, "Applied": 0, "Interviewing": 0, "Offer": 0, "Closed": 0}
-    for r in store.conn.execute("SELECT decision, interest, status FROM owner_state"):
-        st, dec = (r["status"] or ""), (r["decision"] or "")
-        if dec.lower() in PASS_WORDS:
-            continue
-        if st in ("Offer",):
-            jobs["Offer"] += 1
-        elif st == "Interviewing":
-            jobs["Interviewing"] += 1
-        elif st == "Applied":
-            jobs["Applied"] += 1
-        elif st in ENDED:
-            jobs["Closed"] += 1
-        elif st in ("Drafting", "Networking"):
-            jobs["Preparing"] += 1
-        elif dec.lower() in ("apply", "all-in") or r["interest"]:
-            jobs["Shortlisted"] += 1
-    comp = {}
-    for o in store.company_owner().values():
-        if o.get("status"):
-            comp[o["status"]] = comp.get(o["status"], 0) + 1
-    ppl = {}
-    for c in contacts:
-        k = c.get("Status") or "To reach out"
-        ppl[k] = ppl.get(k, 0) + 1
-    section("WHERE YOU STAND")
-    rows.append(["Jobs"] + [" · ".join(f"{k} {v}" for k, v in jobs.items())] + [""] * (W - 2))
-    rows.append(["Companies"] + [" · ".join(f"{k} {comp[k]}" for k in COMPANY_STATUS if comp.get(k)) or "none marked yet"]
-                + [""] * (W - 2))
-    rows.append(["Contacts"] + [" · ".join(f"{k} {ppl[k]}" for k in CONTACT_STATUS if ppl.get(k))
-                                or "none yet - add people on the Contacts tab"] + [""] * (W - 2))
-
-    # --- standout companies ---
-    ci = {h: i for i, h in enumerate(COMPANY_HEADERS)}
-    standout = [r for r in crows if r[ci["Status"]] in TARGET_STATUSES or _interest(r[ci["Interest"]]) >= 3][:15]
-    section("STANDOUT COMPANIES", ["Company", "Status", "Interest", "Next step", "Connections",
-                                   "Your picks · roles that fit · programs"])
-    for r in standout:
-        rows.append([r[ci["Company"]], r[ci["Status"]], r[ci["Interest"]], r[ci["Next step"]], r[ci["Connections"]],
-                     f"{r[ci['Your picks']] or 0} · {r[ci['Roles that fit you']] or 0} · {r[ci['Grad programs']] or 0}"])
-    if not standout:
-        rows.append(["", "Mark companies Target (or Interest 3+) on the Companies tab to see them here.", "", "", "", ""])
-
-    # --- new since yesterday ---
-    since = (parse_when(ts) - timedelta(hours=36)).isoformat(timespec="seconds")
-    targets = {c.strip().lower() for c, o in store.company_owner().items()
-               if (o.get("status") or "") in TARGET_STATUSES or _interest(o.get("interest") or "") >= 4}
-    new = []
-    for r in store.conn.execute(
-            "SELECT p.company, p.title, p.url, s.passed, s.flags FROM postings p JOIN scores s USING(posting_id) "
-            "WHERE p.first_seen >= ? AND p.closed_at IS NULL AND p.merged_into IS NULL", (since,)):
-        flags = ", ".join(f for f in json.loads(r["flags"] or "[]") if f.startswith(("Your edge", "Preferred", "Stretch")))
-        if not r["passed"]:
-            continue          # only finds that fit you (everything else is on Company jobs)
-        kind = ("Target company" if (r["company"] or "").strip().lower() in targets else
-                "Grad program" if is_program(r["title"]) else
-                "Your edge" if "Your edge" in flags else None)
-        if kind:
-            new.append((kind, r["company"], hyperlink(r["url"], r["title"]), flags))
-    order = {"Target company": 0, "Your edge": 1, "Grad program": 2}
-    section("NEW SINCE YESTERDAY", ["Kind", "Company", "Role", "Flags"])
-    for k, c, role, f in sorted(new, key=lambda x: (order[x[0]], x[1]))[:25]:
-        rows.append([k, c, role, f, "", ""])
-    if not new:
-        rows.append(["", "Nothing new at your targets, edge or programs in the last day.", "", "", "", ""])
-
-    header = [f"Job hunt - home ({today.isoformat()})", "", "", "", "", ""]
-    return header, rows
-
-
-def _company_rollups(store: Store, contacts: list[dict]) -> dict[str, dict]:
-    """Per company (lower-cased): your connections, last contact, picks and grad programs."""
-    out: dict[str, dict] = {}
-    def get(name):
-        return out.setdefault((name or "").strip().lower(), {"people": [], "last": None, "picks": 0, "programs": 0})
-    for c in contacts:
-        g = get(c.get("Company"))
-        g["people"].append(f"{c.get('Name') or '?'} ({c.get('Status') or 'to reach out'})")
-        d = parse_day(c.get("Last contact"))
-        if d and (g["last"] is None or d > g["last"]):
-            g["last"] = d
-    for r in store.conn.execute(
-            "SELECT p.company FROM postings p JOIN owner_state o USING(posting_id) WHERE "
-            "COALESCE(o.decision,'') NOT IN ('', 'Pending', 'Pass') OR COALESCE(o.interest,'')<>''"):
-        get(r["company"])["picks"] += 1
-    for row in program_rows(store):
-        get(row[1])["programs"] += 1
-    return out
-
-
-def company_rows(store: Store, seeds: list[dict], ts: str, contacts: list[dict] | None = None) -> list[list]:
-    store.clear_auto_companies_v1()
-    for c in seeds:                                   # your list / researched companies
-        store.note_target_company(c.get("name", ""), c.get("fit", ""), c.get("about", ""),
-                                  c.get("source", "your list"), ts, c.get("careers"))
-    owner = store.company_owner()
-    posts = store.company_postings()
-    roll = _company_rollups(store, contacts or [])
-    out = []
-    for r in store.target_companies():
-        o = owner.get(r["company"]) or {}
-        k = r["company"].strip().lower()
-        p = posts.get(k) or {"open": 0, "fitting": 0, "first": None}
-        g = roll.get(k) or {"people": [], "last": None, "picks": 0, "programs": 0}
-        first = hyperlink(p["first"][0], p["first"][1]) if p["first"] else ""
-        careers = hyperlink(r["careers_url"], "careers") if r["careers_url"] else ""
-        people = f"{len(g['people'])}: " + ", ".join(g["people"][:3]) if g["people"] else ""
-        out.append([o.get("interest") or "", o.get("status") or "", r["company"], r["fit"] or "",
-                    o.get("next_step") or "", due_cell(o.get("due")), people,
-                    g["last"].isoformat() if g["last"] else "", g["picks"] or "", p["fitting"] or "",
-                    g["programs"] or "", first, p["open"] or "", r["about"] or "", careers, o.get("contact") or "",
-                    o.get("notes") or "", r["source"] or "", _date(r["first_seen"])])
-    def key(row):
-        status = row[1]
-        return (status == "Not for me", _COMPANY_STAGE.get(status, 99), -_interest(row[0]),
-                -(row[8] or 0), _FIT_RANK.get(row[3], 9), -(row[9] or 0), row[2].lower())
-    return sorted(out, key=key)
-
-
-def _company_tab(meta: dict, rows: list[list], existing_len: int) -> list[dict]:
-    m = meta[COMPANIES]
-    sid = m["id"]
-    grid = [COMPANY_HEADERS] + rows
-    need = len(grid) + 20
-    padded = grid + [[""] * len(COMPANY_HEADERS)] * (min(existing_len, need) - len(grid))
-    col = {h: i for i, h in enumerate(COMPANY_HEADERS)}
-    return [
-        {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
-            "rowCount": need, "columnCount": max(m.get("cols", 26), len(COMPANY_HEADERS)), "frozenRowCount": 1}},
-            "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
-        {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
-                         "rows": [{"values": [_cell(v) for v in _pad(r, len(COMPANY_HEADERS))]} for r in padded],
-                         "fields": "userEnteredValue"}},
-        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
-                        "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
-                        "fields": "userEnteredFormat.textFormat.bold"}},
-        _validation(sid, col["Interest"], INTEREST_OPTIONS, need),
-        _validation(sid, col["Status"], COMPANY_STATUS, need),
-    ] + _company_colours(m, sid, col)
-
-
-def _company_colours(m: dict, sid: int, col: dict) -> list[dict]:
-    st, it, due = _col_letter(col["Status"]), _col_letter(col["Interest"]), _col_letter(col["Due"])
-    rules = [
-        (f'=${st}2="Not for me"', {"textFormat": {"foregroundColor": GRAY}}),
-        (_due_formula(due), {"backgroundColor": YELLOW}),
-        (f'=OR(${st}2="Offer",${st}2="Interviewing",${st}2="Referred",VALUE(0&${it}2)=5)', {"backgroundColor": GREEN_5}),
-        (f'=OR(${st}2="Coffee chat",${st}2="Applied",VALUE(0&${it}2)=4)', {"backgroundColor": GREEN_4}),
-        (f'=OR(${st}2="Networking",${st}2="Target",VALUE(0&${it}2)=3)', {"backgroundColor": GREEN_3}),
-    ]
-    if m.get("cf_formulas") == [f for f, _ in rules]:
-        return []
-    full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(COMPANY_HEADERS)}
-    reqs = [{"deleteConditionalFormatRule": {"sheetId": sid, "index": 0}} for _ in range(int(m.get("cf_count", 0)))]
-    for i, (formula, fmt) in enumerate(rules):
-        reqs.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [full], "booleanRule": {
-            "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": formula}]}, "format": fmt}}}})
     return reqs
 
 
@@ -1120,25 +675,22 @@ def other_tab_rows(store: Store, criteria: Criteria, ts: str, unparsed: list[lis
     }
 
 
+
+
 def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | None = None,
              unparsed: list[list] | None = None) -> dict:
     """Every tab: one read + one batchUpdate per run."""
     ts = ts or datetime.now(timezone.utc).isoformat(timespec="seconds")
-    reset_scores_once(backend, store, ts)
     if hasattr(backend, "rename_tabs"):
         backend.rename_tabs(RENAMES)
+    if hasattr(backend, "delete_tabs") and not store.conn.execute(
+            "SELECT 1 FROM sheet_tabs WHERE tab='__four_tabs_v1'").fetchone():
+        backend.delete_tabs(REMOVED_TABS)                      # once: you can re-add a tab any time
+        store.conn.execute("DELETE FROM sheet_tabs WHERE tab IN (?, ?)", (PICKS, CONTACTS))   # rebuilt
+        store.conn.execute("INSERT OR REPLACE INTO sheet_tabs (tab, content_hash, written_at) "
+                           "VALUES ('__four_tabs_v1', '', ?)", (ts,))
     meta = backend.ensure_tabs(ALL_TABS)
     existing = backend.read(ALL_TABS)
-    known_companies = {r["company"].strip().lower() for r in store.target_companies()}
-    for name, vals in read_company_owner(existing).items():   # your Companies-tab columns first
-        store.save_company_owner(name, vals, ts)
-        if name.strip().lower() not in known_companies:        # a company you typed in yourself
-            store.note_target_company(name.strip(), "", "", "you added on the Sheet", ts)
-    resolve = make_row_resolver(store)
-    for pid, cells in read_company_job_adds(existing):         # jobs you added from Company jobs
-        pid = resolve(pid, cells)
-        if pid:
-            store.add_forced(pid, ts)
     for pid in load_picked_jobs():                             # jobs you asked to add directly
         if store.conn.execute("SELECT 1 FROM postings WHERE posting_id=?", (pid,)).fetchone():
             store.add_forced(pid, ts)
@@ -1149,20 +701,8 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
         per_tab[_tab_of(r, meta)].append(r)
     for tab, (header, rows) in other_tab_rows(store, criteria, ts, unparsed).items():
         per_tab[tab] = _simple_tab(meta, tab, header, rows, len(existing.get(tab, [])))
-    contacts = read_contacts(existing)
-    crows = company_rows(store, load_target_companies(), ts, contacts)
-    per_tab[CONTACTS] = _contacts_tab(meta, len(existing.get(CONTACTS, [])))
-    per_tab[HOME] = _simple_tab(meta, HOME, *home_grid(store, contacts, crows, ts), 0)
-    per_tab[PICKS] = _view_tab(meta, PICKS, f"IFERROR(VALUE('{JOBS}'!A2:A),0)>=1", True)
-    per_tab[PASSED] = _view_tab(meta, PASSED, f"'{JOBS}'!A2:A=\"Pass\"", False)
-    per_tab[BACKUP] = _simple_tab(meta, BACKUP, ["Your pick", "Status", "Company", "Role", "Notes"],
-                                  backup_rows(store), len(existing.get(BACKUP, [])))
-    per_tab[COMPANIES] = _company_tab(meta, crows, len(existing.get(COMPANIES, [])))
-    per_tab[COMPANY_JOBS] = _company_jobs_tab(meta, company_job_rows(store), len(existing.get(COMPANY_JOBS, [])))
-    prows = program_rows(store)
-    per_tab[PROGRAMS] = _programs_tab(meta, prows, len(existing.get(PROGRAMS, [])))
-    info["programs"] = len(prows)
-    info["companies"] = len(crows)
+    per_tab[CONTACTS] = _contacts_tab(meta)
+    per_tab[PASSED] = _view_tab(meta, PASSED, f"'{JOBS}'!A2:A=\"Pass\"")
     # A rewrite makes an open Sheet reload and recalculate (it froze on big tabs), so a tab
     # whose content is the same as last time is left alone.
     last = dict(store.conn.execute("SELECT tab, content_hash FROM sheet_tabs").fetchall())
@@ -1176,8 +716,7 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
         requests += per_tab[tab]
         store.conn.execute("INSERT OR REPLACE INTO sheet_tabs (tab, content_hash, written_at) VALUES (?, ?, ?)",
                            (tab, h, ts))
-    order = [t for t in ALL_TABS if meta[t].get("index") != ALL_TABS.index(t)]
-    for tab in order:                            # keep the tab order: Home first
+    for tab in [t for t in ALL_TABS if meta[t].get("index") != ALL_TABS.index(t)]:   # keep the tab order
         requests.append({"updateSheetProperties": {"properties": {"sheetId": meta[tab]["id"],
                                                                   "index": ALL_TABS.index(tab)},
                                                    "fields": "index"}})

@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS company_owner (     -- your Companies-tab columns, mi
     company TEXT PRIMARY KEY, interest TEXT, status TEXT, contact TEXT, notes TEXT, updated_at TEXT
 );
 
-CREATE TABLE IF NOT EXISTS forced_in (         -- jobs you added from the Company jobs tab
+CREATE TABLE IF NOT EXISTS forced_in (         -- jobs you asked to add (config/picked_jobs.yaml)
     posting_id TEXT PRIMARY KEY, added_at TEXT
 );
 
