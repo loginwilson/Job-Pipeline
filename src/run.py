@@ -855,6 +855,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # 1–2. search sources + discovery (full runs only)
     muse_evals, muse_complete, jsearch_evals, adzuna_evals, jobspipe_evals = (None, False, None, None, None)
+    serp_evals = None
     if store is not None and not single:
         cfg = load_sources_config()
         muse_evals, muse_complete = run_muse(store, cfg.get("muse") or {}, criteria, gates, matcher, ts)
@@ -866,7 +867,6 @@ def main(argv: list[str] | None = None) -> int:
             log.error("Adzuna error: %s", exc)
         try:
             serp_evals = run_serpapi(store, cfg.get("serpapi") or {}, criteria, gates, matcher, ts)
-            jsearch_evals = (jsearch_evals or []) + serp_evals if serp_evals else jsearch_evals
         except Exception as exc:  # a new source never stops the run
             log.error("SerpApi error: %s", exc)
         try:
@@ -874,9 +874,10 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:  # a new source never stops the run
             log.error("JobsPipe error: %s", exc)
         known = {normalize(c.name) for c in companies} | {normalize(r["company"]) for r in store.discovered_boards()}
-        if muse_evals or jsearch_evals or adzuna_evals or jobspipe_evals or _STILL_PASSING:
+        if muse_evals or jsearch_evals or serp_evals or adzuna_evals or jobspipe_evals or _STILL_PASSING:
             try:
-                discover(store, (muse_evals or []) + (jsearch_evals or []) + (adzuna_evals or []) + (jobspipe_evals or [])
+                discover(store, (muse_evals or []) + (jsearch_evals or []) + (serp_evals or []) + (adzuna_evals or [])
+                         + (jobspipe_evals or [])
                          + _STILL_PASSING, cfg.get("discovery") or {}, known, ts,
                          retry_daily={normalize(e.posting.company) for e in _STILL_PASSING})
                 _STILL_PASSING.clear()
@@ -1030,6 +1031,12 @@ def main(argv: list[str] | None = None) -> int:
                               board_companies=board_companies)
         add_stats(stats, "JSearch", c)
         log.info("JSearch: %d postings stored, %d passed", c["seen"], c["passed"])
+    if serp_evals is not None:                    # its own Funnel row (was folded into JSearch)
+        c = store_evaluations(store, Company(name="Google Jobs (SerpApi)", platform="serpapi", slug="search"), serp_evals,
+                              ts, criteria, prefix="serpapi:__none__", board_keys=board_keys,
+                              board_companies=board_companies)
+        add_stats(stats, "Google Jobs (SerpApi)", c)
+        log.info("SerpApi: %d postings stored, %d passed", c["seen"], c["passed"])
     if adzuna_evals is not None:
         c = store_evaluations(store, Company(name="Adzuna", platform="adzuna", slug="search"), adzuna_evals, ts,
                               criteria, prefix="adzuna:__none__", board_keys=board_keys,
