@@ -507,10 +507,10 @@ def _grid_tab(m: dict, headers: list[str], grid: list[list], existing_len: int, 
                         "fields": "userEnteredFormat.textFormat.bold"}},
         {"setDataValidation": {"range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": need_rows,
                                          "startColumnIndex": 0, "endColumnIndex": len(headers)}}},
-        _validation(sid, col["Interest"], PICK_OPTIONS, need_rows),
+        _validation(sid, col["Interest"], PICK_OPTIONS, filter_rows or need_rows),
     ]
     if "Status" in col:
-        reqs.append(_validation(sid, col["Status"], STATUS_OPTIONS, need_rows))
+        reqs.append(_validation(sid, col["Status"], STATUS_OPTIONS, filter_rows or need_rows))
     reqs += [
         {"setBasicFilter": {"filter": {"range": {"sheetId": sid, "startRowIndex": 0,
                                                  "endRowIndex": filter_rows or len(grid),
