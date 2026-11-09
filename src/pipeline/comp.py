@@ -145,7 +145,9 @@ def find_text_ranges(lines: list[str], criteria: Criteria, market_currency: str 
             suffix = text[m.end():m.end() + 20]
             after = "" if suffix.lstrip().startswith("(") else re.split(r"[,;]|\.(?:\s|$)", suffix)[0]
             # "$60,000 - 70,000 (OTE $108,600...)": the bracket is a separate figure, not this one
-            kind = "ote" if _is_ote(prefix, criteria) or _is_ote(after, criteria) else "base"
+            # "$21.00 - $23.00/hr + Commission(s)" (Kith): a base wage with commission on top
+            plus = re.match(r"\s*(?:/\s*\w+\s*)?(?:\+|plus\b|and\b)\s*(?:commissions?|bonus)", after, re.I)
+            kind = "ote" if _is_ote(prefix, criteria) or (_is_ote(after, criteria) and not plus) else "base"
             found.append(_Found(lo, hi, _currency(c1 or c2, m.group("t1") or m.group("t2"), market_currency),
                                 period or "year", prefix.strip()[-80:], kind, text))
         if spans or not _PAY_WORDS.search(text):

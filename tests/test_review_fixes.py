@@ -175,3 +175,15 @@ def test_analytically_strong_comfortable_with_sql_is_familiarity(full_criteria):
     ev = _ev(full_criteria, "Associate, Business Operations & Analytics", BODY[:4] + [line, BODY[5], PAY])
     assert ev.passed, ev.failures
     # "Proficiency in Python" still drops: tests/test_gates.py::test_technical
+
+
+def test_hourly_wage_plus_commission_is_base_pay(full_criteria):
+    body = ["Kith is a lifestyle brand and specialty retailer.", "About the role",
+            "The Operations Associate keeps merchandise flowing to the sales floor.", "Requirements",
+            "0-1 years of experience.",
+            "Strong communication skills, curiosity, ownership and the drive to learn fast with many moving parts.",
+            "Compensation: $21.00 - $23.00/hr + Commission(s)*"]
+    ev = _ev(full_criteria, "Operations Associate", body, company="Kith Kids", platform="workday",
+             locations=("Vancouver, BC",))
+    assert not ev.posting.comp.ote_only
+    assert ev.failures and ev.failures[0].gate == "salary" and "below floor" in ev.failures[0].matched
