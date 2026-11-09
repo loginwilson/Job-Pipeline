@@ -28,6 +28,11 @@ class Hit:
     reason: str
 
 
+_BUSINESS_AS_WORK = re.compile(
+    r"\bbusiness (?:operations|ops|development|teams?|needs|process(?:es)?|systems|outcomes|problems|units?|goals|"
+    r"partners?|stakeholders|leaders|impact|requirements|cases?|reviews?)\b", re.I)
+
+
 def required_lines(p: Posting, criteria: Criteria) -> list[str]:
     pref_terms = criteria.get("credentials", "softeners", default=[]) or []
     out = [item_text(ln) for ln in p.sections.lines("required")]
@@ -139,7 +144,9 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
             continue
         # a degree "in a quantitative field" / mostly math-stats-CS-physics: finance or economics
         # on the list doesn't make it yours; only a business / hospitality / real-estate field does
-        if _DEGREE.search(line) and not find_terms(line, strong, first_only=True):
+        # "business operations" on the same line is the job, not a degree field (SnapMagic: "A STEM
+        # degree and 1-3 years in operations, business operations, automation ...")
+        if _DEGREE.search(line) and not find_terms(_BUSINESS_AS_WORK.sub(" ", line), strong, first_only=True):
             q = find_terms(line, quant, first_only=True)
             unrel = {h.term for h in find_terms(line, cred.get("unrelated_degree_fields", []) or [])}
             if q or len(unrel) >= 2:

@@ -108,3 +108,13 @@ def test_ote_only_pay_is_judged_like_no_pay(full_criteria):
                locations=("Vancouver, BC",))
     assert kith.posting.comp.ote_only
     assert kith.failures and kith.failures[0].gate == "salary"
+
+
+def test_required_stem_degree_drops_even_with_business_operations_on_the_line(full_criteria):
+    line = ("A STEM degree and 1–3 years in operations, business operations, automation, solutions engineering "
+            "or a similar hands-on role, ideally at an early-stage startup")
+    ev = _ev(full_criteria, "Founder's Associate", BODY[:4] + [line, BODY[5], PAY])
+    assert ev.failures and ev.failures[0].gate == "credentials"
+    ok = _ev(full_criteria, "Founder's Associate", BODY[:4] + [
+        "Bachelor's degree in business, economics or a STEM field and 0-1 years in business operations.", BODY[5], PAY])
+    assert ok.passed, ok.failures
