@@ -63,6 +63,10 @@ class JobsPipeSource(Source):
             lo, hi = j.get("min_annual_salary_usd"), j.get("max_annual_salary_usd")
             if (lo or hi) and (j.get("salary_source") or "posted") != "estimated":
                 ranges.append(CompRange(lo, hi, "USD", "year", label="JobsPipe"))
+            else:                                  # an estimate only counts when it's far below your minimum
+                elo, ehi = j.get("estimated_min_annual_salary_usd"), j.get("estimated_max_annual_salary_usd")
+                if (elo or ehi) and max(elo or 0, ehi or 0) < 60000:
+                    ranges.append(CompRange(elo, ehi, "USD", "year", label="JobsPipe estimate"))
             text = j.get("description") or ""
             out.append(RawPosting(
                 platform=self.platform, slug="", native_id=str(j.get("id")),

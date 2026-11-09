@@ -21,6 +21,7 @@ from .base import TIMEOUT_S, USER_AGENT, CompRange, RawPosting, Source, SourceEr
 from .jsearch import _aggregator
 
 API = "https://api.adzuna.com/v1/api/jobs/{country}/search/{page}"
+LOW_ESTIMATE = 60000      # an estimate under this is used (it can only drop a job, never pass one)
 
 
 def search(what: str, where: str, country: str = "us", max_days_old: int = 3, per_page: int = 50,
@@ -60,8 +61,13 @@ class AdzunaSource(Source):
             if not company or _aggregator(company):
                 continue                                   # a job site, not the employer
             ranges = []
-            if (j.get("salary_min") or j.get("salary_max")) and str(j.get("salary_is_predicted")) != "1":
-                ranges.append(CompRange(j.get("salary_min"), j.get("salary_max"), None, "year", label="Adzuna"))
+            lo, hi = j.get("salary_min"), j.get("salary_max")
+            if (lo or hi) and str(j.get("salary_is_predicted")) != "1":
+                ranges.append(CompRange(lo, hi, None, "year", label="Adzuna"))
+            elif (lo or hi) and max(lo or 0, hi or 0) < LOW_ESTIMATE:
+                # Adzuna's own estimate: never counted as pay, but one this far below your minimum
+                # (a $32K concierge, Nov 9) is evidence enough that the job won't reach it
+                ranges.append(CompRange(lo, hi, None, "year", label="Adzuna estimate"))
             text = re.sub(r"\s+", " ", j.get("description") or "").strip()
             out.append(RawPosting(
                 platform=self.platform, slug=re.sub(r"[^a-z0-9]+", "-", company.lower()).strip("-"),

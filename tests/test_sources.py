@@ -162,7 +162,10 @@ def test_adzuna_parse_and_daily_plan(criteria, monkeypatch):
         {"id": 3, "title": "Ops", "company": {"display_name": "Jobrapido"}, "location": {"display_name": "NYC"}}]}
     raws = adz.AdzunaSource().parse(payload)
     assert [r.native_id for r in raws] == ["1", "2"] and raws[0].company == "Acme AI"
-    assert raws[0].comp_ranges[0].min == 110000 and raws[1].comp_ranges == []      # an estimate isn't pay
+    assert raws[0].comp_ranges[0].min == 110000 and raws[1].comp_ranges == []      # an estimate isn't pay...
+    low = adz.AdzunaSource().parse({"results": [{"id": 9, "title": "Concierge", "company": {"display_name": "Sterling"},
+                                                  "salary_min": 32695, "salary_max": 32695, "salary_is_predicted": "1"}]})
+    assert low[0].comp_ranges[0].max == 32695                     # ...unless it's far below your minimum (Nov 9)
     asked = []
     monkeypatch.setenv("ADZUNA_APP_ID", "x")
     monkeypatch.setenv("ADZUNA_APP_KEY", "y")
