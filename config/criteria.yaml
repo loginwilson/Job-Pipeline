@@ -100,7 +100,7 @@ experience:
                           managing a team, people management, experience at an ai, experience at a high-growth,
                           experience at a high growth, experience at a fast-growing, internal job level,
                           prior experience as a, prior experience in a similar role, experience in a similar role,
-                          extensive experience, significant experience, deep experience, many years of experience, several years of experience, multiple years of experience, several years experience, spent years, seasoned professional, mentor junior, mentor less experienced, mentoring junior, mentor and develop junior, train and mentor less experienced, track record in, proven track record, proven experience leading, experience leading, you've lived in, you have lived in, first business operations lead, business operations lead, "operated, not just advised", negotiate it yourself, have navigated, manage and grow people, want to manage and grow, you've managed complex, managed complex, trusted advisor to c-suite, experience as a founder, experience as a chief of staff, as a founder associate, comparable startup operator, develop into a deal maker]
+                          extensive experience, significant experience, deep experience, many years of experience, several years of experience, multiple years of experience, several years experience, spent years, seasoned professional, mentor junior, mentor less experienced, mentoring junior, mentor and develop junior, train and mentor less experienced, track record in, proven track record, proven experience leading, experience leading, you've lived in, you have lived in, first business operations lead, business operations lead, "operated, not just advised", negotiate it yourself, have navigated, manage and grow people, want to manage and grow, you've managed complex, managed complex, trusted advisor to c-suite, experience as a founder, experience as a chief of staff, as a founder associate, comparable startup operator, develop into a deal maker, strong experience in building, proven ability to turn data into clear business narratives]
   # With NO years stated, these mid-level titles drop unless the title also has an entry cue (your choice, Nov 8)
   no_years_mid_level_titles: [manager, account executive, consultant, officer, advisor, producer, broker, executive, partner]
   entry_title_cues: [associate, assistant, junior, jr, entry, new grad, graduate, early career, analyst, coordinator, trainee, program, apprentice, " I", "1", campus, university, "2027", "2026"]
@@ -238,6 +238,8 @@ opt_relatedness:
 # search-source postings must be recent (config/sources.yaml max_age_days)
 # and, when we also watch that company's board, must be on it.
 openings:
+  # Nov 9: a staffing / recruiting agency posting for its client (Pursuit Sales Solutions)
+  agency_text: [our client is a, our client is an, on behalf of our client, "our client, a", email your resume to, send your resume to, staffing agency, recruiting firm, recruitment agency]
   drop_title_terms: [working student, werkstudent, student worker, student, wildcard, wild card, apply anyway, "don't see", dont see, perfect role, right role, former founder, talent community, talent pool, talent network, general application, general interest, future opportunities, future opening, expression of interest, evergreen, open application, resume drop, submit your resume, interested in future, opportunistic application, future roles, your interest, past founder]
 
 

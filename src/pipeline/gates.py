@@ -71,6 +71,10 @@ class Gates:
         hit = find_terms(p.title, self.c.get("openings", "drop_title_terms", default=[]) or [], first_only=True)
         if hit:
             ev.fail("not_a_real_opening", f"'{hit[0].term}': {p.title}")
+            return
+        agency = find_terms(p.description_lines, self.c.get("openings", "agency_text", default=[]) or [], first_only=True)
+        if agency:
+            ev.fail("not_a_real_opening", f"a staffing agency posting for a client ('{agency[0].term}')")
 
     # 11. related to the degree (OPT) -----------------------------------------
     def opt_related(self, p: Posting, ev: Evaluation) -> None:
