@@ -64,6 +64,10 @@ class Gates:
 
     # 10. a real opening (not a talent pool / general application) ----------
     def real_opening(self, p: Posting, ev: Evaluation) -> None:
+        from ..sources.jsearch import _aggregator
+        if _aggregator(p.company or ""):
+            ev.fail("not_a_real_opening", f"'{p.company}' is a job site reposting someone else's job")
+            return
         hit = find_terms(p.title, self.c.get("openings", "drop_title_terms", default=[]) or [], first_only=True)
         if hit:
             ev.fail("not_a_real_opening", f"'{hit[0].term}': {p.title}")

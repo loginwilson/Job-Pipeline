@@ -535,3 +535,17 @@ def test_unknown_salary_rule(criteria):
     assert "salary" not in {f.gate for f in no_pay("2027 Operations Development Program").failures}
     g.targets.add("x")                                      # a company on your target list
     assert "salary" not in {f.gate for f in no_pay("Operations Analyst").failures}
+
+
+def test_a_job_site_is_never_the_employer(criteria):
+    from src.config import Company
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.pipeline.normalize import normalize_posting
+    from src.sources.base import RawPosting
+    raw = RawPosting(platform="jsearch", slug="jobrapido", native_id="1", title="Business Operations Specialist",
+                     url="https://us.trabajo.org/1", locations=["New York, NY"], company="Jobrapido",
+                     description_lines=["Great team. The base salary range is $120,000 - $130,000."])
+    ev = Gates(criteria).evaluate(normalize_posting(raw, Company("Jobrapido", "jsearch", "jobrapido"), criteria,
+                                                    LocationMatcher(criteria)))
+    assert "not_a_real_opening" in {f.gate for f in ev.failures}
