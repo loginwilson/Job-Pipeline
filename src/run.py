@@ -520,6 +520,41 @@ def discover_from_newgrad_lists(store: Store, cfg: dict, known: set[str], matche
     return found
 
 
+YC_HIRING = "https://yc-oss.github.io/api/companies/hiring.json"     # YC's public directory (open dataset)
+
+
+def yc_candidates(companies: list[dict], matcher) -> dict[tuple[str, str], str]:
+    """(platform, slug) -> company for YC startups hiring in your cities. A board name is guessed
+    from the company's website / name; short generic names count only when they ARE the website
+    name (radar.com -> 'radar'), so a different company's board isn't picked up."""
+    from urllib.parse import urlparse
+    from .resolve.discover import candidate_slugs
+    out: dict[tuple[str, str], str] = {}
+    for c in companies:
+        places = [p.strip() for p in (c.get("all_locations") or "").split(";") if p.strip()]
+        if not places or not matcher.match(places).offices:
+            continue
+        host = urlparse(c.get("website") or "").netloc.lower().removeprefix("www.")
+        stem = host.split(".")[0] if host else ""
+        for slug in candidate_slugs(c.get("name") or "", stem or None)[:3]:
+            if slug != stem and len(slug) < 7:
+                continue
+            for platform in ("ashby", "greenhouse", "lever"):
+                out.setdefault((platform, slug), c["name"])
+    return out
+
+
+def discover_from_yc(store: Store, cfg: dict, known: set[str], matcher, ts: str) -> list[Company]:
+    """Job boards of YC startups that are hiring in your cities (Nov 9: more startup jobs)."""
+    r = requests.get(cfg.get("url") or YC_HIRING, timeout=60, headers={"User-Agent": "job-pipeline"})
+    r.raise_for_status()
+    cands = yc_candidates(r.json(), matcher)
+    # one board per company: drop guesses for companies already watched, then verify
+    found = _add_verified_boards(store, cands, known, ts, "yc", "YC directory", cfg)
+    log.info("YC directory: %d board guesses for startups in your cities, %d new boards", len(cands), len(found))
+    return found
+
+
 def discover(store: Store, evals: list[Evaluation], cfg: dict, known: set[str], ts: str) -> list[Company]:
     """Probe for the company boards behind search results. Returns newly found boards."""
     if not cfg.get("enabled", True):
@@ -663,6 +698,13 @@ def main(argv: list[str] | None = None) -> int:
                 store.source_complete("newgrad_lists", ts)
             except Exception as exc:  # never stops the run
                 log.error("New-grad list discovery error: %s", exc)
+        yc_cfg = cfg.get("yc") or {}
+        if yc_cfg.get("enabled") and store.source_due("yc", yc_cfg.get("every_hours", 24), ts):
+            try:
+                discover_from_yc(store, yc_cfg, known, matcher, ts)
+                store.source_complete("yc", ts)
+            except Exception as exc:  # never stops the run
+                log.error("YC discovery error: %s", exc)
         # pipeline 2: a target company whose careers page is a readable job board is watched
         try:
             from .output.sheet import load_target_companies

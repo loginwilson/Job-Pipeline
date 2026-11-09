@@ -59,6 +59,11 @@ hackernews:                 # "Ask HN: Who is hiring?" — discovery only (board
   threads: 3                # this month's thread and the two before
   every_hours: 24
 
+yc:                         # YC's public company directory - discovery only: job boards of YC startups hiring in your cities
+  enabled: true
+  every_hours: 24
+  max_new_boards_per_run: 5000 # board guesses checked per run (each guess is re-checked once a month)
+
 newgrad_lists:              # community new-grad lists on GitHub — discovery only (boards behind listings in your cities)
   enabled: true
   every_hours: 24

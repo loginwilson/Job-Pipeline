@@ -131,3 +131,16 @@ def test_gem_rippling_comeet_boards():
                                                               "value": "<p>Grow our market.</p>"}]}}], "guesty/10.000")[0]
     assert c.locations == ["New York, NY, US"]
     assert c.description_lines[0] == "## Description" and "## Requirements" in c.description_lines
+
+
+def test_yc_startups_in_your_cities_become_board_guesses(criteria):
+    from src.pipeline.locations import LocationMatcher
+    from src.run import yc_candidates
+    yc = [{"name": "Canary Technologies", "website": "https://www.canarytechnologies.com",
+           "all_locations": "New York, NY, USA"},
+          {"name": "RADAR", "website": "https://goradar.com", "all_locations": "New York, NY, USA"},
+          {"name": "Faraway Co", "website": "https://faraway.io", "all_locations": "Berlin, Germany"}]
+    c = yc_candidates(yc, LocationMatcher(criteria))
+    assert ("ashby", "canarytechnologies") in c and ("lever", "canarytechnologies") in c
+    assert ("ashby", "goradar") in c and ("ashby", "radar") not in c      # generic name: website name only
+    assert not any(v == "Faraway Co" for v in c.values())                 # not in your cities
