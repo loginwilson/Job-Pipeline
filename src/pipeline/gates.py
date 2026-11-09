@@ -192,6 +192,13 @@ class Gates:
         allow = (self.c.get("field_fit", default={}) or {}).get("role_allow")
         if not allow or ev.failures:
             return
+        ff = self.c.get("field_fit", default={}) or {}
+        finance = find_terms(p.company or "", ff.get("finance_firm_names") or [], first_only=True) or \
+            find_terms(p.description_lines[:12], ff.get("finance_firm_terms") or [], first_only=True)
+        if finance and not (PROGRAM_RX.search(p.title or "") or
+                            find_terms(p.title, ff.get("finance_firm_ok_roles") or [], first_only=True)):
+            ev.fail("field", f"a finance firm ({finance[0].term}) and not a generalist / operations role: {p.title}")
+            return
         if PROGRAM_RX.search(p.title or "") or find_terms(p.title, allow, first_only=True) \
                 or qualifications.is_ai_builder(p.title, self.c):     # AI-builder roles: "as long as I qualify"
             return

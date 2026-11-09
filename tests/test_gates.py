@@ -646,3 +646,30 @@ def test_hotel_jobs_must_be_corporate_level(full_criteria):
     assert field("Hotel Operations Analyst", prop)
     assert not field("Operations Analyst", corp)
     assert not field("Chief of Staff", ai)
+
+
+def test_nov9_final_audit_misses(full_criteria):
+    """The 12 misses from the Nov 9 audit of To review, by their real company + title."""
+    from src.config import Company
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.pipeline.normalize import normalize_posting
+    from src.sources.base import RawPosting
+    from src.sources.jsearch import _aggregator
+    g, m = Gates(full_criteria), LocationMatcher(full_criteria)
+    d = ["We are a growing company and you will work across the business with leadership on our most important "
+         "initiatives every week.", "You will own projects end to end, communicate clearly with stakeholders, and help "
+         "build processes that let a growing team scale.", "The salary range for this role is $110,000 - $150,000."]
+
+    def passes(company, title):
+        raw = RawPosting(platform="lever", slug="x", native_id="1", title=title, url="https://x/1",
+                         locations=["New York, NY"], employment_type="Full-time", description_lines=d)
+        return g.evaluate(normalize_posting(raw, Company(company, "lever", "x"), full_criteria, m)).passed
+    for co, t in (("Initio Capital", "Commercial Strategy Analyst"), ("EVERCORE", "Associate - Real Estate Strategy & Operations"),
+                  ("Mitsubishi UFG", "Analyst, Markets AI Enablement and Digital"), ("Lazard Professional", "AI Operations Head"),
+                  ("Macy's", "Marketing Strategy Associate - Kids"), ("CLERA", "Strategy & Operations Working Student")):
+        assert not passes(co, t), (co, t)
+    for co, t in (("The Voleon Group", "Operations Associate (University Hire)"), ("Paxos", "Product Operations Associate"),
+                  ("Pallet", "Associate Deployment Strategist"), ("Lance", "Chief of Staff")):
+        assert passes(co, t), (co, t)
+    assert all(_aggregator(n) for n in ("Snatch UP Jobs", "FDE Times", "Careers at KKR"))

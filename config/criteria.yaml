@@ -119,7 +119,7 @@ experience:
 # Representative, Consultant I, Strategist, APM, Rotational, New Grad, Junior,
 # Level I/II) pass; the 3-year rule handles the rest.
 seniority:
-  drop_title_terms: [senior, "sr.", sr, staff, principal, director, "head of", vp, svp, evp, avp, "vice president", chief, "executive director", leader, experienced, lateral, experienced hire, FVP, SVP, RVP, first vice president, regional vice president, SMTS, senior member, distinguished, fellow engineer, supervisor, group account, group strategist, group product manager, group creative, group copy, group project manager, supv, associate partner, assoc partner, consulting partner, consult partner, dean, vice dean]
+  drop_title_terms: [senior, "sr.", sr, staff, principal, director, "head of", head, vp, svp, evp, avp, "vice president", chief, "executive director", leader, experienced, lateral, experienced hire, FVP, SVP, RVP, first vice president, regional vice president, SMTS, senior member, distinguished, fellow engineer, supervisor, group account, group strategist, group product manager, group creative, group copy, group project manager, supv, associate partner, assoc partner, consulting partner, consult partner, dean, vice dean]
   senior_title_in_description: true   # "Experience Owner" whose text says "the Sr Experience Owner"
   keep_titles_with: [chief of staff]   # level words inside these phrases don't count (years rule still applies)
   drop_level_numerals: [III, IV, V, "3", "4", "5"]   # "Analyst III", "Consultant 4"
@@ -236,7 +236,7 @@ opt_relatedness:
 # search-source postings must be recent (config/sources.yaml max_age_days)
 # and, when we also watch that company's board, must be on it.
 openings:
-  drop_title_terms: [wildcard, wild card, apply anyway, "don't see", dont see, perfect role, right role, former founder, talent community, talent pool, talent network, general application, general interest, future opportunities, future opening, expression of interest, evergreen, open application, resume drop, submit your resume, interested in future, opportunistic application, future roles, your interest, past founder]
+  drop_title_terms: [working student, werkstudent, student worker, student, wildcard, wild card, apply anyway, "don't see", dont see, perfect role, right role, former founder, talent community, talent pool, talent network, general application, general interest, future opportunities, future opening, expression of interest, evergreen, open application, resume drop, submit your resume, interested in future, opportunistic application, future roles, your interest, past founder]
 
 
 # ── FACTS SHOWN IN THE SHEET (never drop anything) ─────────────
@@ -303,6 +303,18 @@ field_fit:
                          technology, data, digital, innovation, transformation, strategy, strategic,
                          business operations, bizops, chief of staff, deployment, implementation, revenue operations,
                          growth, special projects, founder]
+  # Nov 9 (your rule): at a bank / PE / investment firm, only generalist operations roles count
+  # (Voleon's Operations Associate program yes; KKR portfolio product, Initio strategy analysts, Evercore,
+  # MUFG markets no). A finance firm is known by its name or the posting's opening.
+  finance_firm_names: [capital, bank, bancorp, securities, asset management, investment management, investments,
+                       private equity, KKR, Kohlberg Kravis Roberts, Evercore, Lazard, Moelis, MUFG, Mitsubishi UFG,
+                       Goldman Sachs, Morgan Stanley, JPMorgan, JP Morgan, Citi, Citigroup, Deutsche Bank, Barclays, UBS,
+                       Blackstone, Apollo, Carlyle, BlackRock, PJT Partners, Jefferies, Houlihan Lokey, Centerview]
+  finance_firm_terms: [private equity firm, investment firm, investment bank, asset manager, asset management firm,
+                       hedge fund, quantitative investment, investment management firm, alternative investment,
+                       global investment, financial advisory firm]
+  finance_firm_ok_roles: [operations associate, operations analyst, business operations, operations generalist, generalist,
+                          rotational, university hire, new grad, graduate program, chief of staff, ai operations]
   # Nov 9: ONLY these role types pass (from the 26 jobs you scored 1-5, which all match). Anything
   # else drops, whatever company or field words it has. Grad / rotational programs also pass.
   role_allow: [business operations, bizops, biz ops, strategy & operations, strategy and operations, strategy & ops,
@@ -327,6 +339,7 @@ field_fit:
                  receptionist, administrative specialist, administrative assistant, leasing, transaction coordinator,
                  buyer specialist, showing agent, maintenance, groundskeeper, janitor, custodian, banquet, spa therapist,
                  massage, esthetician, retail associate, sales associate, reservations, night auditor]   # Nov 9: Loews / Stream Realty
+    marketing_titles: [marketing, brand strategy, media strategy, content strategy, merchandising]   # Nov 9: Macy's
     sales_reps: [real estate agent, realtor, buyer's agent, buyer agent, listing agent, leasing agent, real estate salesperson, licensed agent, development representative, sales representative, business development rep, sales development rep, account executive, BDR, SDR]   # Nov 9: "Strategic Business Development Representative" (Algolia)
     accounting_insurance: [accounting, accountant, tax, controller, controllership, bookkeeper, payroll, accounts payable, accounts receivable, underwriter, underwriting, claims, actuarial, actuary, insurance, reinsurance, broker]
     hr_people: [talent, recruiter, recruiting, talent acquisition, sourcer, human resources, HR, people partner, people operations, compensation, benefits, HRIS, talent operations]
