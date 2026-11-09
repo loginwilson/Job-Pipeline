@@ -1,4 +1,7 @@
 from .ashby import AshbySource
+from .comeet import ComeetSource
+from .gem import GemSource
+from .rippling import RipplingSource
 from .base import RawPosting, Source, SourceError, load_fixture
 from .greenhouse import GreenhouseSource
 from .lever import LeverSource
@@ -15,6 +18,9 @@ ADAPTERS: dict[str, Source] = {
     "workday": WorkdaySource(),
     "oracle": OracleSource(),
     "workable": WorkableSource(),
+    "gem": GemSource(),
+    "rippling": RipplingSource(),
+    "comeet": ComeetSource(),
 }
 
 

@@ -84,6 +84,9 @@ _LINK_PATTERNS = [
     ("ashby", re.compile(r"jobs\.ashbyhq\.com/([A-Za-z0-9_.%-]+)")),
     ("workable", re.compile(r"apply\.workable\.com/(?:api/v\d/(?:widget/)?accounts/)?([A-Za-z0-9_-]+)")),
     ("smartrecruiters", re.compile(r"(?:jobs|careers)\.smartrecruiters\.com/([A-Za-z0-9_-]+)")),
+    ("gem", re.compile(r"(?:jobs\.gem\.com|api\.gem\.com/job_board/v0)/([A-Za-z0-9_-]+)")),
+    ("rippling", re.compile(r"ats\.rippling\.com/(?:api/v2/board/)?([A-Za-z0-9_-]+)")),
+    ("comeet", re.compile(r"comeet\.com/jobs/([A-Za-z0-9_-]+/[0-9A-F]{2}\.[0-9A-F]{3})", re.I)),
 ]
 _ORACLE = re.compile(r"https?://([a-z0-9-]+\.fa\.(?:[a-z0-9]+\.)?oraclecloud\.com)/hcmUI/CandidateExperience/[A-Za-z-]+/sites/([A-Za-z0-9_]+)")
 _WORKDAY = re.compile(r"https?://([a-z0-9-]+)\.(wd\d+)\.myworkdayjobs\.com/(?:[a-z]{2}-[A-Z]{2}/)?([A-Za-z0-9_-]+)")

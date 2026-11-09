@@ -100,3 +100,34 @@ def test_jsearch_skips_reposting_sites():
         job("Jobrapido", ["https://us.jobrapido.com/1"]),
         job("Skylight", ["https://us.trabajo.org/job-1", "https://jobs.ashbyhq.com/skylight/1"])]})
     assert [(r.company, r.url) for r in out] == [("Skylight", "https://jobs.ashbyhq.com/skylight/1")]
+
+
+def test_gem_rippling_comeet_boards():
+    """Nov 9: Bilt / Spotnana (Gem), Bowery / TheGuarantors (Rippling), Guesty / Buildots (Comeet)."""
+    from src.resolve.discover import board_from_url
+    from src.sources.comeet import ComeetSource
+    from src.sources.gem import GemSource
+    from src.sources.rippling import RipplingSource
+    assert board_from_url("https://jobs.gem.com/bilt") == ("gem", "bilt")
+    assert board_from_url("https://ats.rippling.com/bowery-valuation/jobs") == ("rippling", "bowery-valuation")
+    assert board_from_url("https://www.comeet.com/jobs/guesty/10.000") == ("comeet", "guesty/10.000")
+    g = GemSource().parse([{"id": "1", "title": "Strategy Associate", "absolute_url": "https://jobs.gem.com/bilt/1",
+                            "content": "<p>Own projects.</p>", "location": {"name": "New York, United States"},
+                            "offices": [{"name": "NYC", "location": {"name": "New York, United States"}}],
+                            "location_type": "in_office"}], "bilt")[0]
+    assert (g.title, g.locations, g.description_lines) == ("Strategy Associate", ["New York, United States"],
+                                                           ["Own projects."])
+    r = RipplingSource().parse({"items": [{"id": "a", "name": "Associate, Valuation", "url": "https://x/a",
+                                           "locations": [{"name": "New York, NY", "workplaceType": "ON_SITE"}],
+                                           "detail": {"description": {"company": "<p>Who we are</p>",
+                                                                      "role": "<p>You will value buildings.</p>"}}}]},
+                               "bowery-valuation")[0]
+    assert r.locations == ["New York, NY"] and "You will value buildings." in r.description_lines
+    c = ComeetSource().parse([{"uid": "2F.276", "name": "Market Manager", "url_active_page": "https://x/2F.276",
+                               "location": {"city": "New York", "state": "NY", "country": "US"},
+                               "custom_fields": {"details": [{"name": "Requirements", "order": 2,
+                                                              "value": "<ul><li>2+ years</li></ul>"},
+                                                             {"name": "Description", "order": 1,
+                                                              "value": "<p>Grow our market.</p>"}]}}], "guesty/10.000")[0]
+    assert c.locations == ["New York, NY, US"]
+    assert c.description_lines[0] == "## Description" and "## Requirements" in c.description_lines
