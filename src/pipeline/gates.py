@@ -72,6 +72,10 @@ class Gates:
         if hit:
             ev.fail("not_a_real_opening", f"'{hit[0].term}': {p.title}")
             return
+        catch = find_terms(p.description_lines, self.c.get("openings", "catch_all_text", default=[]) or [], first_only=True)
+        if catch:
+            ev.fail("not_a_real_opening", f"an open application, not a specific job ('{catch[0].term}')")
+            return
         agency = find_terms(p.description_lines, self.c.get("openings", "agency_text", default=[]) or [], first_only=True)
         if agency:
             ev.fail("not_a_real_opening", f"a staffing agency posting for a client ('{agency[0].term}')")

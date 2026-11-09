@@ -246,6 +246,10 @@ openings:
   # Nov 9: a staffing / recruiting agency posting for its client (Pursuit Sales Solutions)
   agency_text: [our client is a, our client is an, on behalf of our client, "our client, a", email your resume to, send your resume to, staffing agency, recruiting firm, recruitment agency]
   drop_title_terms: [working student, werkstudent, student worker, student, wildcard, wild card, apply anyway, "don't see", dont see, perfect role, right role, former founder, talent community, talent pool, talent network, general application, general interest, future opportunities, future opening, expression of interest, evergreen, open application, resume drop, submit your resume, interested in future, opportunistic application, future roles, your interest, past founder]
+  # Nov 9 (Eventual 'Generalist'): the text says it is a catch-all, not an opening
+  catch_all_text: ["don't see a specific role", "dont see a specific role", "don't see a role", "dont see a role",
+                   "don't see an open role", "don't see the right role", "what you'd like to work on",
+                   "no specific role", "general application", "open application", "for future opportunities"]
 
 
 # ── FACTS SHOWN IN THE SHEET (never drop anything) ─────────────

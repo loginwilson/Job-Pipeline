@@ -118,3 +118,11 @@ def test_required_stem_degree_drops_even_with_business_operations_on_the_line(fu
     ok = _ev(full_criteria, "Founder's Associate", BODY[:4] + [
         "Bachelor's degree in business, economics or a STEM field and 0-1 years in business operations.", BODY[5], PAY])
     assert ok.passed, ok.failures
+
+
+def test_catch_all_posting_is_not_an_opening(full_criteria):
+    ev = _ev(full_criteria, "Generalist", BODY + [PAY,
+             "This role is for candidates who think they'd be exceptional members of our team but don’t see a "
+             "specific role that matches their skillsets. Let us know what you'd like to work on!"])
+    assert ev.failures and ev.failures[0].gate == "not_a_real_opening"
+    assert _ev(full_criteria, "Generalist", BODY + [PAY]).passed
