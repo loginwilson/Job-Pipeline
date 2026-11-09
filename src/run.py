@@ -567,6 +567,38 @@ def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> 
             changed += 1
         store.save_score(r["posting_id"], ev.passed, [{"gate": f.gate, "matched": f.matched} for f in ev.failures],
                          ev.flags, display_fields(ev), ts)
+    # Adzuna / SerpApi / JobsPipe: the stored copy is the full result, so today's rules apply to it too
+    from .sources.adzuna import AdzunaSource
+    from .sources.jobspipe import JobsPipeSource
+    from .sources.serpapi import SerpApiSource
+    parsers = {"adzuna": lambda j: AdzunaSource().parse({"results": [j]}),
+               "serpapi": lambda j: SerpApiSource().parse({"jobs_results": [j]}),
+               "jobspipe": lambda j: JobsPipeSource().parse({"data": [j]})}
+    for prefix, parse in parsers.items():
+        for r in store.conn.execute(
+                "SELECT p.posting_id, p.company, p.snapshot FROM postings p JOIN scores s USING(posting_id) "
+                f"WHERE p.posting_id LIKE '{prefix}:%' AND p.closed_at IS NULL AND p.merged_into IS NULL "
+                "AND s.passed = 1 AND p.snapshot IS NOT NULL").fetchall():
+            try:
+                job = (json.loads(r["snapshot"]) or {}).get("job")
+                if not job:
+                    continue
+                parsed = parse(job)
+                if not parsed:                       # e.g. the "employer" is a job site
+                    changed += 1
+                    store.save_score(r["posting_id"], False, [{"gate": "not_a_real_opening",
+                                                               "matched": "a job site, not the employer"}], [], {}, ts)
+                    continue
+                raw = parsed[0]
+                ev = evaluate_one(raw, Company(name=r["company"] or raw.company or "", platform=prefix, slug=raw.slug),
+                                  criteria, gates, matcher)
+            except Exception as exc:      # one bad stored copy never stops the run
+                log.warning("re-check %s: %s", r["posting_id"], exc)
+                continue
+            if not ev.passed:
+                changed += 1
+            store.save_score(r["posting_id"], ev.passed, [{"gate": f.gate, "matched": f.matched} for f in ev.failures],
+                             ev.flags, display_fields(ev), ts)
     store.commit()
     if changed:
         log.info("Re-checked search results: %d no longer meet the must-haves", changed)

@@ -233,3 +233,24 @@ def test_serpapi_google_jobs_parse():
     assert len(raws) == 1 and raws[0].url == "https://jobs.ashbyhq.com/acme/1"
     assert raws[0].posting_id if hasattr(raws[0], "posting_id") else True
     assert "- 0-2 years of experience" in raws[0].description_lines and raws[0].platform == "serpapi"
+
+
+def test_stored_adzuna_results_are_rechecked(criteria):
+    """Nov 9: a Sterling concierge ($32K estimate) sat on To review; stored search results now
+    get today's rules every run, like JSearch's."""
+    import json
+    import src.run as run
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.store.db import Store
+    store = Store(":memory:")
+    job = {"id": 9, "title": "Concierge", "company": {"display_name": "Sterling"},
+           "location": {"display_name": "Miami, FL"}, "redirect_url": "https://www.adzuna.com/details/9",
+           "description": " ".join(["Grand Living is a senior hospitality brand with luxury residences."] * 6),
+           "salary_min": 32695, "salary_max": 32695, "salary_is_predicted": "1", "contract_time": "full_time"}
+    pid = "adzuna:sterling:9"
+    store.upsert_posting(pid, "Sterling", "Concierge", job["redirect_url"], None, {"job": job}, "2026-11-09T01:00:00+00:00")
+    store.save_score(pid, True, [], [], {}, "2026-11-09T01:00:00+00:00")
+    store.commit()
+    run.recheck_search_postings(store, criteria, Gates(criteria), LocationMatcher(criteria), "2026-11-09T03:00:00+00:00")
+    assert store.conn.execute("SELECT passed FROM scores WHERE posting_id=?", (pid,)).fetchone()[0] == 0
