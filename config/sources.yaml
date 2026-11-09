@@ -133,10 +133,10 @@ boards:                     # how often each kind of company board is polled (de
   # roles still come in through Google Jobs / Adzuna searches
   never_watch: [Hilton, Marriott International, Greystar, Cushman & Wakefield, Expedia Group]
   every_hours:
-    oracle: 6               # same for Oracle career sites
-    workday: 6              # large career sites, details fetched only for postings that could pass
+    oracle: 12              # same for Oracle career sites
+    workday: 12             # large career sites, details fetched only for postings that could pass
   quiet_after_days: 3       # a board with no passing posting for this long...
-  quiet_every_hours: 6      # ...is polled this often instead (it speeds up again when one passes)
+  quiet_every_hours: 12     # ...is polled this often instead (it speeds up again when one passes)
 
 hackernews:                 # "Ask HN: Who is hiring?" — discovery only (board links in posts about your cities)
   enabled: true

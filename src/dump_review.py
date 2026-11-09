@@ -21,6 +21,18 @@ def main(path: str = "data/pipeline.db", out: str = "review_dump.json") -> None:
         rows.append({"posting_id": r["posting_id"], "company": r["company"], "title": r["title"], "url": r["url"],
                      "passed": r["passed"], "snapshot": json.loads(r["snapshot"] or "null")})
     json.dump(rows, open(out, "w"), default=str)
+    # near misses: open jobs in your cities and role types that a later rule dropped - read these
+    # to catch good jobs the rules cut by mistake (Nov 9)
+    early = ("field", "not_related_to_degree", "not_a_real_opening", "location", "employment_type",
+             "title_language", "no_description", "specialist", "edge", "hotel_corporate_only")
+    near = store.conn.execute(
+        "SELECT p.posting_id, p.company, p.title, p.url, s.gate, s.matched FROM postings p JOIN scores s "
+        "USING(posting_id) WHERE p.closed_at IS NULL AND p.merged_into IS NULL AND s.passed = 0 "
+        f"AND COALESCE(s.gate, '') NOT IN ({','.join('?' * len(early))}) ORDER BY s.gate, p.company",
+        early).fetchall()
+    print(f"near misses: {len(near)}")
+    for r in near:
+        print(f"NEAR | {r['gate']} | {r['company']} | {r['title']} | {r['url']} | {(r['matched'] or '')[:200]}")
     # job-site results (LinkedIn / Indeed links can't be opened): print their stored text to the log
     for r in rows:
         if r["posting_id"].split(":")[0] in ("jsearch", "adzuna", "jobspipe", "serpapi", "muse"):
