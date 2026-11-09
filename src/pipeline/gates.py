@@ -56,7 +56,7 @@ class Gates:
 
     def evaluate(self, p: Posting) -> Evaluation:
         ev = Evaluation(posting=p)
-        for rule in (self.real_opening, self.opt_related, self.field_fit, self.role_focus, self.title_language, self.has_description, self.specialist_text, self.edge, self.employment_type, self.location, self.salary, self.experience,
+        for rule in (self.real_opening, self.opt_related, self.field_fit, self.role_focus, self.title_language, self.has_description, self.specialist_text, self.edge, self.hotel_corporate_only, self.employment_type, self.location, self.salary, self.experience,
                      self.seniority, self.work_authorization, self.technical_and_credentials, self.timing):
             rule(p, ev)
         ev.field = field_of(p, self.c)
@@ -169,6 +169,22 @@ class Gates:
             return
         data = find_terms(title, ff.get("data_title_terms") or [], first_only=True)
         ev.fail("field", f"{'pure data role' if data else 'not one of your fields'}: {title}")
+
+    def hotel_corporate_only(self, p: Posting, ev: Evaluation) -> None:
+        """Nov 9 (your rule): at a hotel company you'd work at the corporate level - AI or operations
+        across the portfolio - never at one property. Tech companies serving hotels aren't hotels."""
+        ff = self.c.get("field_fit", default={}) or {}
+        if ev.failures or not p.description_lines:
+            return
+        domain = self._title_domain(p) or self._company_domain(p)
+        if not domain or not domain.startswith("hospitality"):
+            return
+        if any(f.startswith(("Your edge", "AI-forward")) for f in ev.flags):
+            return                                   # an AI company serving hotels (Lance, Canary)
+        text = [p.title] + p.description_lines[:20]
+        if find_terms(text, ff.get("hotel_corporate_cues") or [], first_only=True):
+            return
+        ev.fail("field", f"a single-property hotel job, not corporate: {p.title}")
 
     def role_focus(self, p: Posting, ev: Evaluation) -> None:
         """Nov 9: an allow-list, not a block-list. Only the role types you actually say yes to pass
@@ -285,13 +301,16 @@ class Gates:
         market = {"USD": "US", "CAD": "CA"}.get(comp.currency or "", p.location.market or "US")
         m = markets.get(market) or {}
         mid = comp.midpoint_annual
+        # Nov 9 (your rule): the job counts if ANY of the range reaches the floor - $90-130K passes
+        raw_mid = ((comp.min or 0) + (comp.max or 0)) / 2 if (comp.min or comp.max) else 0
+        top = mid * (comp.max / raw_mid) if comp.max and raw_mid else mid
         floor = m.get("floor", 0)
         if m.get("program_floor") and PROGRAM_RX.search(p.title or ""):
             floor = m["program_floor"]              # grad programs: lower pay minimum (your choice, Nov 8)
-        if mid < floor:
-            ev.fail("salary", f"midpoint {comp.currency or ''} {mid:,.0f} below floor {floor:,}: "
+        if top < floor:
+            ev.fail("salary", f"top of range {comp.currency or ''} {top:,.0f} below floor {floor:,}: "
                               f"{comp.matched_text}")
-        elif mid < m.get("comfortable", 0):
+        elif (comp.min and mid * (comp.min / raw_mid) < floor) or mid < m.get("comfortable", 0):
             ev.flag("Low base — check incentives")
 
     # 4. experience ----------------------------------------------------------

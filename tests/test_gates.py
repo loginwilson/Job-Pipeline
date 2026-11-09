@@ -45,7 +45,9 @@ def test_salary(evaluate):
     assert evaluate(lines=["Salary: $120,000 - $130,000/year"]).passed
     low = evaluate(lines=["Salary: $100,000 - $110,000/year"])
     assert low.passed and "Low base — check incentives" in low.flags
-    assert "salary" in gates_of(evaluate(lines=["Salary: $80,000 - $110,000/year. Generous equity."]))
+    # Nov 9 (your rule): any of the range reaching $100K counts - $80-110K passes, $80-95K doesn't
+    assert "salary" not in gates_of(evaluate(lines=["Salary: $80,000 - $110,000/year. Generous equity."]))
+    assert "salary" in gates_of(evaluate(lines=["Salary: $80,000 - $95,000/year. Generous equity."]))
     unknown = evaluate(lines=["Great benefits."])
     assert unknown.passed and "Salary unknown" in unknown.flags
     ote = evaluate(lines=["OTE: $150,000 - $200,000 with uncapped commission."])
@@ -593,7 +595,7 @@ def test_a_hotel_or_real_estate_word_alone_is_not_your_field(full_criteria):
                 "Commercial Real Estate Transaction Coordinator", "Real Estate Buyer Specialist"):
         assert field(bad), bad
     for good in ("Hospitality Strategy Associate",
-                 "Revenue Management Analyst - Hotels", "Business Operations Associate", "Deployment Strategist",
+                 "Business Operations Associate", "Deployment Strategist",
                  "Growth Strategy Analyst, Future Platforms | Housing", "Strategic Partnerships Associate"):
         assert not field(good), good
 
@@ -624,3 +626,23 @@ def test_ai_builder_titles_get_no_coding_exemption(evaluate):
                  "SQL and code-level data proficiency, sophisticated modeling in Sheets or Excel"):
         assert "technical" in {f.gate for f in evaluate(title="GTM Engineer", lines=["## Who you are", "- " + hard,
                                                                                    PAY_OK]).failures}, hard
+
+
+def test_hotel_jobs_must_be_corporate_level(full_criteria):
+    """Nov 9 (your rule): at a hotel company, only corporate-level roles (AI / operations across the
+    portfolio) - never a single property. AI companies serving hotels aren't hotels."""
+    from src.pipeline.gates import Gates
+    g = Gates(full_criteria)
+    prop = ["Loews Royal Pacific Resort is a 1,000-room resort hotel in Orlando with restaurants, pools and event space.",
+            "You will support daily operations at the resort, track occupancy and service metrics, and work with front "
+            "office and housekeeping teams."]
+    corp = ["Loews Hotels corporate office supports a portfolio of 25 hotels across the United States and Canada.",
+            "You will work on strategy and operations initiatives across our hotels with regional and brand leadership."]
+    ai = ["Lance builds autonomous AI agents that run hotel operations end to end for hotels and resorts nationwide.",
+          "You will work with the founders on operations, customers and growth as we scale our AI platform for hotels."]
+    pay = "The salary range is $120,000 - $140,000."
+    field = lambda t, d: "field" in {f.gate for f in g.evaluate(_p(full_criteria, t, d, pay=pay)).failures}
+    assert field("Operations Analyst - Loews Royal Pacific Resort", prop)
+    assert field("Hotel Operations Analyst", prop)
+    assert not field("Operations Analyst", corp)
+    assert not field("Chief of Staff", ai)

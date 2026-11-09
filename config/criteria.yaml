@@ -295,6 +295,14 @@ field_fit:
   domain_role_terms: [strategy, strategist, operations, development, acquisitions, acquisition, asset management, asset manager,
                       revenue management, revenue manager, planning, feasibility, research, consulting, consultant,
                       advisory, proptech, technology, data, business, corporate, project manager, development manager]
+  # Nov 9 (your rule): at a hotel company, only corporate-level roles - one of these in the title or the
+  # posting's opening - not a single property
+  hotel_corporate_cues: [corporate, headquarters, HQ, corporate office, support office, support center, home office,
+                         portfolio, regional, region, enterprise, multi-property, across our hotels, across our properties,
+                         across properties, all of our hotels, global, brand, development, AI, artificial intelligence,
+                         technology, data, digital, innovation, transformation, strategy, strategic,
+                         business operations, bizops, chief of staff, deployment, implementation, revenue operations,
+                         growth, special projects, founder]
   # Nov 9: ONLY these role types pass (from the 26 jobs you scored 1-5, which all match). Anything
   # else drops, whatever company or field words it has. Grad / rotational programs also pass.
   role_allow: [business operations, bizops, biz ops, strategy & operations, strategy and operations, strategy & ops,
