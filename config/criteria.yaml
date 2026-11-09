@@ -276,7 +276,7 @@ field_fit:
     real_estate: [real estate, property, properties, housing, leasing, multifamily, CRE, REIT, acquisitions, real estate development, land development, construction management, asset management analyst, investment sales, proptech]
   families:               # kept unless an unrelated-field term is also in the title
     # your fields (Nov 8): business operations with a strategy / consulting / automation angle
-    ops_strategy: [operations, business operations, bizops, strategy, strategic, chief of staff, founders office, founder's office, rotational, leadership program, leadership development, development program, management trainee, generalist, project manager, project coordinator, project associate, implementation, special projects, founder associate, founders associate, facilities, workplace operations, revenue operations, sales operations, deployment strategist, forward deployed, strategist, agent development, deal operations, automation, process improvement, process excellence, transformation, AI operations, AI enablement, AI strategy, AI transformation, operational excellence, continuous improvement]
+    ops_strategy: [operations, business operations, bizops, strategy, strategic, chief of staff, founders office, founder's office, rotational, leadership program, leadership development, development program, management trainee, generalist, project manager, project coordinator, project associate, implementation, special projects, founder associate, founders associate, facilities, workplace operations, revenue operations, sales operations, deployment strategist, forward deployed, strategist, agent development, deal operations, automation, process improvement, process excellence, transformation, AI operations, AI enablement, AI strategy, AI transformation, operational excellence, continuous improvement, launch associate, expansion associate, founding operator, founding associate, founding team, strategic operator, forward deployed strategist, forward deployed operator]
     consulting: [consultant, consulting, advisory]
   # Turned off Nov 8 ("most things of interest are hospitality, real estate, business ops"):
   # these titles now pass only at a hospitality / real-estate company. Move a line back
@@ -330,7 +330,11 @@ field_fit:
                partnerships associate, gtm associate, ai operations, solutions associate,
                consulting analyst, strategy consulting, strategy consultant, management consulting analyst,
                revenue management analyst, revenue management associate, development analyst, development associate,
-               hotel operations analyst, real estate operations]
+               hotel operations analyst, real estate operations,
+               forward deployed strategist, forward deployed operations, forward deployed operator, deployed strategist,
+               operations & strategy, operations and strategy, ops & strategy, strategic initiatives, strategic projects,
+               business strategy, launch associate, expansion associate, market expansion associate, founding operator,
+               founding associate, founding team, strategic operator, ai strategy associate, ai implementation]
   core_company_generic_titles: [analyst, associate, coordinator, generalist, specialist, fellow, fellowship, program, rotational, chief of staff, implementation, trainee]
   # "Your edge" flag (listed first): one of the above plus AI in the title or opening description
   ai_terms: [AI, A.I., artificial intelligence, machine learning, LLM, LLMs, agentic, AI agents, AI agent, generative AI, GenAI, conversational AI, AI-native, AI-powered]
