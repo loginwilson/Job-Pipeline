@@ -84,6 +84,14 @@ def evaluate_one(raw, company, criteria, gates, matcher) -> Evaluation:
     if stub_drops(quick):
         quick.posting.raw = raw            # keep the full posting for the snapshot
         quick.posting.description_lines = raw.description_lines
+        try:                               # pay is still worth showing (a job you add stays visible)
+            from .pipeline.comp import parse_comp
+            loc = quick.posting.location
+            quick.posting.comp = parse_comp(raw.description_lines, raw.comp_ranges, raw.comp_extra, criteria,
+                                            market=loc.market, region=loc.best.region if loc.best else None,
+                                            employment_type=None, matcher=matcher)
+        except Exception:
+            pass
         return quick
     return gates.evaluate(normalize_posting(raw, company, criteria, matcher))
 

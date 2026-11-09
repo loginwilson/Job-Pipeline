@@ -143,7 +143,9 @@ def find_text_ranges(lines: list[str], criteria: Criteria, market_currency: str 
             spans.append(m.span())
             prefix = re.split(r"[.!?](?:\s|$)", text[:m.start()])[-1]
             suffix = text[m.end():m.end() + 20]
-            kind = "ote" if _is_ote(prefix, criteria) or _is_ote(re.split(r"[,;]|\.(?:\s|$)", suffix)[0], criteria) else "base"
+            after = "" if suffix.lstrip().startswith("(") else re.split(r"[,;]|\.(?:\s|$)", suffix)[0]
+            # "$60,000 - 70,000 (OTE $108,600...)": the bracket is a separate figure, not this one
+            kind = "ote" if _is_ote(prefix, criteria) or _is_ote(after, criteria) else "base"
             found.append(_Found(lo, hi, _currency(c1 or c2, m.group("t1") or m.group("t2"), market_currency),
                                 period or "year", prefix.strip()[-80:], kind, text))
         if spans or not _PAY_WORDS.search(text):
@@ -156,9 +158,10 @@ def find_text_ranges(lines: list[str], criteria: Criteria, market_currency: str 
             if v < 1000 and period != "hour":
                 continue
             prefix = re.split(r"[.!?](?:\s|$)", text[:m.start()])[-1]
-            if not _PAY_WORDS.search(prefix):
-                continue
-            kind = "ote" if _is_ote(prefix, criteria) else "base"
+            after = re.split(r"[,;(]|\bwith\b|\.(?:\s|$)", text[m.end():m.end() + 30])[0]
+            if not (_PAY_WORDS.search(prefix) or re.match(r"\s*(?:base|salary)\b", after, re.I)):
+                continue                                  # "$90K base with $150K OTE" counts too
+            kind = "ote" if _is_ote(prefix, criteria) or _is_ote(after, criteria) else "base"
             found.append(_Found(v, v, _currency(m.group("c1"), m.group("t1"), market_currency),
                                 period or "year", prefix.strip()[-80:], kind, text))
     return found

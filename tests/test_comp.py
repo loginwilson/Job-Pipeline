@@ -53,3 +53,14 @@ def test_funding_amounts_ignored(make):
 def test_part_time_full_time_equivalent(make):
     p = make(employment="Part-time", lines=["Salary $60,000 per year for 20 hours per week"])
     assert p.comp.midpoint_annual == 120000
+
+
+def test_pay_written_the_ways_postings_actually_write_it(criteria):
+    """Nov 9: Meow, EliseAI SDR and Fora showed 'Unknown' though each posting states its pay."""
+    from src.pipeline.comp import parse_comp
+    pay = lambda t: parse_comp([t], [], [], criteria, "US", None, "full_time", None)
+    assert pay("$90K base with $150K OTE, uncapped and revenue-based.").midpoint_annual == 90000
+    r = pay("The salary for this role is $60,000 - 70,000 (OTE $108,600 - 118,600).")
+    assert (r.min, r.max, r.ote_only) == (60000, 70000, False)
+    assert pay("Annual salary is $90k + equity.").midpoint_annual == 90000
+    assert not pay("$120K OTE").known
