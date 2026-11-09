@@ -93,11 +93,14 @@ salary:
 experience:
   max_years: 1          # 1 year MAX (your rule, Nov 9): any ask over 1 year drops (1.5+, 2+, "3-6 years");
                         # a range that starts at 1 or less ("0-2", "1-2 years") still passes
-  # Nov 9: a posted salary midpoint above this, with no entry-level wording (new grad, 0-1 years,
-  # "Associate"/"Analyst" titles...), means an experienced hire even when no years are stated
-  senior_pay_midpoint: 200000
+  # (Nov 9: no pay-based seniority rule - high pay isn't the reason, the posting's requirements are)
   # Experience asks with no number that still mean "several years" (drop; the line is shown in Dropped)
-  unstated_senior_terms: [extensive experience, significant experience, deep experience, many years of experience, several years of experience, multiple years of experience, several years experience, spent years, seasoned professional, mentor junior, mentor less experienced, mentoring junior, mentor and develop junior, train and mentor less experienced]
+  unstated_senior_terms: [track record of, presented to senior executives, presenting to senior executives,
+                          built and run, built and ran, you have led, you've led, led a team, led teams, managed a team,
+                          managing a team, people management, experience at an ai, experience at a high-growth,
+                          experience at a high growth, experience at a fast-growing, internal job level,
+                          prior experience as a, prior experience in a similar role, experience in a similar role,
+                          extensive experience, significant experience, deep experience, many years of experience, several years of experience, multiple years of experience, several years experience, spent years, seasoned professional, mentor junior, mentor less experienced, mentoring junior, mentor and develop junior, train and mentor less experienced]
   # With NO years stated, these mid-level titles drop unless the title also has an entry cue (your choice, Nov 8)
   no_years_mid_level_titles: [manager, account executive, consultant, officer, advisor, producer, broker, executive, partner]
   entry_title_cues: [associate, assistant, junior, jr, entry, new grad, graduate, early career, analyst, coordinator, trainee, program, apprentice, " I", "1", campus, university, "2027", "2026"]
@@ -186,7 +189,13 @@ technical:
   ai_builder_ok_phrases: [write code, writing code, coding experience, programming experience, a technical background, strong technical background, engineering background]
   required_drop:
     languages: [Python, JavaScript, TypeScript, Java, C++, C#, Ruby, Scala, Rust, Kotlin, Swift, Golang, PHP]
-    phrases: [production code, production-quality code, write code, writing code, coding experience, programming experience, software development experience, software engineering experience, years of software engineering, build and train machine learning models, train machine learning models, building machine learning models, training ML models, building ML models, a technical background, strong technical background, engineering background, technical degree, video editing, graphic design experience, design portfolio, portfolio of work, Salesforce administration]
+    phrases: [code-level, production code, production-quality code, write code, writing code, coding experience, programming experience, software development experience, software engineering experience, years of software engineering, build and train machine learning models, train machine learning models, building machine learning models, training ML models, building ML models, a technical background, strong technical background, engineering background, technical degree, video editing, graphic design experience, design portfolio, portfolio of work, Salesforce administration]
+  # Nov 9: a language with one of these is an expectation of proficiency -> drop, even next to SQL / AI tools
+  proficiency_words: [proficient, proficiency, expert, expertise, strong, fluent, fluency, advanced, deep, solid,
+                      write, writing, production, code-level, hands-on coding, years of]
+  # ...and one of these means familiarity is enough -> keep (you can do it with AI tools)
+  familiarity_words: [familiar, familiarity, exposure, comfortable, comfort with, interest in, bonus, a plus, plus,
+                      ideally, nice to have, basic, some experience, working knowledge]
   # if any of these appears on the same line, the line offers a non-coding path → keep
   ok_alternatives: [SQL, Excel, spreadsheets, Tableau, Power BI, Looker, no-code, low-code, Zapier, n8n, Clay, Airtable, AI tools, ChatGPT, LLMs, statistical packages, or equivalent]
 
@@ -296,7 +305,6 @@ field_fit:
                chief of staff, special projects, strategy associate, strategy analyst, enterprise strategy, gtm strategy,
                partnerships associate, gtm associate, ai operations, solutions associate,
                consulting analyst, strategy consulting, strategy consultant, management consulting analyst,
-               acquisitions analyst, acquisitions associate, asset management analyst, asset management associate,
                revenue management analyst, revenue management associate, development analyst, development associate,
                hotel operations analyst, real estate operations]
   core_company_generic_titles: [analyst, associate, coordinator, generalist, specialist, fellow, fellowship, program, rotational, chief of staff, implementation, trainee]

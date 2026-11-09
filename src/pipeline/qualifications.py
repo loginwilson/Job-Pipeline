@@ -100,9 +100,16 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
         # 7. technical
         lang = _case_sensitive(line, req.get("languages", []) or [])
         phrase = [h for h in find_terms(line, req.get("phrases", []) or []) if h.term.lower() not in ok_phrases][:1]
-        if (lang or phrase) and not softened and not find_terms(line, ok_alt, first_only=True):
-            hits.append(Hit("technical", line, f"requires {lang or phrase[0].term}"))
-            continue
+        if lang or phrase:
+            # Nov 9: you can do technical work with AI tools, but not when they expect proficiency
+            proficient = find_terms(line, tech.get("proficiency_words") or [], first_only=True)
+            familiar = find_terms(line, tech.get("familiarity_words") or [], first_only=True)
+            if proficient and not softened:          # "fluent in Python ... comfortable with X": fluent wins
+                hits.append(Hit("technical", line, f"expects {proficient[0].term} {lang or phrase[0].term}"))
+                continue
+            if not softened and not familiar and not find_terms(line, ok_alt, first_only=True):
+                hits.append(Hit("technical", line, f"requires {lang or phrase[0].term}"))
+                continue
         # hard skills you don't have (e.g. financial modeling): softening wording keeps the line,
         # but a tool on the same line (Excel) doesn't - modeling in Excel is still modeling
         if not softened:

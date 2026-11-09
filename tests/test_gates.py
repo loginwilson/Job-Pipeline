@@ -343,7 +343,7 @@ def test_field_fit_keeps_your_fields_only(full_criteria):
     from src.pipeline.gates import Gates
     g = Gates(full_criteria)
     fails = lambda t, lines=(): {f.gate for f in g.evaluate(_p(full_criteria, t, list(lines))).failures}
-    for t in ("Hotel Revenue Management Analyst", "Real Estate Acquisitions Analyst", "Business Operations Associate",
+    for t in ("Hotel Revenue Management Analyst", "Business Operations Associate",
               "Strategy Consulting Analyst", "Chief of Staff",
               "Deployment Strategist", "Revenue Operations Associate"):
         assert "field" not in fails(t), t
@@ -546,20 +546,20 @@ def test_a_job_site_is_never_the_employer(criteria):
     assert "not_a_real_opening" in {f.gate for f in ev.failures}
 
 
-def test_senior_pay_with_no_entry_wording_drops(criteria):
-    """Nov 9: Anthropic GTM S&O ($190-270K, no years stated) is an experienced hire."""
+def test_seniority_comes_from_the_requirements_not_the_pay(criteria):
+    """Nov 9 (your rule): high pay isn't a reason to drop - the posting's requirements are.
+    Real lines from Anthropic's GTM Strategy & Operations and EliseAI's Deployment Strategist."""
     from src.pipeline.gates import Gates
     g = Gates(criteria)
-    d = ["You will own strategy and operations across the business with leadership on key programs.",
-         "## Requirements", "- Strong analytical skills and clear communication with executives and partners.",
-         "- Comfort with ambiguity and a bias toward ownership in a fast-moving environment."]
-    gates = lambda t, pay, extra=(): {f.gate for f in g.evaluate(_p(criteria, t, d + list(extra), pay=pay)).failures}
-    assert "experience" in gates("GTM Strategy & Operations", "Annual Salary: $190,000 - $270,000 USD")
-    assert "experience" not in gates("Founding BizOps", "Base salary of $170K to $300K.",
-                                     ["- 0 to 5 years of experience in consulting or operations."])
-    assert "experience" not in gates("Strategy Associate", "Salary $190K - $250K")      # entry title
-    assert "experience" not in gates("Deployment Strategist", "Salary $140K - $240K")   # mid $190K
-
+    intro = ["We are a fast-growing company building software for operators, and you will work across the "
+             "business with leadership on our most important initiatives every week."]
+    gates = lambda line, pay="Annual Salary: $190,000 - $270,000 USD": {f.gate for f in g.evaluate(_p(
+        criteria, "GTM Strategy & Operations", intro + ["## Requirements", "- " + line], pay=pay)).failures}
+    assert "experience" in gates("Built and run high-stakes, operations-heavy programs at a high-velocity product "
+                                 "company, with a track record of turning effective heroics into a repeatable methodology")
+    assert "experience" in gates("Written for and presented to senior executives")
+    assert "experience" in gates("3–5 years running enterprise software implementations, platform migrations")
+    assert "experience" not in gates("Clear communication and strong ownership in a fast-moving team")   # pay alone: kept
 
 def test_nov9_audit_misses_are_caught(criteria, full_criteria):
     """Real lines from the Nov 9 audit of To review (Verse Medical, HUD, Algolia)."""
@@ -592,7 +592,7 @@ def test_a_hotel_or_real_estate_word_alone_is_not_your_field(full_criteria):
                 "Property Administrative Specialist", "Leasing and Hospitality Associate",
                 "Commercial Real Estate Transaction Coordinator", "Real Estate Buyer Specialist"):
         assert field(bad), bad
-    for good in ("Hotel Asset Management Analyst", "Real Estate Acquisitions Associate", "Hospitality Strategy Associate",
+    for good in ("Hospitality Strategy Associate",
                  "Revenue Management Analyst - Hotels", "Business Operations Associate", "Deployment Strategist",
                  "Growth Strategy Analyst, Future Platforms | Housing", "Strategic Partnerships Associate"):
         assert not field(good), good
@@ -615,6 +615,12 @@ def test_ai_builder_titles_get_no_coding_exemption(evaluate):
     ev = evaluate(title="GTM Engineer", lines=["## Who you are",
                   "- Technically fluent in Python or JavaScript, comfortable building automated pipelines", PAY_OK])
     assert "technical" in {f.gate for f in ev.failures}
-    ok = evaluate(title="GTM Engineer", lines=["## Who you are",
-                  "- You build workflows with Clay, Zapier and AI tools; SQL is a plus", PAY_OK])
-    assert "technical" not in {f.gate for f in ok.failures}
+    # Nov 9 (your rule): familiarity is fine - you build with AI tools; proficiency is not
+    for fine in ("You build workflows with Clay, Zapier and AI tools; SQL is a plus",
+                 "Comfortable with Python or JavaScript - you'll build with AI tools", "Familiarity with Python is a plus"):
+        assert "technical" not in {f.gate for f in evaluate(title="GTM Engineer", lines=["## Who you are", "- " + fine,
+                                                                                       PAY_OK]).failures}, fine
+    for hard in ("Strong Python skills and experience writing production scripts",
+                 "SQL and code-level data proficiency, sophisticated modeling in Sheets or Excel"):
+        assert "technical" in {f.gate for f in evaluate(title="GTM Engineer", lines=["## Who you are", "- " + hard,
+                                                                                   PAY_OK]).failures}, hard
