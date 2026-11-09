@@ -174,3 +174,12 @@ def test_adzuna_parse_and_daily_plan(criteria, monkeypatch):
     evs = run.run_adzuna(Store(":memory:"), cfg, criteria, Gates(criteria), LocationMatcher(criteria),
                          "2026-11-09T10:00:00+00:00")
     assert asked == [("bizops", "New York, NY"), ("hotel", "Miami, FL")] and len(evs) == 4
+
+
+def test_muse_without_a_key_is_skipped_quietly(criteria, monkeypatch):
+    """Nov 9: run 79 crashed here (wrong return shape when no MUSE_API_KEY)."""
+    import src.run as run
+    from src.store.db import Store
+    monkeypatch.delenv("MUSE_API_KEY", raising=False)
+    assert run.run_muse(Store(":memory:"), {"enabled": True, "needs_key": True}, criteria, None, None,
+                        "2026-11-09T10:00:00+00:00") == (None, False)
