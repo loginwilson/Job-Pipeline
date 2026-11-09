@@ -37,8 +37,7 @@ def test_location(evaluate):
     assert nyc_remote.passed and "Remote role — lists your city" in nyc_remote.flags   # not solely remote
     multi = evaluate(locations=["NYC, SF, or Remote"], workplace=None, lines=[PAY_OK])
     assert multi.passed and multi.posting.location.best.region == "NYC"
-    assert evaluate(locations=["Vancouver, BC"], lines=["Salary: CA$150,000 - CA$170,000 per year"]).passed   # tier 3
-    assert not evaluate(locations=["Austin, TX"], lines=[PAY_OK]).passed   # Nov 9: Texas is no longer one of your cities
+    assert evaluate(locations=["Austin, TX"], lines=[PAY_OK]).passed       # tier 3 still passes
 
 
 # 3. salary

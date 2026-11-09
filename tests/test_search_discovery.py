@@ -20,8 +20,8 @@ T1, T2 = "2026-11-07T10:00:00+00:00", "2026-11-07T11:00:00+00:00"
 
 def test_muse_locations_cover_every_criteria_city(criteria):
     locs = muse_locations(criteria)
-    for want in ("New York, NY", "Manhattan, NY", "Jersey City, NJ",
-                 "San Francisco, CA", "Toronto, Canada", "Vancouver, Canada"):
+    for want in ("New York, NY", "Manhattan, NY", "Jersey City, NJ", "Chicago, IL", "Miami, FL",
+                 "San Francisco, CA", "Toronto, Canada", "Austin, TX", "Vancouver, Canada"):
         assert want in locs
 
 

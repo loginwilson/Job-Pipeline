@@ -42,12 +42,13 @@ location:
   tiers:
     1:
       NYC: [Manhattan, Brooklyn, Queens, Bronx, Staten Island, Jersey City, Hoboken]
-    # Nov 9 (your 153 decisions): every 1-5 was NYC or San Francisco; Texas, Florida and Chicago
-    # were 0 of 59, so they're out. California stays (secondary); Canada stays (no visa needed).
     2:
+      Chicago: [Chicago, Evanston, Oak Park]
+      Florida: [Miami, Miami Beach, Fort Lauderdale, West Palm Beach, Boca Raton, Tampa, Orlando]
       California: [San Francisco, Oakland, Palo Alto, Mountain View, Menlo Park, Redwood City, San Mateo, Sunnyvale, San Jose, Los Angeles, Santa Monica, Culver City, San Diego]
       Toronto: [Toronto, Mississauga, Markham, Vaughan, Oakville]
     3:
+      Texas: [Austin, Dallas, Houston]
       British Columbia: [Vancouver, Burnaby, Richmond, Surrey]
 
 

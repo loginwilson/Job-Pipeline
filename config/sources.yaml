@@ -16,7 +16,7 @@ discovery:                  # companies found by search → their own job board 
   retry_unfound_after_days: 30
 
 serpapi:                    # SerpApi Google Jobs (free monthly allowance; key: SERPAPI_API_KEY)
-  enabled: false   # Nov 9: back to the sources that produced your good fits
+  enabled: true
   requests_per_day: 5       # ~150 a month; raise to match your plan's monthly allowance / 30
   focus:
     - {keywords: "business operations OR strategy and operations OR bizops", city: "New York, New York, United States"}
@@ -25,10 +25,11 @@ serpapi:                    # SerpApi Google Jobs (free monthly allowance; key: 
   keywords:
     - business operations OR strategy associate
     - real estate OR hospitality associate
-  cities: ["San Francisco, California, United States", "Los Angeles, California, United States"]
+  cities: ["San Francisco, California, United States", "Chicago, Illinois, United States", "Miami, Florida, United States",
+           "Los Angeles, California, United States", "Austin, Texas, United States"]
 
 jobspipe:                   # JobsPipe ONE-TIME sweep (free 1,000 credits, never renew; key: JOBSPIPE_API_KEY)
-  enabled: false   # Nov 9: back to the sources that produced your good fits
+  enabled: true
   total_credits: 950        # stops here; 1 credit = 1 job, 25 per page on the free plan
   filters:                  # applied to every search
     job_title_not: [senior, sr., director, head of, vp, vice president, principal, staff, lead, engineer,
@@ -62,7 +63,7 @@ jobspipe:                   # JobsPipe ONE-TIME sweep (free 1,000 credits, never
                      strategy associate, founders associate, deployment strategist, real estate, hospitality, hotel]
 
 adzuna:                     # Adzuna job search (free key: GitHub secrets ADZUNA_APP_ID + ADZUNA_APP_KEY)
-  enabled: false   # Nov 9: back to the sources that produced your good fits
+  enabled: true
   requests_per_day: 24      # free plan allows ~250 a day; each search returns up to 50 postings
   max_days_old: 3
   first_fill_days: 30       # a search's first run looks back a month
@@ -80,7 +81,8 @@ adzuna:                     # Adzuna job search (free key: GitHub secrets ADZUNA
     - real estate proptech
     - hospitality hotel
     - deployment strategist implementation
-  cities: ["Jersey City, NJ", "San Francisco, CA", "Los Angeles, CA", "San Diego, CA", "Toronto, ON"]
+  cities: ["Jersey City, NJ", "Chicago, IL", "Miami, FL", "Los Angeles, CA", "San Diego, CA", "Austin, TX",
+           "Dallas, TX", "Houston, TX", "Tampa, FL", "Orlando, FL"]
 
 jsearch:                    # Google for Jobs via JSearch (OpenWeb Ninja) — key: JSEARCH_API_KEY
   enabled: true
@@ -105,10 +107,17 @@ jsearch:                    # Google for Jobs via JSearch (OpenWeb Ninja) — ke
   cities:                   # one per area in criteria location tiers (search radius covers suburbs)
     - {query: "New York, NY", country: us}
     - {query: "Jersey City, NJ", country: us}
+    - {query: "Chicago, IL", country: us}
+    - {query: "Miami, FL", country: us}
+    - {query: "Tampa, FL", country: us}
+    - {query: "Orlando, FL", country: us}
     - {query: "San Francisco, CA", country: us}
     - {query: "Los Angeles, CA", country: us}
     - {query: "San Diego, CA", country: us}
     - {query: "Toronto, ON", country: ca}
+    - {query: "Austin, TX", country: us}
+    - {query: "Dallas, TX", country: us}
+    - {query: "Houston, TX", country: us}
     - {query: "Vancouver, BC", country: ca}
   first_fill_window: month  # date_posted for a pair's first search
   window: 3days             # afterwards, only recent postings
@@ -118,8 +127,6 @@ boards:                     # how often each kind of company board is polled (de
   # Nov 9: whole boards that are almost all hotel-floor / leasing jobs - not read; their corporate
   # roles still come in through Google Jobs / Adzuna searches
   never_watch: [Hilton, Marriott International, Greystar, Cushman & Wakefield, Expedia Group]
-  # Nov 9 (your 153 decisions): 0 of 64 jobs from big-company systems were worth a score
-  skip_platforms: [workday, oracle, smartrecruiters]
   every_hours:
     oracle: 6               # same for Oracle career sites
     workday: 6              # large career sites, details fetched only for postings that could pass

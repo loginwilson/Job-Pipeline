@@ -176,7 +176,8 @@ class Gates:
         allow = (self.c.get("field_fit", default={}) or {}).get("role_allow")
         if not allow or ev.failures:
             return
-        if PROGRAM_RX.search(p.title or "") or find_terms(p.title, allow, first_only=True):
+        if PROGRAM_RX.search(p.title or "") or find_terms(p.title, allow, first_only=True) \
+                or qualifications.is_ai_builder(p.title, self.c):     # AI-builder roles: "as long as I qualify"
             return
         ev.fail("field", f"not one of your role types: {p.title}")
 
