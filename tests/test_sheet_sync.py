@@ -54,6 +54,8 @@ def tab(sheet, name):
         if name == PICKS and not any(r):
             break                      # the live "just scored" section starts after a blank row
         d = dict(zip(head, r + [""] * (len(head) - len(r))))
+        if d.get("Interest", "").startswith("=IFERROR(INDEX("):
+            d["Interest"] = d["Interest"].rsplit(', "', 1)[1].rstrip('")')   # Sheets shows the live score
         out.append([d.get(h, "") for h in U])
     return out
 
@@ -111,17 +113,20 @@ def test_scores_go_to_apply_and_you_track_there(criteria, board, evals):
     assert tab(sheet, APPLICATIONS)[0][NOTES] == "Coffee chat"
 
 
-def test_rescoring_on_either_tab_wins(criteria, board, evals):
+def test_apply_shows_your_to_review_score_live(criteria, board, evals):
+    """You score on To review only; Apply's Interest is a live lookup of it."""
     store, sheet = Store(":memory:"), FakeBackend()
     run(store, sheet, board, evals, criteria, T1)
     a, b = [r[ID_COL] for r in tab(sheet, REVIEW)][:2]
     put(sheet, REVIEW, a, "Interest", "4")
     put(sheet, REVIEW, b, "Interest", "2")
     run(store, sheet, board, evals, criteria, T2)
-    put(sheet, PICKS, a, "Interest", "Pass")                    # changed your mind on Apply
-    put(sheet, REVIEW, b, "Interest", "5")                      # re-scored on To review
+    f = sheet.formulas(PICKS, 0)[0]
+    assert f.startswith("=IFERROR(INDEX('To review'!A:A, MATCH(O2, 'To review'!O:O, 0)), \"4\")")
+    put(sheet, REVIEW, a, "Interest", "Pass")                   # changed your mind
+    put(sheet, REVIEW, b, "Interest", "5")
     run(store, sheet, board, evals, criteria, T2)
-    assert [r[ID_COL] for r in tab(sheet, APPLICATIONS)] == [b] and tab(sheet, APPLICATIONS)[0][INT] == "5"
+    assert [r[ID_COL] for r in tab(sheet, APPLICATIONS)] == [b]
     assert [r[ID_COL] for r in tab(sheet, PASSED)] == [a]
 
 

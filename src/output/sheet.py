@@ -248,7 +248,8 @@ def read_owner_values(existing: dict[str, list[list[str]]],
                 pid = resolve(pid, cells)
             if not pid:
                 continue
-            vals = {h: cells[h].strip() for h in OWNER_HEADERS if h in idx and h != "Decision"}
+            vals = {h: cells[h].strip() for h in OWNER_HEADERS if h in idx and h != "Decision"
+                    and not (tab == PICKS and h == "Interest")}      # you score on To review only
             if "Interest" in vals:
                 vals["Interest"] = _pick_norm(vals["Interest"])
             if pid in seen and not any(vals.values()):
@@ -425,10 +426,14 @@ def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Cr
     picks = sorted([r for r in tab_rows if _interest(r["cells"].get("Interest") or "") > 0],
                    key=lambda r: _sort_key(PICKS, r))
     company_col = _col_letter(APPLY_HEADERS.index("Company"))
+    aid, rid = _col_letter(APPLY_HEADERS.index("Posting ID")), _col_letter(ID_COL)
     agrid = [APPLY_HEADERS]
     for n, r in enumerate(picks, start=2):
         c = dict(r["cells"])
         c["Contacts"] = f'=IF(COUNTIF(Contacts!A:A,{company_col}{n})=0,"",COUNTIF(Contacts!A:A,{company_col}{n}))'
+        # your score lives on To review: shown here live (a Pass greys the row at once)
+        c["Interest"] = (f"=IFERROR(INDEX('{JOBS}'!A:A, MATCH({aid}{n}, '{JOBS}'!{rid}:{rid}, 0)), "
+                         f"\"{c.get('Interest', '')}\")")
         agrid.append([c.get(h, "") for h in APPLY_HEADERS])
     agrid += [[], [_JUST_SCORED] + [""] * (len(APPLY_HEADERS) - 1), [_live_picks(len(picks) + 1)]]
     requests += _grid_tab(meta[PICKS], APPLY_HEADERS, agrid, len(existing.get(PICKS) or []), room=300,
