@@ -74,6 +74,14 @@ def _num(token: str | None) -> float | None:
         return None
 
 
+def _alternatives(line: str) -> bool:
+    spans = [m.span() for m in _YEARS_RE.finditer(line)]
+    # the "or" must lead into the next year count ("...; or 3+ years", "...as an AE OR 4+ years"),
+    # not sit in the middle ("2 years in consulting (MBB or boutique) and 1-2 years ...")
+    return any(re.search(r"\bor\b[\s,;:(]*(?:\w+\s+){0,2}$", re.sub(r"\([^)]*\)", " ", line[a[1]:b[0]]), re.I)
+               for a, b in zip(spans, spans[1:]))
+
+
 def parse_experience(kind_lines: list[tuple[str, str]], title: str, criteria: Criteria) -> ExperienceResult:
     res = ExperienceResult()
     pref_terms = criteria.get("experience", "parse_sections", "preferred", default=[]) or []
@@ -90,7 +98,15 @@ def parse_experience(kind_lines: list[tuple[str, str]], title: str, criteria: Cr
             if m.group(1).lower() in ("a", "an") and not re.match(r"\s*of\b", tail):
                 continue
             in_req_section = kind in ("required", "preferred")
-            if not in_req_section and not _EXPERIENCE_WORD.search(tail):
+            # Nov 9: "2+ years in revenue operations" / "3-6 years in RCM" are asks too, even when the
+            # posting's headings weren't recognised - written as a requirement (a +, a range,
+            # "at least" / "minimum", or the line opening with the number) and tied to a field
+            as_requirement = bool(re.search(r"\+|\d\s*(?:-|–|to)\s*\d", m.group(0))) or \
+                bool(re.search(r"\b(?:at least|minimum|min\.|over)\s*$", line[:m.start()], re.I)) or \
+                not line[:m.start()].strip(" -•*")
+            field_tail = re.match(r"\s*(?:of\s+)?(?:in|at|with|working|as|across|on|doing|leading|building|"
+                                  r"supporting|running|owning|managing|selling|of\s+\w+)\b", tail, re.I)
+            if not in_req_section and not _EXPERIENCE_WORD.search(tail) and not (as_requirement and field_tail):
                 continue
             years = lo / 12 if unit.startswith("month") else lo
             if kind == "required":
@@ -103,8 +119,10 @@ def parse_experience(kind_lines: list[tuple[str, str]], title: str, criteria: Cr
         if len(line_asks) > 1 and re.search(r"\bfollowed by\b|\band then\b|\bplus (?:an additional|another)\b", line, re.I):
             # "2+ years in banking, ideally followed by 2+ years in BizOps" → 4 years in all
             line_asks = [Ask(sum(a.years for a in line_asks), line_asks[0].kind, line_asks[0].line)]
-        elif len(line_asks) > 1 and re.search(r"\bor\b", line, re.I):
-            # alternative paths on one line ("1+ years with a bachelor's; or 3+ years") → the easiest one
+        elif len(line_asks) > 1 and _alternatives(line):
+            # alternative paths on one line ("1+ years with a bachelor's; or 3+ years") → the easiest one.
+            # Only an "or" BETWEEN the year counts makes them alternatives: "3-6 years in RCM, with at
+            # least 1-2 years in a consulting or advisory capacity" is 3 years (Nov 9)
             line_asks = [min(line_asks, key=lambda a: a.years)]
         res.asks.extend(line_asks)
     clean = [t for t in criteria.get("experience", "pass_clean", default=[]) if not str(t).startswith("no_")]

@@ -564,3 +564,20 @@ def test_senior_pay_with_no_entry_wording_drops(criteria):
                                      ["- 0 to 5 years of experience in consulting or operations."])
     assert "experience" not in gates("Strategy Associate", "Salary $190K - $250K")      # entry title
     assert "experience" not in gates("Deployment Strategist", "Salary $140K - $240K")   # mid $190K
+
+
+def test_nov9_audit_misses_are_caught(criteria, full_criteria):
+    """Real lines from the Nov 9 audit of To review (Verse Medical, HUD, Algolia)."""
+    from src.pipeline.experience import parse_experience
+    from src.pipeline.gates import Gates
+    years = lambda line: max([a.years for a in parse_experience([("other", line)], "Associate", criteria).asks] or [0])
+    assert years("2+ years in revenue operations, sales operations, GTM operations, or analytics") == 2
+    assert years("3–6 years in RCM, with at least 1–2 years in a consulting or advisory capacity.") == 3
+    assert years("3–4 years of experience, including 2 years in management consulting (MBB or top-tier "
+                 "boutique) and 1–2 years at a startup") == 3
+    assert years("1+ years with a bachelor's degree; or 3+ years without a degree") == 1      # real alternatives
+    assert years("We've been in business for 10 years and serve 500 customers.") == 0
+    assert years("You'll spend 2 years in our rotational program across three teams.") == 0
+    ev = Gates(full_criteria).evaluate(_p(full_criteria, "Strategic Business Development Representative",
+                                          ["Own outbound pipeline generation for our AI search platform."]))
+    assert "field" in {f.gate for f in ev.failures}
