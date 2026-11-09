@@ -203,6 +203,14 @@ class Gates:
                             find_terms(p.title, ff.get("finance_firm_ok_roles") or [], first_only=True)):
             ev.fail("field", f"a finance firm ({finance[0].term}) and not a generalist / operations role: {p.title}")
             return
+        # the title is one of your role types but the text describes a function you've ruled out
+        # (Clera 'GTM Engineer': DevRel, community building, technical evangelism = marketing)
+        nt = ff.get("never_role_text") or {}
+        hits = {h.term.lower() for h in find_terms(p.description_lines, nt.get("terms") or [])}
+        if len(hits) >= int(nt.get("drop_at", 2)):
+            ev.fail("field", f"the posting describes {nt.get('label', 'a role you ruled out')} "
+                             f"({', '.join(sorted(hits)[:3])}): {p.title}")
+            return
         if PROGRAM_RX.search(p.title or "") or find_terms(p.title, allow, first_only=True) \
                 or qualifications.is_ai_builder(p.title, self.c):     # AI-builder roles: "as long as I qualify"
             return
@@ -279,10 +287,8 @@ class Gates:
     # 3. salary -------------------------------------------------------------
     def salary(self, p: Posting, ev: Evaluation) -> None:
         comp = p.comp
-        if comp.ote_only:
-            ev.flag("Salary unknown (OTE only)")
-            return
-        if not comp.known:
+        if comp.ote_only or not comp.known:
+            # OTE / commission figures don't count as pay: judged like a posting with no pay at all
             sal = self.c.get("salary", default={}) or {}
             floor = ((sal.get("markets") or {}).get(p.location.market or "US") or {}).get("floor")
             hit = find_terms(p.title, sal.get("rarely_meets_floor_titles", []) or [], first_only=True)
@@ -309,7 +315,7 @@ class Gates:
                     and not PROGRAM_RX.search(p.title or "")):
                 ev.fail("salary", "no salary posted, and not a grad program or an AI-forward company")
                 return
-            ev.flag("Salary unknown")
+            ev.flag("Salary unknown (OTE only)" if comp.ote_only else "Salary unknown")
             return
         markets = self.c.get("salary", "markets", default={}) or {}
         market = {"USD": "US", "CAD": "CA"}.get(comp.currency or "", p.location.market or "US")

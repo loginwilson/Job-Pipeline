@@ -93,6 +93,12 @@ _TITLE_TYPES = [
 _DESC_TYPES = re.compile(
     r"\bthis is an? (?:\d+[- ](?:month|week)[- ])?(contract[- ]to[- ]hire|contract|temporary|temp|fixed[- ]term)\b"
     r"(?: role| position| assignment| opportunity)?", re.I)
+# the posting describes itself as an internship though the title and board field don't say so
+# (SAP 'SAPiXp - GTM Strategy & Operations': "During your internship you will be part of ...")
+_DESC_INTERNSHIP = re.compile(
+    r"\b(?:during|throughout|through) (?:your|the|this) internship\b|\byour internship (?:experience|will|is)\b"
+    r"|\bthis is an? (?:paid |unpaid |full[- ]time |part[- ]time |\d+[- ](?:week|month)[- ])*internship\b"
+    r"|\bthis internship\b", re.I)
 _DURATION = re.compile(r"\b(\d{1,2})[- ]?(weeks?|months?)\b(?:[- ]long)?", re.I)
 _PROGRAM_WORD = re.compile(r"\b(?:fellowship|program|programme|cohort|runs|lasts|duration)\b", re.I)
 
@@ -112,6 +118,11 @@ def employment_type_of(raw: RawPosting, lines: list[str]) -> tuple[str, str]:
         if rx.search(raw.title):
             return kind, f"title: {raw.title}"
     blob = "\n".join(lines)
+    if re.search(r"\bsap\s?ixp\b", raw.title, re.I):
+        return "internship", f"title: {raw.title} (SAP's internship program)"
+    mi = _DESC_INTERNSHIP.search(blob)
+    if mi:
+        return "internship", f"description: {mi.group(0)}"
     m = _DESC_TYPES.search(blob)
     if m:
         word = m.group(1).lower().replace(" ", "_").replace("-", "_")

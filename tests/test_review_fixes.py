@@ -53,3 +53,58 @@ def test_same_job_key_keeps_teams_apart_and_cities_together():
     assert k("Operations Associate | Remote") == k("Operations Associate")
     assert k("Operations Associate - Austin", "Austin, TX (tier 3)") == k("Operations Associate")
     assert k("Strategy & Operations, Marketplace") != k("Strategy & Operations, Payments")
+
+
+# --- Nov 9, 3 PM read of the new To review rows ---------------------------------------------
+def _ev(full_criteria, title, lines, company="Acme", platform="ashby", locations=("New York, NY",)):
+    from src.config import Company
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.pipeline.normalize import normalize_posting
+    from src.sources.base import RawPosting
+    raw = RawPosting(platform=platform, slug="x", native_id=title, title=title, url="https://x", team=None,
+                     locations=list(locations), workplace_type="in_office", employment_type="Full-time",
+                     country=None, description_lines=list(lines), comp_ranges=[])
+    return Gates(full_criteria).evaluate(
+        normalize_posting(raw, Company(company, platform, "x"), full_criteria, LocationMatcher(full_criteria)))
+
+
+BODY = ["Acme builds AI agents for enterprises.", "About the role", "You will work with customers every day.",
+        "Requirements", "0-1 years of experience. Recent graduates welcome.",
+        "Strong communication skills, curiosity, ownership and the drive to learn fast in a startup with many moving parts."]
+PAY = "The salary range for this position is $110,000 - $130,000/year."
+
+
+def test_posting_that_calls_itself_an_internship_drops(full_criteria):
+    ev = _ev(full_criteria, "GTM Strategy & Operations", BODY + [PAY, "During your internship you will be part of SAP Next Gen."])
+    assert {f.gate for f in ev.failures} == {"employment_type"}
+    assert _ev(full_criteria, "SAPiXp - GTM Strategy & Operations", BODY + [PAY]).failures[0].gate == "employment_type"
+    # mentioning past internships is not being one (FSH, Instawork)
+    assert _ev(full_criteria, "Operations Associate", BODY + [PAY, "An internal tool you made at an internship.",
+                                                             "Previous internships or relevant project work."]).passed
+
+
+def test_track_record_of_owning_is_a_senior_ask(full_criteria):
+    ev = _ev(full_criteria, "Strategy & Operations", BODY[:4] + [
+        "Track record of owning operational outcomes end-to-end across strategy, operations, or consulting roles.",
+        BODY[5], PAY])
+    assert ev.failures and ev.failures[0].gate == "experience"
+
+
+def test_devrel_behind_a_gtm_engineer_title_is_marketing(full_criteria):
+    ev = _ev(full_criteria, "GTM Engineer", BODY + [PAY,
+             "Make this company a known name through events, community, and authentic technical evangelism.",
+             "1-3+ years in DevRel, community building, growth, or developer-facing GTM roles."])
+    assert ev.failures and ev.failures[0].gate == "field"
+    assert _ev(full_criteria, "GTM Engineer", BODY + [PAY]).passed
+
+
+def test_ote_only_pay_is_judged_like_no_pay(full_criteria):
+    body = ["Kith is a lifestyle brand with stores around the world.", "About the role",
+            "You will support daily operations for the team.", "Requirements", "0-1 years of experience.",
+            "Strong communication skills, curiosity, ownership and the drive to learn fast with many moving parts.",
+            "OTE: $60,000 - $70,000 per year including commission."]
+    kith = _ev(full_criteria, "Operations Associate", body, company="Kith Kids", platform="workday",
+               locations=("Vancouver, BC",))
+    assert kith.posting.comp.ote_only
+    assert kith.failures and kith.failures[0].gate == "salary"

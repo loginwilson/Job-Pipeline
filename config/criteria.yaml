@@ -99,7 +99,8 @@ experience:
   # (Nov 9: no pay-based seniority rule - high pay isn't the reason, the posting's requirements are)
   # Experience asks with no number that still mean "several years" (drop; the line is shown in Dropped)
   # Nov 9 audit: generic 'track record of getting things done' / company-voice 'we built and ran' no longer count
-  unstated_senior_terms: [built and run, built and ran, presented to senior executives, presenting to senior executives,
+  unstated_senior_terms: [track record of owning,     # January S&O: "Track record of owning operational outcomes end-to-end"
+                          built and run, built and ran, presented to senior executives, presenting to senior executives,
                           you have led, you've led, led a team, led teams, managed a team,
                           managing a team, people management, experience at an ai, experience at a high-growth,
                           experience at a high growth, experience at a fast-growing, internal job level,
@@ -275,6 +276,12 @@ tracking:                   # how your Status column is followed up
 # (hospitality/travel, real estate) win over everything; unrelated fields (banking,
 # legal, accounting, insurance, HR, pure data/tech) win over the other families.
 field_fit:
+  # Nov 9: text that marks developer relations / community marketing whatever the title says
+  never_role_text:
+    label: developer relations / community marketing
+    drop_at: 2
+    terms: [devrel, developer relations, developer advocate, developer advocacy, technical evangelism, technical evangelist,
+            developer communities, developer community, developer-facing, community building]
   core_families:          # always kept
     hospitality_travel: [hotel, hotels, hospitality, resort, resorts, travel, tourism, guest experience, guest relations, revenue management, revenue manager, rooms division, front office, food and beverage, F&B, lodging, airline, airlines, cruise, concierge, catering, venue, venues, restaurant group, timeshare, vacation ownership]
     real_estate: [real estate, property, properties, housing, leasing, multifamily, CRE, REIT, acquisitions, real estate development, land development, construction management, asset management analyst, investment sales, proptech]
