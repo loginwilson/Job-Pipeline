@@ -15,6 +15,40 @@ discovery:                  # companies found by search → their own job board 
   max_new_companies_per_run: 40
   retry_unfound_after_days: 30
 
+jobspipe:                   # JobsPipe ONE-TIME sweep (free 1,000 credits, never renew; key: JOBSPIPE_API_KEY)
+  enabled: true
+  total_credits: 950        # stops here; 1 credit = 1 job, 25 per page on the free plan
+  filters:                  # applied to every search
+    job_title_not: [senior, sr., director, head of, vp, vice president, principal, staff, lead, engineer,
+                    developer, scientist, intern, internship, nurse, driver, technician]
+    employer_type_not: [agency]           # no staffing / recruiting agencies
+    posted_at_max_age_days: 45
+    max_ghost_score: 60                   # skip likely "ghost" postings
+    job_country_code_or: [US, CA]
+  searches:                 # pages x 25 jobs each
+    - name: NYC business ops / strategy
+      pages: 14
+      metro_code_or: ["35620"]
+      job_title_or: [business operations, bizops, strategy & operations, strategy and operations, operations associate,
+                     strategy associate, founders associate, founder's associate, chief of staff, deployment strategist,
+                     implementation specialist, implementation strategist, ai operations, revenue operations associate,
+                     operations analyst, strategy analyst, growth operations, special projects]
+    - name: NYC real estate / hospitality
+      pages: 8
+      metro_code_or: ["35620"]
+      job_title_or: [real estate, acquisitions analyst, acquisitions associate, asset management, development associate,
+                     development analyst, proptech, hospitality, hotel, revenue management, investment analyst real estate]
+    - name: San Francisco business ops / strategy
+      pages: 6
+      metro_code_or: ["41860", "41940"]
+      job_title_or: [business operations, bizops, strategy & operations, strategy and operations, operations associate,
+                     strategy associate, founders associate, chief of staff, deployment strategist, implementation specialist]
+    - name: Other cities business ops / strategy
+      pages: 10
+      metro_code_or: ["16980", "33100", "31080", "12420", "19100", "26420", "41740", "45300", "36740"]
+      job_title_or: [business operations, bizops, strategy & operations, strategy and operations, operations associate,
+                     strategy associate, founders associate, deployment strategist, real estate, hospitality, hotel]
+
 adzuna:                     # Adzuna job search (free key: GitHub secrets ADZUNA_APP_ID + ADZUNA_APP_KEY)
   enabled: true
   requests_per_day: 24      # free plan allows ~250 a day; each search returns up to 50 postings

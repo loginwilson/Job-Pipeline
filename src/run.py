@@ -136,9 +136,9 @@ def _fetch_with_details(src, company, criteria, gates, matcher, store, ts, cache
     return raws
 
 
-SOURCE_NAMES = {"lever": "Lever", "greenhouse": "Greenhouse", "ashby": "Ashby", "muse": "The Muse", "adzuna": "Adzuna",
+SOURCE_NAMES = {"lever": "Lever", "greenhouse": "Greenhouse", "ashby": "Ashby", "muse": "The Muse", "adzuna": "Adzuna", "jobspipe": "JobsPipe",
                 "smartrecruiters": "SmartRecruiters", "jsearch": "JSearch", "workday": "Workday", "oracle": "Oracle", "workable": "Workable"}
-SEARCH_PLATFORMS = ("muse", "jsearch", "adzuna")
+SEARCH_PLATFORMS = ("muse", "jsearch", "adzuna", "jobspipe")
 
 
 def evaluate_raws(raws, criteria, gates, matcher, company: Company | None = None) -> list[Evaluation]:
@@ -383,6 +383,58 @@ def run_adzuna(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> li
     store.spend("adzuna", spent, ts)
     store.commit()
     log.info("Adzuna: %d searches, %d postings", spent, len(evals))
+    return evals
+
+
+def run_jobspipe(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> list[Evaluation] | None:
+    """One-time JobsPipe sweep (its free 1,000 credits never renew): each search pages until its
+    share is spent; every employer board named in a result's link is watched from then on."""
+    from .resolve.discover import board_from_url
+    from .sources.jobspipe import JobsPipeSource, search as jobspipe_search
+    if not cfg.get("enabled") or not os.environ.get("JOBSPIPE_API_KEY"):
+        return None
+    used = store.conn.execute("SELECT COALESCE(SUM(used), 0) FROM search_usage WHERE source='jobspipe'").fetchone()[0]
+    left = int(cfg.get("total_credits", 950)) - int(used)
+    if left < 25:
+        return None
+    base = dict(cfg.get("filters") or {})
+    src, evals, spent, sess = JobsPipeSource(), [], 0, requests.Session()
+    for q in cfg.get("searches") or []:
+        name = q["name"]
+        row = store.conn.execute("SELECT last_count FROM search_pairs WHERE source='jobspipe' AND pair=?",
+                                 (name,)).fetchone()
+        done = int(row["last_count"]) if row else 0
+        want = int(q.get("pages", 1)) * 25 - done
+        cursor = None
+        while want >= 25 and left >= 25:
+            body = {**base, **{k: v for k, v in q.items() if k not in ("name", "pages")}, "limit": 25}
+            if cursor:
+                body["cursor"] = cursor
+            try:
+                payload = jobspipe_search(body, sess)
+            except SourceError as exc:
+                log.error("JobsPipe: %s", exc)
+                store.board_error("JobsPipe (search)", "jobspipe", str(exc), ts)
+                left = 0
+                break
+            got = len(payload.get("data") or [])
+            spent += got
+            left -= got
+            want -= 25
+            done += got
+            raws = src.parse(payload)
+            for raw in raws:                      # the employer's own board, watched for free from now on
+                b = board_from_url(raw.raw.get("source_url") or "") or board_from_url(raw.url)
+                if b and raw.company:
+                    store.add_discovered(raw.company, b[0], b[1], "JobsPipe", raw.title, ts)
+            evals += evaluate_raws(raws, criteria, gates, matcher)
+            cursor = (payload.get("metadata") or {}).get("next_cursor")
+            if not cursor or got < 25:
+                want = 0                          # this search has no more results
+        store.mark_pair("jobspipe", name, max(done, int(q.get("pages", 1)) * 25) if not cursor else done, ts)
+    store.spend("jobspipe", spent, ts)
+    store.commit()
+    log.info("JobsPipe: %d jobs (credits) this run, %d left of the free grant", spent, max(left, 0))
     return evals
 
 
@@ -719,7 +771,7 @@ def main(argv: list[str] | None = None) -> int:
     t0 = time.time()
 
     # 1–2. search sources + discovery (full runs only)
-    muse_evals, muse_complete, jsearch_evals, adzuna_evals = (None, False, None, None)
+    muse_evals, muse_complete, jsearch_evals, adzuna_evals, jobspipe_evals = (None, False, None, None, None)
     if store is not None and not single:
         cfg = load_sources_config()
         muse_evals, muse_complete = run_muse(store, cfg.get("muse") or {}, criteria, gates, matcher, ts)
@@ -729,10 +781,14 @@ def main(argv: list[str] | None = None) -> int:
             adzuna_evals = run_adzuna(store, cfg.get("adzuna") or {}, criteria, gates, matcher, ts)
         except Exception as exc:  # a new source never stops the run
             log.error("Adzuna error: %s", exc)
+        try:
+            jobspipe_evals = run_jobspipe(store, cfg.get("jobspipe") or {}, criteria, gates, matcher, ts)
+        except Exception as exc:  # a new source never stops the run
+            log.error("JobsPipe error: %s", exc)
         known = {normalize(c.name) for c in companies} | {normalize(r["company"]) for r in store.discovered_boards()}
-        if muse_evals or jsearch_evals or adzuna_evals:
+        if muse_evals or jsearch_evals or adzuna_evals or jobspipe_evals:
             try:
-                discover(store, (muse_evals or []) + (jsearch_evals or []) + (adzuna_evals or []),
+                discover(store, (muse_evals or []) + (jsearch_evals or []) + (adzuna_evals or []) + (jobspipe_evals or []),
                          cfg.get("discovery") or {}, known, ts)
             except Exception as exc:  # discovery problems never stop the run
                 log.error("discovery error: %s", exc)
@@ -856,6 +912,12 @@ def main(argv: list[str] | None = None) -> int:
                               board_companies=board_companies)
         add_stats(stats, "Adzuna", c)
         log.info("Adzuna: %d postings stored, %d passed", c["seen"], c["passed"])
+    if jobspipe_evals is not None:                # one-time sweep: stored, never closed for being "unseen"
+        c = store_evaluations(store, Company(name="JobsPipe", platform="jobspipe", slug="search"), jobspipe_evals, ts,
+                              criteria, prefix="jobspipe:__none__", board_keys=board_keys,
+                              board_companies=board_companies)
+        add_stats(stats, "JobsPipe", c)
+        log.info("JobsPipe: %d postings stored, %d passed", c["seen"], c["passed"])
     if store is not None and not single:
         js = (load_sources_config().get("jsearch") or {})
         store.close_stale("jsearch:", int(js.get("close_after_days_unseen", 7)), ts)

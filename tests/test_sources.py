@@ -183,3 +183,35 @@ def test_muse_without_a_key_is_skipped_quietly(criteria, monkeypatch):
     monkeypatch.delenv("MUSE_API_KEY", raising=False)
     assert run.run_muse(Store(":memory:"), {"enabled": True, "needs_key": True}, criteria, None, None,
                         "2026-11-09T10:00:00+00:00") == (None, False)
+
+
+def test_jobspipe_one_time_sweep_spends_its_cap_and_finds_boards(criteria, monkeypatch):
+    """Nov 9: JobsPipe's free 1,000 credits never renew - spend a capped amount once, and watch
+    every employer board named in a result's link from then on."""
+    import src.run as run
+    import src.sources.jobspipe as jp
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.store.db import Store
+    calls = []
+
+    def fake(body, session=None):
+        calls.append(body)
+        n = len(calls)
+        return {"metadata": {"next_cursor": f"c{n}"}, "data": [
+            {"id": f"{n}-{i}", "job_title": "Business Operations Associate", "company": f"Co{n}{i}",
+             "location": "New York, NY", "country_code": "US", "date_posted": "2026-11-01",
+             "source_url": f"https://jobs.ashbyhq.com/co{n}{i}/abc", "description": "Own ops projects."}
+            for i in range(25)]}
+    monkeypatch.setenv("JOBSPIPE_API_KEY", "x")
+    monkeypatch.setattr(jp, "search", fake)
+    store = Store(":memory:")
+    cfg = {"enabled": True, "total_credits": 75, "filters": {"posted_at_max_age_days": 45},
+           "searches": [{"name": "nyc", "pages": 2, "job_title_or": ["bizops"]},
+                        {"name": "sf", "pages": 2, "job_title_or": ["bizops"]}]}
+    args = (criteria, Gates(criteria), LocationMatcher(criteria))
+    evs = run.run_jobspipe(store, cfg, *args, "2026-11-09T10:00:00+00:00")
+    assert len(calls) == 3 and len(evs) == 75                       # capped at 75 credits
+    assert calls[1]["cursor"] == "c1" and calls[0]["posted_at_max_age_days"] == 45
+    assert {r["company"] for r in store.discovered_boards()} >= {"Co10", "Co324"}
+    assert run.run_jobspipe(store, cfg, *args, "2026-11-10T10:00:00+00:00") is None   # grant used: never again
