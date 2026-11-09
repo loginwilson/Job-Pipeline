@@ -431,3 +431,18 @@ def test_unscored_jobs_stay_on_top_and_old_tab_names_are_renamed(criteria, board
     old.ensure_tabs(["Jobs", "My picks"])
     old.rename_tabs({"Jobs": "To review", "My picks": "Apply"})
     assert "To review" in old.tabs and "Jobs" not in old.tabs
+
+
+def test_a_shorter_apply_list_leaves_no_stale_row(criteria, board, evals):
+    """Nov 9: Apply lost a row and the old last row (FSH) showed through the blank separator."""
+    store, sheet = Store(":memory:"), FakeBackend()
+    run(store, sheet, board, evals, criteria, T1)
+    a, b = [r[ID_COL] for r in tab(sheet, REVIEW)][:2]
+    put(sheet, REVIEW, a, "Interest", "4")
+    put(sheet, REVIEW, b, "Interest", "3")
+    run(store, sheet, board, evals, criteria, T2)
+    put(sheet, REVIEW, b, "Interest", "Pass")
+    run(store, sheet, board, evals, criteria, T2)
+    raw = sheet.read([PICKS])[PICKS]
+    assert [r[ID_COL] for r in tab(sheet, PICKS)] == [a]
+    assert not any(raw[2]) and raw[3][0].startswith("Just scored")

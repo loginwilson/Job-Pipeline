@@ -439,7 +439,8 @@ def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Cr
         c["Interest"] = (f"=IFERROR(INDEX('{JOBS}'!A:A, MATCH({aid}{n}, '{JOBS}'!{rid}:{rid}, 0)), "
                          f"\"{c.get('Interest', '')}\")")
         agrid.append([c.get(h, "") for h in APPLY_HEADERS])
-    agrid += [[], [_JUST_SCORED] + [""] * (len(APPLY_HEADERS) - 1), [_live_picks(len(picks) + 1)]]
+    blank = [""] * len(APPLY_HEADERS)      # a full blank row, so a longer old list never shows through
+    agrid += [blank, [_JUST_SCORED] + blank[1:], [_live_picks(len(picks) + 1)] + blank[1:]]
     requests += _grid_tab(meta[PICKS], APPLY_HEADERS, agrid, len(existing.get(PICKS) or []), room=300,
                           filter_rows=len(picks) + 1)
     passed = sum(1 for r in tab_rows if (r["cells"].get("Interest") or "") == "Pass")
@@ -911,7 +912,9 @@ class FakeBackend:
                 for i, row in enumerate(body["rows"]):
                     while len(tab["grid"]) <= r0 + i:
                         tab["grid"].append([])
-                    tab["grid"][r0 + i] = [c.get("userEnteredValue", {}) for c in row["values"]]
+                    new = [c.get("userEnteredValue", {}) for c in row["values"]]
+                    old = tab["grid"][r0 + i]           # like Sheets: only the cells sent change
+                    tab["grid"][r0 + i] = new + old[len(new):]
                 if len(tab["grid"]) > tab["rows"]:
                     raise ValueError("updateCells exceeds grid limits")
             elif kind == "updateSheetProperties":
