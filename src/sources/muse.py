@@ -11,6 +11,7 @@ every city. Results can't be sorted by date, so a sweep reads every page.
 """
 from __future__ import annotations
 
+import os
 import time
 import urllib.parse
 from datetime import datetime, timedelta, timezone
@@ -56,6 +57,9 @@ class MuseSource(Source):
     def page_url(self, page: int, locations: list[str]) -> str:
         params = [("page", page)] + [("level", lv) for lv in self.settings.get("levels", ["Entry Level"])]
         params += [("location", loc) for loc in locations]
+        key = os.environ.get("MUSE_API_KEY")       # your registered key (free): identified, not anonymous
+        if key:
+            params.append(("api_key", key))
         return API + "?" + urllib.parse.urlencode(params)
 
     def get_page(self, page: int, locations: list[str], session: requests.Session) -> dict:

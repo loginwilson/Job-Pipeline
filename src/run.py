@@ -290,6 +290,8 @@ def load_sources_config() -> dict:
 
 def run_muse(store: Store, cfg: dict, criteria, gates, matcher, ts: str, payload=None):
     """Daily Muse sweep. Returns (evals, complete) or (None, False) when not due."""
+    if payload is None and cfg.get("needs_key") and not os.environ.get("MUSE_API_KEY"):
+        return None                     # anonymous requests are blocked since Nov 8: only with your key
     if not cfg.get("enabled") or (payload is None and not store.source_due("muse", cfg.get("every_hours", 20), ts)):
         return None, False
     src = MuseSource(cfg)
