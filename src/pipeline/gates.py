@@ -154,13 +154,17 @@ class Gates:
                     return
                 ev.fail("field", f"{group.replace('_', ' ')} ('{hit[0].term}'): {title}")
                 return
-        if title_domain:
-            return                                   # the title itself names hospitality / real estate
+        kept = next((f for f, terms in (ff.get("families") or {}).items()
+                     if find_terms(title, terms, first_only=True)), None)
+        corporate = find_terms(title, (ff.get("core_company_generic_titles") or []) +
+                               (ff.get("domain_role_terms") or []), first_only=True)
+        if title_domain and (kept or corporate):
+            return          # "Hotel Asset Management Analyst": your field AND an office role
+        # Nov 9: a hotel / real-estate word alone ("Laundry Attendant - Loews Hotels",
+        # "Real Estate Agent") is not enough - the role itself still has to be one of yours
         if company and find_terms(title, ff.get("core_company_generic_titles") or [], first_only=True) \
                 and not any(find_terms(title, t, first_only=True) for t in (ff.get("families_off") or {}).values()):
             return                                   # a general role (Analyst, Associate...) at such a company
-        kept = next((f for f, terms in (ff.get("families") or {}).items()
-                     if find_terms(title, terms, first_only=True)), None)
         if kept:
             return
         data = find_terms(title, ff.get("data_title_terms") or [], first_only=True)

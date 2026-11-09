@@ -280,13 +280,24 @@ field_fit:
   core_company_allows: [corporate_finance, banking_markets]
   # at a hospitality / real-estate company, these general titles count too (sales / marketing
   # titles there still drop: you want business operations, Nov 8)
+  # roles that make a hotel / real-estate title an office job in your field (with "Hotel", "Real Estate"...)
+  domain_role_terms: [strategy, strategist, operations, development, acquisitions, acquisition, asset management, asset manager,
+                      revenue management, revenue manager, investment, investments, underwriting analyst, finance, financial analyst,
+                      portfolio, capital markets, transactions, transaction, planning, feasibility, research, consulting, consultant,
+                      advisory, valuation, proptech, technology, data, business, corporate, project manager, development manager]
   core_company_generic_titles: [analyst, associate, coordinator, generalist, specialist, fellow, fellowship, program, rotational, chief of staff, implementation, trainee]
   # "Your edge" flag (listed first): one of the above plus AI in the title or opening description
   ai_terms: [AI, A.I., artificial intelligence, machine learning, LLM, LLMs, agentic, AI agents, AI agent, generative AI, GenAI, conversational AI, AI-native, AI-powered]
   unrelated_title_terms:  # drop, even when a kept-family word is also in the title
     banking_markets: [investment banking, banker, banking, financing solutions, structured finance, structured financing, securitization, securitized, origination, syndicate, syndication, leveraged finance, debt capital markets, equity capital markets, DCM, ECM, M&A, mergers and acquisitions, trader, trading, quant, quantitative, capital markets, derivatives, securities, clearing, settlement, fixed income, equities, equity research, wealth, private bank, private client, brokerage, prime brokerage, fund accounting, portfolio manager, treasury, lending, loan, credit analyst, structured products, investment services, investment operations, fund services]
     legal_compliance: [legal, counsel, paralegal, compliance, regulatory, AML, KYC, audit, auditor, risk, fraud, investigator, sanctions, privacy]
-    sales_reps: [development representative, sales representative, business development rep, sales development rep, account executive, BDR, SDR]   # Nov 9: "Strategic Business Development Representative" (Algolia)
+    front_line: [attendant, laundry, lifeguard, housekeeper, housekeeping, room attendant, bell person, bellperson, bellman, valet,
+                 doorman, concierge, front office, front desk, guest service, guest services, guest experience, guest relations,
+                 busperson, busser, server, barista, bartender, cook, chef, dishwasher, steward, porter, host, hostess, cashier,
+                 receptionist, administrative specialist, administrative assistant, leasing, transaction coordinator,
+                 buyer specialist, showing agent, maintenance, groundskeeper, janitor, custodian, banquet, spa therapist,
+                 massage, esthetician, retail associate, sales associate, reservations, night auditor]   # Nov 9: Loews / Stream Realty
+    sales_reps: [real estate agent, realtor, buyer's agent, buyer agent, listing agent, leasing agent, real estate salesperson, licensed agent, development representative, sales representative, business development rep, sales development rep, account executive, BDR, SDR]   # Nov 9: "Strategic Business Development Representative" (Algolia)
     accounting_insurance: [accounting, accountant, tax, controller, controllership, bookkeeper, payroll, accounts payable, accounts receivable, underwriter, underwriting, claims, actuarial, actuary, insurance, reinsurance, broker]
     hr_people: [talent, recruiter, recruiting, talent acquisition, sourcer, human resources, HR, people partner, people operations, compensation, benefits, HRIS, talent operations]
     corporate_finance: [financial analyst, FP&A, finance analyst, finance associate, financial planning, strategic finance, corporate finance, finance & strategy, finance and strategy]

@@ -33,7 +33,8 @@ def passed(evals):
 
 def test_boards_produce_options(evals):
     # tech-company boards: only a handful of ops / strategy roles (0–1 years) pass
-    assert len(evals) > 700 and len(passed(evals)) >= 5
+    # >= 4 since Nov 9: a "Housing" title alone no longer passes (EliseAI's Growth PM is product work)
+    assert len(evals) > 700 and len(passed(evals)) >= 4
     titles = {e.posting.title for e in passed(evals)}
     # roles in your fields survive the field filter (EliseAI is a housing company)
     assert {"Deployment Strategist", "Revenue Operations Associate"} <= titles, titles

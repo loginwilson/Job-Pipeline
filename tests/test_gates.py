@@ -581,3 +581,23 @@ def test_nov9_audit_misses_are_caught(criteria, full_criteria):
     ev = Gates(full_criteria).evaluate(_p(full_criteria, "Strategic Business Development Representative",
                                           ["Own outbound pipeline generation for our AI search platform."]))
     assert "field" in {f.gate for f in ev.failures}
+
+
+def test_a_hotel_or_real_estate_word_alone_is_not_your_field(full_criteria):
+    """Nov 9: 'Laundry Attendant - Loews Hotels', 'Lifeguard', 'Real Estate Agent' passed because the
+    title named hotels / real estate. The role itself must be one of yours."""
+    from src.pipeline.gates import Gates
+    g = Gates(full_criteria)
+    d = ["Loews Hotels is a hospitality company with hotels and resorts across the United States and a proud team.",
+         "You will support guests and colleagues every day and deliver great service to everyone who visits us."]
+    field = lambda t: "field" in {f.gate for f in g.evaluate(
+        _p(full_criteria, t, d, pay="The salary range is $120,000 - $140,000.")).failures}
+    for bad in ("Laundry Attendant - Loews Hotels Laundry, Apopka, FL", "Lifeguard - Loews Royal Pacific Resort",
+                "Bell Person - Loews Hotels", "Front Office Agent - Loews Chicago Hotel", "Real Estate Agent",
+                "Property Administrative Specialist", "Leasing and Hospitality Associate",
+                "Commercial Real Estate Transaction Coordinator", "Real Estate Buyer Specialist"):
+        assert field(bad), bad
+    for good in ("Hotel Asset Management Analyst", "Real Estate Acquisitions Associate", "Hospitality Strategy Associate",
+                 "Revenue Management Analyst - Hotels", "Business Operations Associate", "Deployment Strategist",
+                 "Growth Strategy Analyst, Future Platforms | Housing", "Strategic Partnerships Associate"):
+        assert not field(good), good
