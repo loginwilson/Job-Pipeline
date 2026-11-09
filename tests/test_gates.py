@@ -596,3 +596,25 @@ def test_a_hotel_or_real_estate_word_alone_is_not_your_field(full_criteria):
                  "Revenue Management Analyst - Hotels", "Business Operations Associate", "Deployment Strategist",
                  "Growth Strategy Analyst, Future Platforms | Housing", "Strategic Partnerships Associate"):
         assert not field(good), good
+
+
+def test_one_year_max(evaluate):
+    """Nov 9: 1 year MAX. 1.5+ (Algolia, Infisical) and 2+ drop; a range starting at 0-1 passes."""
+    from conftest import PAY_OK
+    yrs = lambda line: {f.gate for f in evaluate(lines=["## Requirements", "- " + line, PAY_OK]).failures}
+    assert "experience" in yrs("1.5+ years of experience in outbound prospecting")
+    assert "experience" in yrs("2+ years of experience in operations")
+    assert "experience" not in yrs("0-2 years of experience; recent graduates encouraged")
+    assert "experience" not in yrs("1+ years of experience in a fast-paced environment")
+    assert "experience" not in yrs("1-2 years of experience in consulting or operations")
+
+
+def test_ai_builder_titles_get_no_coding_exemption(evaluate):
+    """Nov 9: GTM / automation engineers asking for Python passed. They face the coding check now."""
+    from conftest import PAY_OK
+    ev = evaluate(title="GTM Engineer", lines=["## Who you are",
+                  "- Technically fluent in Python or JavaScript, comfortable building automated pipelines", PAY_OK])
+    assert "technical" in {f.gate for f in ev.failures}
+    ok = evaluate(title="GTM Engineer", lines=["## Who you are",
+                  "- You build workflows with Clay, Zapier and AI tools; SQL is a plus", PAY_OK])
+    assert "technical" not in {f.gate for f in ok.failures}

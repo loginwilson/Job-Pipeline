@@ -86,8 +86,9 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
     quant = cred.get("quantitative_field_terms", []) or []
     mine = {str(x).lower() for x in criteria.get("candidate", "languages", default=["English"]) or []}
     others = [x for x in criteria.get("other_languages", default=[]) or [] if str(x).lower() not in mine]
-    builder = is_ai_builder(p.title, criteria)
-    ok_phrases = set(t.lower() for t in (tech.get("ai_builder_ok_phrases") or [])) if builder else set()
+    # Nov 9: AI-builder titles get NO exemption any more - a required programming language or
+    # "write code" drops them like any other job (GTM / automation engineers asking for Python)
+    ok_phrases: set[str] = set()
     for line in required_lines(p, criteria):
         lang_hit = find_terms(line, others, first_only=True)
         if lang_hit and _FLUENCY.search(line) and not find_terms(_ADVANCED_PREFERRED.sub(" ", line), soft, first_only=True):
@@ -97,7 +98,7 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
         core = _ADVANCED_PREFERRED.sub(" ", line)
         softened = bool(find_terms(core, soft, first_only=True))
         # 7. technical
-        lang = None if builder else _case_sensitive(line, req.get("languages", []) or [])
+        lang = _case_sensitive(line, req.get("languages", []) or [])
         phrase = [h for h in find_terms(line, req.get("phrases", []) or []) if h.term.lower() not in ok_phrases][:1]
         if (lang or phrase) and not softened and not find_terms(line, ok_alt, first_only=True):
             hits.append(Hit("technical", line, f"requires {lang or phrase[0].term}"))

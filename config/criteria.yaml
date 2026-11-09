@@ -91,7 +91,8 @@ salary:
 # 4 ── EXPERIENCE ──────────────────────────────────────────────
 # Lower bound of a range counts ("2–4 years" → 2). Required OR preferred.
 experience:
-  drop_at_or_above: 2   # 0–1 years only (your choice, Nov 8): a required 2+ years drops
+  max_years: 1          # 1 year MAX (your rule, Nov 9): any ask over 1 year drops (1.5+, 2+, "3-6 years");
+                        # a range that starts at 1 or less ("0-2", "1-2 years") still passes
   # Nov 9: a posted salary midpoint above this, with no entry-level wording (new grad, 0-1 years,
   # "Associate"/"Analyst" titles...), means an experienced hire even when no years are stated
   senior_pay_midpoint: 200000

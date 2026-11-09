@@ -296,8 +296,8 @@ class Gates:
 
     # 4. experience ----------------------------------------------------------
     def experience(self, p: Posting, ev: Evaluation) -> None:
-        cap = self.c.get("experience", "drop_at_or_above")
-        asks = [a for a in p.experience.asks if cap is not None and a.years >= cap]
+        most = self.c.get("experience", "max_years")          # Nov 9: 1 year max - anything over drops
+        asks = [a for a in p.experience.asks if most is not None and a.years > most]
         if asks:
             top = max(asks, key=lambda a: a.years)
             ev.fail("experience", f"{top.years:g}+ yrs {top.kind}: {top.line}")

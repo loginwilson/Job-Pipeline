@@ -53,12 +53,12 @@ def test_every_drop_explains_itself(evals):
 
 def test_passed_meet_employment_location_experience(evals, criteria):
     allow = set(criteria.get("employment_type", "allow")) | {"unknown"}
-    cap = criteria.get("experience", "drop_at_or_above")
+    most = criteria.get("experience", "max_years")
     for e in passed(evals):
         p = e.posting
         assert p.employment_type in allow, p.title
         assert p.location.offices and not p.location.fully_remote, p.title
-        assert all(a.years < cap for a in p.experience.asks), p.title
+        assert all(a.years <= most for a in p.experience.asks), p.title
 
 
 def test_passed_meet_salary_floor(evals, criteria):
