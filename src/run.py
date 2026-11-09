@@ -136,9 +136,9 @@ def _fetch_with_details(src, company, criteria, gates, matcher, store, ts, cache
     return raws
 
 
-SOURCE_NAMES = {"lever": "Lever", "greenhouse": "Greenhouse", "ashby": "Ashby", "muse": "The Muse", "adzuna": "Adzuna", "jobspipe": "JobsPipe",
+SOURCE_NAMES = {"lever": "Lever", "greenhouse": "Greenhouse", "ashby": "Ashby", "muse": "The Muse", "adzuna": "Adzuna", "jobspipe": "JobsPipe", "serpapi": "Google Jobs (SerpApi)",
                 "smartrecruiters": "SmartRecruiters", "jsearch": "JSearch", "workday": "Workday", "oracle": "Oracle", "workable": "Workable"}
-SEARCH_PLATFORMS = ("muse", "jsearch", "adzuna", "jobspipe")
+SEARCH_PLATFORMS = ("muse", "jsearch", "adzuna", "jobspipe", "serpapi")
 
 
 def evaluate_raws(raws, criteria, gates, matcher, company: Company | None = None) -> list[Evaluation]:
@@ -435,6 +435,41 @@ def run_jobspipe(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> 
     store.spend("jobspipe", spent, ts)
     store.commit()
     log.info("JobsPipe: %d jobs (credits) this run, %d left of the free grant", spent, max(left, 0))
+    return evals
+
+
+def run_serpapi(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> list[Evaluation] | None:
+    """SerpApi Google Jobs: a second free Google Jobs quota. Focus searches first, then rotation."""
+    from .sources.serpapi import SerpApiSource, search as serp_search
+    if not cfg.get("enabled") or not os.environ.get("SERPAPI_API_KEY"):
+        return None
+    budget = store.budget_left("serpapi", int(cfg.get("requests_per_day", 0)), ts)
+    if budget <= 0:
+        return None
+    pairs = {f"{kw} in {c}": (kw, c) for kw in cfg.get("keywords", []) for c in cfg.get("cities", [])}
+    focus = {f"{f['keywords']} in {f['city']}": (f["keywords"], f["city"]) for f in cfg.get("focus") or []}
+    pairs.update(focus)
+    done_today = {r["pair"] for r in store.conn.execute(
+        "SELECT pair FROM search_pairs WHERE source='serpapi' AND substr(last_searched, 1, 10)=?", (ts[:10],))}
+    plan = [(p, False) for p in focus if p not in done_today][:budget]
+    plan += store.next_pairs("serpapi", [p for p in pairs if p not in focus and p not in done_today],
+                             budget - len(plan))
+    src, evals, spent, sess = SerpApiSource(), [], 0, requests.Session()
+    for pair, first in plan:
+        q, where = pairs[pair]
+        try:
+            payload = serp_search(q, where, "date_posted:month" if first else "date_posted:3days", sess)
+        except SourceError as exc:
+            log.error("SerpApi: %s", exc)
+            store.board_error("Google Jobs (SerpApi)", "serpapi", str(exc), ts)
+            break
+        spent += 1
+        raws = src.parse(payload)
+        store.mark_pair("serpapi", pair, len(raws), ts)
+        evals += evaluate_raws(raws, criteria, gates, matcher)
+    store.spend("serpapi", spent, ts)
+    store.commit()
+    log.info("SerpApi: %d searches, %d postings", spent, len(evals))
     return evals
 
 
@@ -782,6 +817,11 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:  # a new source never stops the run
             log.error("Adzuna error: %s", exc)
         try:
+            serp_evals = run_serpapi(store, cfg.get("serpapi") or {}, criteria, gates, matcher, ts)
+            jsearch_evals = (jsearch_evals or []) + serp_evals if serp_evals else jsearch_evals
+        except Exception as exc:  # a new source never stops the run
+            log.error("SerpApi error: %s", exc)
+        try:
             jobspipe_evals = run_jobspipe(store, cfg.get("jobspipe") or {}, criteria, gates, matcher, ts)
         except Exception as exc:  # a new source never stops the run
             log.error("JobsPipe error: %s", exc)
@@ -921,6 +961,7 @@ def main(argv: list[str] | None = None) -> int:
     if store is not None and not single:
         js = (load_sources_config().get("jsearch") or {})
         store.close_stale("jsearch:", int(js.get("close_after_days_unseen", 7)), ts)
+        store.close_stale("serpapi:", int(js.get("close_after_days_unseen", 7)), ts)
         store.close_stale("adzuna:", int((load_sources_config().get("adzuna") or {}).get("close_after_days_unseen", 7)), ts)
     if store is None:
         return 0

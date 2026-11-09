@@ -15,6 +15,19 @@ discovery:                  # companies found by search → their own job board 
   max_new_companies_per_run: 40
   retry_unfound_after_days: 30
 
+serpapi:                    # SerpApi Google Jobs (free monthly allowance; key: SERPAPI_API_KEY)
+  enabled: true
+  requests_per_day: 5       # ~150 a month; raise to match your plan's monthly allowance / 30
+  focus:
+    - {keywords: "business operations OR strategy and operations OR bizops", city: "New York, New York, United States"}
+    - {keywords: "deployment strategist OR implementation specialist OR AI operations", city: "New York, New York, United States"}
+    - {keywords: "real estate OR proptech OR hospitality OR hotel associate", city: "New York, New York, United States"}
+  keywords:
+    - business operations OR strategy associate
+    - real estate OR hospitality associate
+  cities: ["San Francisco, California, United States", "Chicago, Illinois, United States", "Miami, Florida, United States",
+           "Los Angeles, California, United States", "Austin, Texas, United States"]
+
 jobspipe:                   # JobsPipe ONE-TIME sweep (free 1,000 credits, never renew; key: JOBSPIPE_API_KEY)
   enabled: true
   total_credits: 950        # stops here; 1 credit = 1 job, 25 per page on the free plan

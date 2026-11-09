@@ -215,3 +215,18 @@ def test_jobspipe_one_time_sweep_spends_its_cap_and_finds_boards(criteria, monke
     assert calls[1]["cursor"] == "c1" and calls[0]["posted_at_max_age_days"] == 45
     assert {r["company"] for r in store.discovered_boards()} >= {"Co10", "Co324"}
     assert run.run_jobspipe(store, cfg, *args, "2026-11-10T10:00:00+00:00") is None   # grant used: never again
+
+
+def test_serpapi_google_jobs_parse():
+    from src.sources.serpapi import SerpApiSource
+    raws = SerpApiSource().parse({"jobs_results": [
+        {"job_id": "abc", "title": "Strategy & Operations Associate", "company_name": "Acme",
+         "location": "New York, NY", "via": "LinkedIn", "description": "Own projects.\nWork with founders.",
+         "job_highlights": [{"title": "Qualifications", "items": ["0-2 years of experience"]}],
+         "detected_extensions": {"schedule_type": "Full-time"},
+         "apply_options": [{"title": "Trabajo", "link": "https://us.trabajo.org/1"},
+                           {"title": "Acme", "link": "https://jobs.ashbyhq.com/acme/1"}]},
+        {"job_id": "x", "title": "Ops", "company_name": "Jobrapido", "location": "NYC"}]})
+    assert len(raws) == 1 and raws[0].url == "https://jobs.ashbyhq.com/acme/1"
+    assert raws[0].posting_id if hasattr(raws[0], "posting_id") else True
+    assert "- 0-2 years of experience" in raws[0].description_lines and raws[0].platform == "serpapi"

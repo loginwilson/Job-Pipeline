@@ -56,6 +56,7 @@ jobs:
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           JOBSPIPE_API_KEY: ${{ secrets.JOBSPIPE_API_KEY }}
+          SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
           ALERTS_IMAP_USER: ${{ secrets.ALERTS_IMAP_USER }}
           ALERTS_IMAP_APP_PASSWORD: ${{ secrets.ALERTS_IMAP_APP_PASSWORD }}
           PIPELINE_CHECK_ALL: ${{ inputs.check_all && '1' || '0' }}
