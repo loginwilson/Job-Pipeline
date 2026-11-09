@@ -222,3 +222,16 @@ def test_focus_searches_run_daily_before_the_rotation(criteria, monkeypatch):
     asked.clear()
     run.run_jsearch(store, cfg, criteria, None, None, "2026-11-10T10:00:00+00:00")   # next day: focus again
     assert asked[:2] == ["bizops in New York, NY", "proptech in New York, NY"]
+
+
+def test_search_budget_paced_through_the_day():
+    """Nov 9: overnight runs spent the whole day's searches by 8:00 UTC; paced, they open up hourly."""
+    from src.store.db import Store
+    s = Store(":memory:")
+    assert s.budget_left("adzuna", 24, "2026-11-09T00:30:00+00:00", paced=True) == 1
+    assert s.budget_left("adzuna", 24, "2026-11-09T11:30:00+00:00", paced=True) == 12
+    s.spend("adzuna", 12, "2026-11-09T11:30:00+00:00")
+    assert s.budget_left("adzuna", 24, "2026-11-09T11:45:00+00:00", paced=True) == 0
+    assert s.budget_left("adzuna", 24, "2026-11-09T23:10:00+00:00", paced=True) == 12
+    assert s.budget_left("jsearch", 5, "2026-11-09T00:10:00+00:00", paced=True) == 1
+    assert s.budget_left("adzuna", 24, "2026-11-09T00:30:00+00:00") == 24      # unpaced: all at once

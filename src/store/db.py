@@ -340,9 +340,20 @@ class Store:
     def mark_pair(self, source: str, pair: str, count: int, ts: str) -> None:
         self.conn.execute("INSERT OR REPLACE INTO search_pairs VALUES (?,?,?,?)", (source, pair, ts, count))
 
-    def budget_left(self, source: str, per_day: int, ts: str) -> int:
+    def budget_left(self, source: str, per_day: int, ts: str, paced: bool = False) -> int:
+        """Searches still allowed now. Paced (Nov 9): the day's budget opens up evenly over the
+        UTC day, so searches run all day and catch new postings instead of all firing in the
+        first run after midnight (overnight runs had spent everything by 8:00 UTC)."""
         r = self.conn.execute("SELECT used FROM search_usage WHERE source=? AND day=?", (source, ts[:10])).fetchone()
-        return max(0, per_day - (r["used"] if r else 0))
+        used = r["used"] if r else 0
+        allowed = per_day
+        if paced and per_day > 0:
+            try:
+                hour = int(ts[11:13])
+            except ValueError:
+                hour = 23
+            allowed = min(per_day, -(-per_day * (hour + 1) // 24))     # ceil(per_day * (hour+1) / 24)
+        return max(0, allowed - used)
 
     def spend(self, source: str, n: int, ts: str) -> None:
         self.conn.execute("INSERT INTO search_usage VALUES (?,?,?) ON CONFLICT(source, day) DO UPDATE SET "

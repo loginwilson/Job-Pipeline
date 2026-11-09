@@ -316,7 +316,8 @@ def run_jsearch(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> l
     if not os.environ.get("JSEARCH_API_KEY"):
         log.info("JSearch: skipped (no JSEARCH_API_KEY)")
         return None
-    budget = store.budget_left("jsearch", int(cfg.get("requests_per_day", 0)), ts)
+    budget = store.budget_left("jsearch", int(cfg.get("requests_per_day", 0)), ts,
+                               paced=bool(cfg.get("pace_through_day")))
     if budget <= 0:
         return None
     pairs = {f"{kw} in {c['query']}": c for kw in cfg.get("keywords", []) for c in cfg.get("cities", [])}
@@ -355,7 +356,8 @@ def run_adzuna(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> li
     from .sources.adzuna import AdzunaSource, search as adzuna_search
     if not cfg.get("enabled") or not (os.environ.get("ADZUNA_APP_ID") and os.environ.get("ADZUNA_APP_KEY")):
         return None
-    budget = store.budget_left("adzuna", int(cfg.get("requests_per_day", 0)), ts)
+    budget = store.budget_left("adzuna", int(cfg.get("requests_per_day", 0)), ts,
+                               paced=bool(cfg.get("pace_through_day")))
     if budget <= 0:
         return None
     pairs = {f"{kw} in {c}": (kw, c) for kw in cfg.get("keywords", []) for c in cfg.get("cities", [])}
@@ -443,7 +445,8 @@ def run_serpapi(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> l
     from .sources.serpapi import SerpApiSource, search as serp_search
     if not cfg.get("enabled") or not os.environ.get("SERPAPI_API_KEY"):
         return None
-    budget = store.budget_left("serpapi", int(cfg.get("requests_per_day", 0)), ts)
+    budget = store.budget_left("serpapi", int(cfg.get("requests_per_day", 0)), ts,
+                               paced=bool(cfg.get("pace_through_day")))
     if budget <= 0:
         return None
     pairs = {f"{kw} in {c}": (kw, c) for kw in cfg.get("keywords", []) for c in cfg.get("cities", [])}
