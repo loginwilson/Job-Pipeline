@@ -167,3 +167,11 @@ def test_reposted_job_keeps_your_score():
     assert s.is_merged("ashby:jerry.ai:old") and not s.is_merged("ashby:jerry.ai:new")
     assert s.conn.execute("SELECT 1 FROM owner_state WHERE posting_id='ashby:jerry.ai:other'").fetchone() is None
     assert s.carry_reposts(TS) == 0                       # nothing left to move
+
+
+def test_analytically_strong_comfortable_with_sql_is_familiarity(full_criteria):
+    line = ("First principles thinker: You break ambiguous problems into clear hypotheses before touching data. "
+            "You're analytically strong (comfortable with SQL or Python) but your instinct is to ask what we're solving.")
+    ev = _ev(full_criteria, "Associate, Business Operations & Analytics", BODY[:4] + [line, BODY[5], PAY])
+    assert ev.passed, ev.failures
+    # "Proficiency in Python" still drops: tests/test_gates.py::test_technical

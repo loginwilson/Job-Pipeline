@@ -28,6 +28,12 @@ class Hit:
     reason: str
 
 
+_NOT_ABOUT_TOOLS = re.compile(
+    r"\b\w+ly (?:strong|solid|advanced)\b|\b(?:strong|solid|deep|advanced|excellent) (?:analytical|analytic|"
+    r"communication|communicator|written|verbal|problem[- ]solving|business|commercial|interpersonal|"
+    r"organizational|quantitative reasoning|critical thinking|judgment|attention)\b", re.I)
+
+
 _BUSINESS_AS_WORK = re.compile(
     r"\bbusiness (?:operations|ops|development|teams?|needs|process(?:es)?|systems|outcomes|problems|units?|goals|"
     r"partners?|stakeholders|leaders|impact|requirements|cases?|reviews?)\b", re.I)
@@ -118,7 +124,10 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
             if hard:
                 hits.append(Hit("technical", line, f"expects you to {hard[0].term}"))
                 continue
-            proficient = find_terms(line, tech.get("proficiency_words") or [], first_only=True)
+            # "analytically strong (comfortable with SQL or Python)" (Jerry): 'strong' describes the
+            # person's analysis or communication, not the language - only the familiarity word is about SQL
+            prof_line = _NOT_ABOUT_TOOLS.sub(" ", line)
+            proficient = find_terms(prof_line, tech.get("proficiency_words") or [], first_only=True)
             familiar = find_terms(line, tech.get("familiarity_words") or [], first_only=True)
             # Nov 9: a degree softener ("or equivalent", "or related") never softens a coding ask -
             # "CS or equivalent. You write real scripts in Python" is still writing code
