@@ -343,7 +343,7 @@ field_fit:
                  receptionist, administrative specialist, administrative assistant, leasing, transaction coordinator,
                  buyer specialist, showing agent, maintenance, groundskeeper, janitor, custodian, banquet, spa therapist,
                  massage, esthetician, retail associate, sales associate, reservations, night auditor]   # Nov 9: Loews / Stream Realty
-    marketing_titles: [marketing, brand strategy, media strategy, content strategy, merchandising]   # Nov 9: Macy's
+    marketing_titles: [marketing, brand strategy, media strategy, content strategy, merchandising, marketer, marketers, growth marketer, content creator, social media]   # Nov 9: Macy's
     sales_reps: [real estate agent, realtor, buyer's agent, buyer agent, listing agent, leasing agent, real estate salesperson, licensed agent, development representative, sales representative, business development rep, sales development rep, account executive, BDR, SDR]   # Nov 9: "Strategic Business Development Representative" (Algolia)
     accounting_insurance: [accounting, accountant, tax, controller, controllership, bookkeeper, payroll, accounts payable, accounts receivable, underwriter, underwriting, claims, actuarial, actuary, insurance, reinsurance, broker]
     hr_people: [talent, recruiter, recruiting, talent acquisition, sourcer, human resources, HR, people partner, people operations, compensation, benefits, HRIS, talent operations]
