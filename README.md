@@ -1,51 +1,47 @@
 # Job Pipeline
 
-Collects every public job posting it can find in your cities, drops the ones that fail your
-must-haves (`config/criteria.yaml`), and keeps a Google Sheet updated where you decide what
-to do with each one. Runs on GitHub Actions twice an hour (`.github/workflows/hourly.yml`).
+Finds public job postings in your cities, keeps only the ones that meet your criteria
+(`config/criteria.yaml`), and keeps a Google Sheet updated where you decide what to do with
+each one. Runs on GitHub Actions about every 15 minutes (`.github/workflows/hourly.yml`).
 
 ## Where postings come from (`config/sources.yaml`)
 
 | Source | What it is | How often |
 |---|---|---|
-| **Company job boards** | Greenhouse, Lever, Ashby, SmartRecruiters, Workday and Oracle career sites — the ones in `config/watchlist.yaml` plus every board discovered automatically | Every run; Workday / Oracle sites and boards with nothing passing for 3 days every 6 hours. Very large sites are read through their own city filters; new descriptions are fetched up to 80 per site per run (cached) |
-| **JSearch** (Google for Jobs) | LinkedIn, Indeed, Glassdoor and company sites, searched by keyword group × city | Within the daily request budget (`requests_per_day`; free plan = 6/day). Needs the `JSEARCH_API_KEY` secret |
-| **The Muse** | Entry-level postings in all your cities (≤30 days old) | Daily |
-| **Hacker News "Who is hiring?"** | Discovery only: job-board links in posts that mention your cities | Daily |
-| **New-grad lists on GitHub** (SimplifyJobs) | Discovery only: the company boards behind ~1,000 open new-grad listings in your cities (up to 60 new boards a day), including Greenhouse boards hidden behind company career pages (`gh_jid=` links) | Daily |
+| **Company job boards** (~800) | Ashby, Greenhouse, Lever, Workday, Oracle, SmartRecruiters, Workable, Gem, Rippling and Comeet boards: the ones in `config/watchlist.yaml` plus every board discovered automatically | Every run; Workday / Oracle sites and boards with nothing passing for 3 days every 12 hours |
+| **Google Jobs** (JSearch, SerpApi) | LinkedIn, Indeed, Glassdoor and company sites, searched by keyword × city | Within each free daily budget, spread over the day |
+| **Adzuna** | Job-site search by keyword × city | 48 searches a day, spread over the day |
+| **Discovery only** | YC company directory, Hacker News "Who is hiring?", SimplifyJobs new-grad list: used to find company boards, which then join the watch | Daily |
+| The Muse | Off (its API is behind a bot check) | — |
 
 **Auto-discovery.** Every company these sources surface in your cities is checked for its own
-board (apply links first, then name lookups, confirmed by the same job being listed there).
-Found boards join the watch and show in the Board health tab. The same job from several
-sources appears once — the company-board copy wins and keeps any decision you already made.
+board. Found boards join the watch and show in the Board health tab.
+
+**No duplicates.** The same job from several sources, or listed in several cities, appears
+once: the company-board copy wins and keeps any decision you already made.
 
 **Active only.** Board postings show while they're in the company's live feed; search
-postings must be recent and, when we watch that company's board, listed on it. Closed
-postings you never touched leave To review. Search results are stored in full and re-checked
-against the current rules every run, so a rule fix reaches them too. A site that couldn't be
-read in full in one run never marks its unread postings closed.
+postings must be recent. Closed postings you never touched leave To review. Search results
+(passing ones and near misses) are stored in full and re-checked against the current rules
+every run, so a rule fix reaches them too.
 
-## How it works — every option comes in, you decide
+## The rules
 
-The pipeline collects as many postings as it can and drops only the ones you
-couldn't or wouldn't take. **No scoring, no ranking by preference.**
+A posting reaches **To review** only if it passes every rule below. Anything else goes to
+the Dropped tab with the rule and the exact text that triggered it.
 
-**Must-haves** (`config/criteria.yaml` — a posting fails any one → Dropped tab, with the
-rule and the exact text that triggered it):
-
-| # | Dropped if… |
+| Rule | Kept only if… |
 |---|---|
-| 1 | not full-time (internship, contract, temp, co-op, short fellowship, part-time) |
-| 2 | not in NYC · Chicago / Florida / California / Toronto · Texas / BC, or **solely** remote ("Remote, New York, NY" counts as NYC and is flagged) |
-| 3 | salary midpoint under $100K USD / C$120K (between that and $120K / C$140K → kept, flagged *Low base — check incentives*). No salary posted → kept and flagged, unless it's a role that essentially never pays the floor (retail, warehouse, driver, call center…) or hourly with no amount |
-| 4 | asks 3+ years of experience (required or preferred), or implies it without a number ("extensive experience", "mentor less experienced staff") |
-| 5 | senior title (Senior, Sr, Staff, Principal, Director, Head of, VP, Chief, Level III+, Lead-as-a-level, people manager), or the description calls the role senior ("The Sr Marketing Experience Owner is…") |
-| 6 | US job requiring US citizenship, security clearance or U.S.-person status ("no sponsorship" is only flagged — OPT/TN usually fine) |
-| 7 | engineer/developer title (except GTM, Solutions, Sales, Prompt Engineer), or a **required** line demanding coding with no non-coding alternative |
-| 8 | a **required** credential you lack (MBA, JD, Master's, PhD, CPA, bar, RN, PE, CS/engineering-type degree) |
-| 9 | starts before you graduate (May 2027); starts after Aug 1, 2027 are flagged for OPT timing |
-| 10 | not a real opening ("talent community", "general application", …), or no longer active |
-| 11 | a field your degree can't support for OPT (clinical, legal practice, teaching, trades, lab science…) |
+| Role type | business / strategy operations, deployment / implementation, chief of staff / founder's associate, generalist, growth / revenue / data / product operations, or a grad / rotational program. AI-builder titles (GTM engineer, automation) only when coding familiarity is enough |
+| Never | acquisitions / asset management, sales, marketing, banking / finance roles, engineering, design / product, HR, legal, accounting, front-line jobs, staffing agencies. At finance firms only operations / generalist roles; at hotel companies only corporate-level roles |
+| Experience | asks for 1 year at most (a range starting at 0 or 1 passes), and nothing in the title or text marks it as senior |
+| Pay | any part of the posted base range reaches $100K (grad programs $90K; Canada C$120K). OTE doesn't count. No posted pay is kept only for grad programs, AI-forward companies and your core role types on startup boards |
+| Location | NYC · Chicago / Florida / California / Toronto · Texas / Vancouver; not solely remote |
+| Type | full-time (no internship, contract, temp, co-op, part-time) |
+| Work authorization | no US citizenship / clearance requirement ("no sponsorship" is only flagged: OPT / TN usually fine); related to your degree for OPT |
+| Skills | no required coding proficiency, credential you lack (MBA, JD, CPA, CS degree…), financial modelling, or other language |
+| Start date | not before you graduate (May 2027); starts after Aug 1, 2027 are flagged |
+| Real opening | not a talent pool / general application, and still active |
 
 **You decide** with three columns, each answering one question:
 
@@ -66,7 +62,7 @@ and flags **Follow up** when an Applied / Networking application hasn't moved fo
   Interest 5 → 1, active statuses before ended ones. All-in (4–5) rows are green; Follow up
   rows are yellow.
 * **Passed** — your archive; set Decision back to Apply any time.
-* **Dropped** — the newest 10,000 drops with the rule + matched text (all are kept in the
+* **Dropped** — the newest 1,000 drops with the rule + matched text (all are kept in the
   database; `tracking.dropped_tab_max_rows`), **Board health**, **Unparsed alerts**.
 * **Funnel** — is it working? Latest run by source (seen → new → passed → new options, top
   reasons dropped), coverage (boards watched, boards discovered this week, JSearch searches
@@ -97,7 +93,7 @@ First seen, Source.
    - `ALERTS_IMAP_USER`, `ALERTS_IMAP_APP_PASSWORD` — later, for job-alert emails (`docs/ALERTS_SETUP.md`)
 4. **First run** — repo → *Actions → hourly pipeline → Run workflow*. When it finishes
    (≈1–2 min), the Sheet has its tabs (To review, My applications, Passed, Dropped,
-   Unparsed alerts, Funnel, Board health). After that it runs every hour at :17.
+   Unparsed alerts, Funnel, Board health). After that it runs on its own schedule.
 5. **Add a company** — edit `config/watchlist.yaml`: `name`, `platform`
    (greenhouse / lever / ashby / smartrecruiters) and `slug` from the board URL
    (`jobs.lever.co/<slug>`, `boards.greenhouse.io/<slug>`, `jobs.ashbyhq.com/<slug>`,
@@ -106,8 +102,8 @@ First seen, Source.
 
 Open the Sheet from Google Drive or the Google Sheets app on your phone — bookmark it.
 
-**Actions minutes:** hourly runs on a private repo use GitHub Actions minutes (about
-1–2 min per run). If they run short, run the same `python -m src.run` on a small
+**Actions minutes:** runs are free on a public repo; on a private repo they use GitHub
+Actions minutes (a normal run takes a few minutes, a check-everything run about 30–45). If they run short, run the same `python -m src.run` on a small
 always-on server or lower the schedule in `.github/workflows/hourly.yml`.
 
 ## Run
@@ -124,14 +120,15 @@ python -m pytest
 
 **On GitHub (Actions tab):** *hourly pipeline* → *Run workflow* runs it now; tick
 **check_all** to re-check every source and board immediately instead of waiting for their
-daily / 6-hour schedules (takes ~15 min). *probe a board* checks any board on GitHub's network
+daily / 12-hour schedules (takes 30–45 min). *probe a board* checks any board on GitHub's network
 and prints what passes.
 
 ## Config files
 
 | File | What it is |
 |---|---|
-| `config/criteria.yaml` | The rules. Every threshold, weight and term list is read from here. |
+| `config/criteria.yaml` | The rules. Every threshold and term list is read from here. |
+| `config/sources.yaml` | Search keywords, cities, daily budgets and how often each source is checked. |
 | `config/watchlist.yaml` | Companies polled — **you choose them**; the pipeline never picks companies, it judges each posting against the criteria. Optional `sectors` tags only matter for the rules that need them (see the file header). |
 | `config/reference.yaml` | Not rules: place-name reference data (NYC = "New York", state codes so "Richmond, VA" isn't Richmond BC) and the fuzzy-match score. |
 

@@ -2,14 +2,13 @@
 # Job Pipeline Criteria — Login Wilson
 # Version 2.0 · 2026-11-07
 #
-# v2: MUST-HAVES ONLY. The pipeline collects every posting it can find and
-# drops only the ones Login could not or would not take. It does not score
-# or rank by preference. Everything that passes lands in the Sheet with the
-# facts needed to decide, and Login buckets each one himself:
-#     Veto    — not for me
-#     Apply   — a real option, standard application
-#     All-in  — I want this; strong application + networking
-#
+# The rules (all yours, set Nov 7-9). A posting must pass every one to reach "To review":
+#   - one of your role types (field_fit.role_allow), at any company; hotels corporate-level only
+#   - never: acquisitions / asset management, sales, marketing, banking / finance roles,
+#     engineering, design / product, HR, legal, accounting, front-line, staffing agencies
+#   - 1 year of experience max; nothing senior
+#   - any part of the posted pay range reaches $100K (grad programs $90K; Canada C$120K)
+#   - your cities, not fully remote, full-time, OPT / TN possible, no coding proficiency
 # Each rule below is a DROP rule unless it says "flag". A flag never removes
 # a posting; it adds a note in the Flags column.
 # ─────────────────────────────────────────────────────────────
@@ -53,14 +52,12 @@ location:
 
 
 # 3 ── SALARY ──────────────────────────────────────────────────
-# Tested on the midpoint of the posted range (the target city's range when
-# ranges are listed by city). Hourly x 2080.
-#   midpoint >= comfortable        → passes
-#   floor <= midpoint < comfortable → kept, flag "Low base — check incentives"
-#                                     (Login judges whether equity / bonus /
-#                                      commission / IPO upside is strong enough)
-#   midpoint < floor               → dropped
-#   no salary posted               → kept, flag "Salary unknown"
+# A posting passes when ANY part of its posted base range reaches the floor
+# ($90-130K passes; the target city's range when ranges are listed by city). Hourly x 2080.
+#   top of range < floor           → dropped
+#   bottom of range < floor, or midpoint < comfortable → kept, flag "Low base — check incentives"
+#   no salary posted               → dropped, except grad programs, AI-forward companies and
+#                                     your core role types on startup boards (flag "Salary unknown")
 salary:
   hourly_to_annual_hours: 2080
   # no pay posted (Nov 9): kept only for grad programs and AI-forward startups (flags below);
@@ -95,7 +92,7 @@ salary:
 
 
 # 4 ── EXPERIENCE ──────────────────────────────────────────────
-# Lower bound of a range counts ("2–4 years" → 2). Required OR preferred.
+# Lower bound of a range counts ("2–4 years" → 2; "1-3 years" passes). Required OR preferred.
 experience:
   max_years: 1          # 1 year MAX (your rule, Nov 9): any ask over 1 year drops (1.5+, 2+, "3-6 years");
                         # a range that starts at 1 or less ("0-2", "1-2 years") still passes
@@ -124,7 +121,7 @@ experience:
 # 5 ── SENIORITY ───────────────────────────────────────────────
 # Entry-level titles (Associate, Analyst, Coordinator, Specialist,
 # Representative, Consultant I, Strategist, APM, Rotational, New Grad, Junior,
-# Level I/II) pass; the 3-year rule handles the rest.
+# Level I/II) pass; the 1-year rule handles the rest.
 seniority:
   drop_title_terms: [senior, "sr.", sr, staff, principal, director, "head of", head, vp, svp, evp, avp, "vice president", chief, "executive director", leader, experienced, lateral, experienced hire, FVP, SVP, RVP, first vice president, regional vice president, SMTS, senior member, distinguished, fellow engineer, supervisor, group account, group strategist, group product manager, group creative, group copy, group project manager, supv, associate partner, assoc partner, consulting partner, consult partner, dean, vice dean]
   senior_title_in_description: true   # "Experience Owner" whose text says "the Sr Experience Owner"
@@ -358,7 +355,7 @@ field_fit:
     sales_reps: [real estate agent, realtor, buyer's agent, buyer agent, listing agent, leasing agent, real estate salesperson, licensed agent, development representative, sales representative, business development rep, sales development rep, account executive, BDR, SDR]   # Nov 9: "Strategic Business Development Representative" (Algolia)
     accounting_insurance: [accounting, accountant, tax, controller, controllership, bookkeeper, payroll, accounts payable, accounts receivable, underwriter, underwriting, claims, actuarial, actuary, insurance, reinsurance, broker]
     hr_people: [talent, recruiter, recruiting, talent acquisition, sourcer, human resources, HR, people partner, people operations, compensation, benefits, HRIS, talent operations]
-    corporate_finance: [valuation, real estate finance, finance analyst, underwriting, lending, financial analyst, FP&A, finance analyst, finance associate, financial planning, strategic finance, corporate finance, finance & strategy, finance and strategy]
+    corporate_finance: [valuation, real estate finance, finance analyst, underwriting, lending, financial analyst, FP&A, finance analyst, finance associate, financial planning, strategic finance, corporate finance, finance & strategy, finance and strategy, finance operations, financial operations, finance ops, billing, collections, revenue accounting]   # finance-function operations (billing, AP / AR) are finance roles
     product: [product manager, product management, associate product manager, APM, product owner, product designer, program manager]
     design: [designer, graphic design, art director, illustrator, animator, video editor, videographer, photographer, UX, UI, motion design]
     tech: [IT, information technology, help desk, desktop support, security, cybersecurity, network, systems administrator, salesforce administrator, salesforce consultant, servicenow, workday, sap, dynamics 365, crm consultant, technical support, solutions architect, hardware, firmware, manufacturing, production, warehouse, big data, sales engineer, solutions engineer, GTM engineer, go to market engineer, sales engineering, solutions engineering, engineer]

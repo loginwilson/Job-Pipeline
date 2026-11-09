@@ -747,3 +747,24 @@ def test_nov9_near_miss_audit_false_drops(criteria, full_criteria):
     assert "technical" in tech("You will write production code in our Python services")
     pay = "\n".join(["## About", "We are a payments company. " * 10])
     assert "salary" not in {f.gate for f in ev("Chief of Staff", pay.split("\n") + ["## Role", "- Partner with the CEO on priorities."]).failures}
+
+
+def test_finance_function_operations_are_finance_roles(full_criteria):
+    """Finance / billing operations are finance-function jobs; business / revenue operations aren't."""
+    from src.config import Company
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.pipeline.normalize import normalize_posting
+    from src.sources.base import RawPosting
+    g, m = Gates(full_criteria), LocationMatcher(full_criteria)
+
+    def field_drop(title):
+        raw = RawPosting(platform="ashby", slug="x", native_id=title, title=title, url="https://x", team=None,
+                         locations=["New York, NY"], workplace_type="in_office", employment_type="Full-time",
+                         country=None, description_lines=[], comp_ranges=[])
+        ev = g.evaluate(normalize_posting(raw, Company("Acme", "ashby", "x"), full_criteria, m))
+        return "field" in {f.gate for f in ev.failures}
+    assert field_drop("Finance Operations Associate") and field_drop("Billing Operations Associate")
+    assert field_drop("Financial Operations Analyst")
+    assert not field_drop("Business Operations Associate") and not field_drop("Revenue Operations Analyst")
+    assert not field_drop("Strategic Accounts Operations Associate")
