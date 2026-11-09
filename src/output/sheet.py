@@ -430,10 +430,30 @@ def decision_tab_requests(meta: dict, existing: dict, store: Store, criteria: Cr
         c = dict(r["cells"])
         c["Contacts"] = f'=IF(COUNTIF(Contacts!A:A,{company_col}{n})=0,"",COUNTIF(Contacts!A:A,{company_col}{n}))'
         agrid.append([c.get(h, "") for h in APPLY_HEADERS])
-    requests += _grid_tab(meta[PICKS], APPLY_HEADERS, agrid, len(existing.get(PICKS) or []))
+    agrid += [[], [_JUST_SCORED] + [""] * (len(APPLY_HEADERS) - 1), [_live_picks(len(picks) + 1)]]
+    requests += _grid_tab(meta[PICKS], APPLY_HEADERS, agrid, len(existing.get(PICKS) or []), room=300,
+                          filter_rows=len(picks) + 1)
     passed = sum(1 for r in tab_rows if (r["cells"].get("Interest") or "") == "Pass")
     return requests, {"rows": len(rows), "tabs": {JOBS: len(tab_rows), PICKS: len(picks), PASSED: passed},
                       "new": len(new)}
+
+
+_JUST_SCORED = "Just scored on To review (live). Each moves up, with Status etc., on the next hourly run"
+
+
+def _live_picks(last_row: int) -> str:
+    """Apply's bottom section: To review rows you scored 1-5 that aren't in the list above yet,
+    in Apply's column order, so a new score shows the moment you type it."""
+    last = _col_letter(len(HEADERS) - 1)
+    rid = _col_letter(ID_COL)
+    aid = _col_letter(APPLY_HEADERS.index("Posting ID"))
+    score = f"IFERROR(VALUE('{JOBS}'!A2:A),0)"
+    new = f"ISNA(MATCH('{JOBS}'!{rid}2:{rid}, '{PICKS}'!{aid}$2:{aid}${max(last_row, 2)}, 0))"
+    cols = []
+    for h in APPLY_HEADERS:
+        cols.append(f"CHOOSECOLS(g, {HEADERS.index(h) + 1})" if h in HEADERS else 'IF(SEQUENCE(ROWS(g)), "")')
+    return (f"=IFERROR(LET(f, FILTER('{JOBS}'!A2:{last}, {score}>=1, {new}), "
+            f"g, SORT(f, VALUE(CHOOSECOLS(f, 1)), FALSE), HSTACK({', '.join(cols)})), \"\")")
 
 
 def _view_tab(meta: dict, tab: str, condition: str) -> list[dict]:
@@ -456,12 +476,13 @@ def _view_tab(meta: dict, tab: str, condition: str) -> list[dict]:
     ]
 
 
-def _grid_tab(m: dict, headers: list[str], grid: list[list], existing_len: int) -> list[dict]:
+def _grid_tab(m: dict, headers: list[str], grid: list[list], existing_len: int, room: int = 20,
+              filter_rows: int | None = None) -> list[dict]:
     """To review / Apply: values, dropdowns, filter, hidden ID, colours."""
     sid = m["id"]
-    # the grid is resized to the rows plus a little room (shrinking deletes the rest); old rows
+    # the grid is resized to the rows plus some room (shrinking deletes the rest); old rows
     # inside that room are blanked
-    need_rows = len(grid) + 20
+    need_rows = len(grid) + room
     padded = grid + [[""] * len(headers)] * (min(existing_len, need_rows) - len(grid))
     col = {h: i for i, h in enumerate(headers)}
     id_col = col["Posting ID"]
@@ -482,7 +503,8 @@ def _grid_tab(m: dict, headers: list[str], grid: list[list], existing_len: int) 
     if "Status" in col:
         reqs.append(_validation(sid, col["Status"], STATUS_OPTIONS, need_rows))
     reqs += [
-        {"setBasicFilter": {"filter": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": len(grid),
+        {"setBasicFilter": {"filter": {"range": {"sheetId": sid, "startRowIndex": 0,
+                                                 "endRowIndex": filter_rows or len(grid),
                                                  "startColumnIndex": 0, "endColumnIndex": len(headers)}}}},
         {"updateDimensionProperties": {"range": {"sheetId": sid, "dimension": "COLUMNS",
                                                  "startIndex": id_col, "endIndex": id_col + 1},

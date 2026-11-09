@@ -51,6 +51,8 @@ def tab(sheet, name):
     head = rows[0]
     out = []
     for r in rows[1:]:
+        if name == PICKS and not any(r):
+            break                      # the live "just scored" section starts after a blank row
         d = dict(zip(head, r + [""] * (len(head) - len(r))))
         out.append([d.get(h, "") for h in U])
     return out
@@ -214,6 +216,21 @@ def test_contacts_link_to_jobs_on_apply_and_old_tabs_go(criteria, board, evals):
     assert sheet.read(["Contacts"])["Contacts"][1][2] == "Sasha"                 # your row untouched
     count = sheet.formulas(PICKS, AH.index("Contacts"))[0]
     assert count.startswith('=IF(COUNTIF(Contacts!A:A,G2)=0')
+
+
+def test_apply_shows_new_scores_live_until_the_next_run(criteria, board, evals):
+    store, sheet = Store(":memory:"), FakeBackend()
+    run(store, sheet, board, evals, criteria, T1)
+    pid = tab(sheet, REVIEW)[0][ID_COL]
+    put(sheet, REVIEW, pid, "Interest", "4")
+    run(store, sheet, board, evals, criteria, T2)
+    raw = sheet.read([PICKS])[PICKS]
+    n = len(tab(sheet, PICKS))                                   # 1 job in the list
+    assert raw[n + 2][0].startswith("Just scored on To review")
+    live = raw[n + 3][0]
+    # To review rows scored 1-5 whose ID isn't in Apply's list (rows 2..n+1), in Apply's columns
+    assert live.startswith("=IFERROR(LET(f, FILTER('To review'!A2:O") and f"'Apply'!O$2:O${n + 1}" in live
+    assert live.count("CHOOSECOLS(g,") == sum(h in H for h in AH)
 
 
 def test_a_job_you_marked_keeps_its_link_when_rules_change(criteria):
