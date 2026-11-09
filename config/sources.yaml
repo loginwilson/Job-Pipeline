@@ -65,7 +65,7 @@ jobspipe:                   # JobsPipe ONE-TIME sweep (free 1,000 credits, never
 
 adzuna:                     # Adzuna job search (free key: GitHub secrets ADZUNA_APP_ID + ADZUNA_APP_KEY)
   enabled: true
-  requests_per_day: 24      # free plan allows ~250 a day; each search returns up to 50 postings
+  requests_per_day: 48      # free plan allows ~250 a day; each search returns up to 50 postings (Nov 9: 24 -> 48, paced)
   pace_through_day: true    # Nov 9: spread the day's searches over 24h (fresh postings all day)
   max_days_old: 3
   first_fill_days: 30       # a search's first run looks back a month
