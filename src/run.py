@@ -320,9 +320,19 @@ def run_jsearch(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> l
     if budget <= 0:
         return None
     pairs = {f"{kw} in {c['query']}": c for kw in cfg.get("keywords", []) for c in cfg.get("cities", [])}
+    # your best searches run every day first (Nov 9); the rest of the budget rotates through the others
+    focus = {f"{f['keywords']} in {f['city']}": {"query": f["city"], "country": f.get("country", "us")}
+             for f in cfg.get("focus") or []}
+    pairs.update(focus)
+    today = ts[:10]
+    done_today = {r["pair"] for r in store.conn.execute(
+        "SELECT pair FROM search_pairs WHERE source='jsearch' AND substr(last_searched, 1, 10)=?", (today,))}
+    plan = [(p, False) for p in focus if p not in done_today][:budget]
+    plan += store.next_pairs("jsearch", [p for p in pairs if p not in focus and p not in done_today],
+                             budget - len(plan))          # never the same search twice in a day
     src, evals, spent = JSearchSource(), [], 0
     sess = requests.Session()
-    for pair, first in store.next_pairs("jsearch", list(pairs), budget):
+    for pair, first in plan:
         window = cfg.get("first_fill_window", "month") if first else cfg.get("window", "3days")
         try:
             payload = jsearch_search(pair, pairs[pair].get("country", "us"), window, sess)

@@ -201,3 +201,24 @@ def test_workday_detail_cap_defers_the_rest(monkeypatch):
     assert len(out) == 2 and out.truncated and len(cache) == 2      # 3 wait for the next poll
     out = workday.WorkdaySource().fetch("big.wd1/Careers", want=lambda it: True, cache=cache)
     assert len(out) == 4 and len(cache) == 4
+
+
+def test_focus_searches_run_daily_before_the_rotation(criteria, monkeypatch):
+    """Nov 9: the 6 free searches a day go to your best NYC searches first, then rotate."""
+    import src.run as run
+    from src.store.db import Store
+    store, asked = Store(":memory:"), []
+    monkeypatch.setenv("JSEARCH_API_KEY", "test")
+    monkeypatch.setattr(run, "jsearch_search", lambda q, country, window, sess: asked.append(q) or {"data": []})
+    cfg = {"enabled": True, "requests_per_day": 3,
+           "focus": [{"keywords": "bizops", "city": "New York, NY"}, {"keywords": "proptech", "city": "New York, NY"}],
+           "keywords": ["hotel"], "cities": [{"query": "Miami, FL"}, {"query": "Chicago, IL"}]}
+    run.run_jsearch(store, cfg, criteria, None, None, "2026-11-09T10:00:00+00:00")
+    assert asked == ["bizops in New York, NY", "proptech in New York, NY", "hotel in Miami, FL"]
+    asked.clear()
+    cfg["requests_per_day"] = 6                     # more budget the same day: focus isn't repeated
+    run.run_jsearch(store, cfg, criteria, None, None, "2026-11-09T12:00:00+00:00")
+    assert asked == ["hotel in Chicago, IL"]
+    asked.clear()
+    run.run_jsearch(store, cfg, criteria, None, None, "2026-11-10T10:00:00+00:00")   # next day: focus again
+    assert asked[:2] == ["bizops in New York, NY", "proptech in New York, NY"]
