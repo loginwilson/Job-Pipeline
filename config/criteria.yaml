@@ -100,7 +100,7 @@ experience:
                           managing a team, people management, experience at an ai, experience at a high-growth,
                           experience at a high growth, experience at a fast-growing, internal job level,
                           prior experience as a, prior experience in a similar role, experience in a similar role,
-                          extensive experience, significant experience, deep experience, many years of experience, several years of experience, multiple years of experience, several years experience, spent years, seasoned professional, mentor junior, mentor less experienced, mentoring junior, mentor and develop junior, train and mentor less experienced]
+                          extensive experience, significant experience, deep experience, many years of experience, several years of experience, multiple years of experience, several years experience, spent years, seasoned professional, mentor junior, mentor less experienced, mentoring junior, mentor and develop junior, train and mentor less experienced, track record in, proven track record, proven experience leading, experience leading, you've lived in, you have lived in, first business operations lead, business operations lead, "operated, not just advised", negotiate it yourself, have navigated, manage and grow people, want to manage and grow, you've managed complex, managed complex, trusted advisor to c-suite, experience as a founder, experience as a chief of staff, as a founder associate, comparable startup operator, develop into a deal maker]
   # With NO years stated, these mid-level titles drop unless the title also has an entry cue (your choice, Nov 8)
   no_years_mid_level_titles: [manager, account executive, consultant, officer, advisor, producer, broker, executive, partner]
   entry_title_cues: [associate, assistant, junior, jr, entry, new grad, graduate, early career, analyst, coordinator, trainee, program, apprentice, " I", "1", campus, university, "2027", "2026"]
@@ -189,12 +189,14 @@ technical:
   ai_builder_ok_phrases: [write code, writing code, coding experience, programming experience, a technical background, strong technical background, engineering background]
   required_drop:
     languages: [Python, JavaScript, TypeScript, Java, C++, C#, Ruby, Scala, Rust, Kotlin, Swift, Golang, PHP]
-    phrases: [code-level, production code, production-quality code, write code, writing code, coding experience, programming experience, software development experience, software engineering experience, years of software engineering, build and train machine learning models, train machine learning models, building machine learning models, training ML models, building ML models, a technical background, strong technical background, engineering background, technical degree, video editing, graphic design experience, design portfolio, portfolio of work, Salesforce administration]
+    phrases: [code-level, production code, production-quality code, write code, writing code, coding experience, programming experience, software development experience, software engineering experience, years of software engineering, build and train machine learning models, train machine learning models, building machine learning models, training ML models, building ML models, a technical background, strong technical background, engineering background, technical degree, video editing, graphic design experience, design portfolio, portfolio of work, Salesforce administration, full-stack engineer, full stack engineer, fullstack engineer, high quality code, high-quality code, deploy code, ship code, write real scripts, shell-scripting, shell scripting, advanced SQL, SQL proficiency, proficient in SQL, proficiency in SQL, SQL queries from scratch, expert SQL, Figma, Adobe Creative Suite, Framer, product designer, macOS administration, endpoint engineering]
+  # Nov 9: writing / shipping code itself - drops even with 'comfortable' elsewhere on the line
+  always_drop_phrases: [full-stack engineer, full stack engineer, fullstack engineer, high quality code, high-quality code, deploy code, ship code, write real scripts, production code]
   # Nov 9: a language with one of these is an expectation of proficiency -> drop, even next to SQL / AI tools
   proficiency_words: [proficient, proficiency, expert, expertise, strong, fluent, fluency, advanced, deep, solid,
                       write, writing, production, code-level, hands-on coding, years of]
   # ...and one of these means familiarity is enough -> keep (you can do it with AI tools)
-  familiarity_words: [familiar, familiarity, exposure, comfortable, comfort with, interest in, bonus, a plus, plus,
+  familiarity_words: [familiar, familiarity, exposure, comfortable, comfort with, interest in, bonus, a plus, is a plus, plus if, big plus, huge plus,
                       ideally, nice to have, basic, some experience, working knowledge]
   # if any of these appears on the same line, the line offers a non-coding path → keep
   ok_alternatives: [SQL, Excel, spreadsheets, Tableau, Power BI, Looker, no-code, low-code, Zapier, n8n, Clay, Airtable, AI tools, ChatGPT, LLMs, statistical packages, or equivalent]
@@ -389,4 +391,4 @@ stretch_banking:
 # Hard skills you don't have (your words, Nov 8: "a hard skill I don't have like CS or
 # analyst (financial modelling)"). A REQUIRED line asking for one drops the job; "a plus" /
 # "preferred" keeps it. Coding is covered by the technical rule.
-missing_skills: [financial modeling, financial modelling, financial models, financial model, build models, building models, build financial models, building financial models, three-statement, 3-statement, DCF, discounted cash flow, LBO, leveraged buyout model, valuation models, valuation modeling, operating models, merger model, accretion dilution]
+missing_skills: [financial modeling, financial modelling, financial models, financial model, build models, building models, build financial models, building financial models, three-statement, 3-statement, DCF, discounted cash flow, LBO, leveraged buyout model, valuation models, valuation modeling, operating models, merger model, accretion dilution, build and maintain models, models for lease economics, month-end close, month end close, journal entries, accounting principles, financial statements]

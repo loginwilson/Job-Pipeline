@@ -673,3 +673,40 @@ def test_nov9_final_audit_misses(full_criteria):
                   ("Pallet", "Associate Deployment Strategist"), ("Lance", "Chief of Staff")):
         assert passes(co, t), (co, t)
     assert all(_aggregator(n) for n in ("Snatch UP Jobs", "FDE Times", "Careers at KKR"))
+
+
+def test_nov9_full_read_misses(full_criteria):
+    """Nov 9 full read of every unscored posting: lines that should have dropped each job."""
+    from conftest import PAY_OK
+    from src.config import Company
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.pipeline.normalize import normalize_posting
+    from src.sources.base import RawPosting
+    gates, m = Gates(full_criteria), LocationMatcher(full_criteria)
+    filler = ["## About us", "We are an AI startup in New York building software for operations teams. " * 3,
+              "## What you'll do", "- Own projects end to end across the business and work with the founders."]
+
+    def passes(title, req):
+        raw = RawPosting(platform="ashby", slug="x", native_id=title, title=title, url="https://x", team=None,
+                         locations=["New York, NY"], workplace_type="in_office", employment_type="Full-time",
+                         country=None, description_lines=filler + ["## Requirements", "- " + req, PAY_OK], comp_ranges=[])
+        return gates.evaluate(normalize_posting(raw, Company("Acme", "ashby", "x"), full_criteria, m)).passed
+    for title, req in [
+        ("Operations Associate", "Proven track record in an operations related role, and experience leading large projects."),
+        ("GTM Engineer", "A technical foundation: CS, data science, or equivalent. You write real scripts in Python/TypeScript/SQL."),
+        ("GTM Engineer", "You have enough technical chops to build and deploy high quality code, and you're equally comfortable talking to users."),
+        ("GTM Engineer", "You are a pragmatic full-stack engineer who can ship independently."),
+        ("Strategy & Operations Associate", "You have a strong analytical background, advanced SQL proficiency, and experience with visualization tooling."),
+        ("Finance & Operations Analyst", "Hands-on experience supporting a month-end close, including reconciliations and journal entries."),
+        ("Chief of Staff", "Management experience, and you want to manage and grow people."),
+        ("Founder Associate", "Experience as a Founder Associate, Chief of Staff, or comparable startup operator."),
+        ("Growth Strategist", "Deep GTM fluency: You've lived in B2B SaaS and can speak the language of revops leaders."),
+        ("Generalist", "Proficient in tools like Figma, Adobe Creative Suite, or Framer."),
+    ]:
+        assert not passes(title, req), (title, req)
+    # the keeps still pass
+    for title, req in [("Operations Associate", "1-3 years in operations; comfortable with SQL or able to ramp quickly."),
+                       ("Deployment Strategist", "Basic technical acumen, including familiarity with APIs, JSON, SQL."),
+                       ("Business Operations Associate", "Comfortable with no-code tools, plus strong written communication.")]:
+        assert passes(title, req), (title, req)

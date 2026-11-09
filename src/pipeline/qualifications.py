@@ -102,9 +102,17 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
         phrase = [h for h in find_terms(line, req.get("phrases", []) or []) if h.term.lower() not in ok_phrases][:1]
         if lang or phrase:
             # Nov 9: you can do technical work with AI tools, but not when they expect proficiency
+            hard = find_terms(line, tech.get("always_drop_phrases") or [], first_only=True)
+            if hard:
+                hits.append(Hit("technical", line, f"expects you to {hard[0].term}"))
+                continue
             proficient = find_terms(line, tech.get("proficiency_words") or [], first_only=True)
             familiar = find_terms(line, tech.get("familiarity_words") or [], first_only=True)
-            if proficient and not softened:          # "fluent in Python ... comfortable with X": fluent wins
+            # Nov 9: a degree softener ("or equivalent", "or related") never softens a coding ask -
+            # "CS or equivalent. You write real scripts in Python" is still writing code
+            tech_soft = find_terms(core, [t for t in soft if not re.search(r"equivalent|related|similar", t, re.I)],
+                                   first_only=True)
+            if proficient and not tech_soft:         # "fluent in Python ... comfortable with X": fluent wins
                 hits.append(Hit("technical", line, f"expects {proficient[0].term} {lang or phrase[0].term}"))
                 continue
             if not softened and not familiar and not find_terms(line, ok_alt, first_only=True):
