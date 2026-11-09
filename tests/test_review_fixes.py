@@ -150,3 +150,20 @@ def test_track_record_of_owning_problems_is_not_senior(full_criteria):
         "1+ years of experience at a consulting firm, investment bank, or high-growth technology company.",
         "Track record of owning ambiguous problems and delivering impact.", BODY[5], PAY])
     assert ev.passed, ev.failures
+
+
+def test_reposted_job_keeps_your_score():
+    s = Store(":memory:")
+    for pid in ("ashby:jerry.ai:old", "ashby:jerry.ai:new", "ashby:jerry.ai:other"):
+        title = "Senior Associate, Business Operations & Analytics" if pid.endswith("other") else \
+            "Associate, Business Operations & Analytics"
+        s.upsert_posting(pid, "Jerry", title, "u", None, None, TS, dedupe_key=pid)
+        s.save_score(pid, True, [], [], {"location": "NYC (tier 1) · remote"}, TS)
+    s.conn.execute("INSERT INTO owner_state(posting_id, interest, notes) VALUES ('ashby:jerry.ai:old', '3', 'liked it')")
+    s.conn.execute("UPDATE postings SET closed_at=? WHERE posting_id='ashby:jerry.ai:old'", (TS,))
+    assert s.carry_reposts(TS) == 1
+    st = s.conn.execute("SELECT interest, notes FROM owner_state WHERE posting_id='ashby:jerry.ai:new'").fetchone()
+    assert (st["interest"], st["notes"]) == ("3", "liked it")
+    assert s.is_merged("ashby:jerry.ai:old") and not s.is_merged("ashby:jerry.ai:new")
+    assert s.conn.execute("SELECT 1 FROM owner_state WHERE posting_id='ashby:jerry.ai:other'").fetchone() is None
+    assert s.carry_reposts(TS) == 0                       # nothing left to move

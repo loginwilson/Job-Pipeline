@@ -101,6 +101,14 @@ CREATE TABLE IF NOT EXISTS sheet_tabs (      -- what was last written to each Sh
 """
 
 
+def _display_city(display) -> str:
+    try:
+        loc = (json.loads(display or "{}") or {}).get("location") or ""
+    except (TypeError, ValueError):
+        return ""
+    return loc.split(" (")[0].split(" ·")[0].strip().lower()
+
+
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -184,6 +192,39 @@ class Store:
                 (board_id, st["decision"], st["interest"], st["status"], st["notes"], st["applied_on"],
                  st["status_changed_at"], ts))
         return row["posting_id"]
+
+    def carry_reposts(self, ts: str) -> int:
+        """A company closes a job you scored and reposts it under a new link (Jerry, Nov 9): your
+        score, status and notes move to the live posting and the closed one is hidden behind it.
+        Same board, same title, same city; the new posting must have nothing of yours yet."""
+        touched = ("SELECT posting_id FROM owner_state WHERE COALESCE(decision,'') NOT IN ('', 'Pending') "
+                   "OR COALESCE(interest,'')<>'' OR COALESCE(status,'')<>'' OR COALESCE(notes,'')<>''")
+        old_rows = self.conn.execute(
+            "SELECT p.posting_id, p.company, p.title, s.display FROM postings p LEFT JOIN scores s USING(posting_id) "
+            "WHERE p.closed_at IS NOT NULL AND p.merged_into IS NULL AND NOT (" + _SEARCH_LIKE.replace("posting_id", "p.posting_id") + ") "
+            "AND p.posting_id IN (" + touched + ")").fetchall()
+        moved = 0
+        for o in old_rows:
+            board = o["posting_id"].rsplit(":", 1)[0] + ":"
+            city = _display_city(o["display"])
+            for n in self.conn.execute(
+                    "SELECT p.posting_id, s.display FROM postings p LEFT JOIN scores s USING(posting_id) "
+                    "WHERE p.posting_id LIKE ? AND p.posting_id <> ? AND p.closed_at IS NULL AND p.merged_into IS NULL "
+                    "AND lower(trim(p.title)) = lower(trim(?)) AND p.posting_id NOT IN (" + touched + ")",
+                    (board + "%", o["posting_id"], o["title"] or "")).fetchall():
+                if city and _display_city(n["display"]) and _display_city(n["display"]) != city:
+                    continue
+                self.conn.execute("DELETE FROM owner_state WHERE posting_id=?", (n["posting_id"],))
+                self.conn.execute(
+                    "INSERT INTO owner_state(posting_id, decision, interest, status, notes, applied_on, "
+                    "status_changed_at, updated_at) SELECT ?, decision, interest, status, notes, applied_on, "
+                    "status_changed_at, ? FROM owner_state WHERE posting_id=?", (n["posting_id"], ts, o["posting_id"]))
+                self.conn.execute("UPDATE postings SET merged_into=? WHERE posting_id=?", (n["posting_id"], o["posting_id"]))
+                self.conn.execute("UPDATE postings SET first_seen=MIN(first_seen, (SELECT first_seen FROM postings "
+                                  "WHERE posting_id=?)) WHERE posting_id=?", (o["posting_id"], n["posting_id"]))
+                moved += 1
+                break
+        return moved
 
     def merge_into(self, posting_id: str, keep_id: str) -> None:
         """Hide an already-stored duplicate behind the copy we keep."""

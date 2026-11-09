@@ -1113,6 +1113,9 @@ def main(argv: list[str] | None = None) -> int:
         store.close_stale("adzuna:", int((load_sources_config().get("adzuna") or {}).get("close_after_days_unseen", 7)), ts)
     if store is None:
         return 0
+    moved = store.carry_reposts(ts)
+    if moved:
+        log.info("%d reposted jobs: your score / status moved to the new posting", moved)
     store.mark_evergreen(int(criteria.get("freshness", "evergreen_after_days", default=180)), ts)
     store.compact()
     for st in stats.values():
