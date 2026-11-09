@@ -70,7 +70,7 @@ def put(sheet, name, pid, header, value):
 def test_new_postings_land_in_review(criteria, board, evals):
     store, sheet = Store(":memory:"), FakeBackend()
     info = run(store, sheet, board, evals, criteria, T1)
-    passed = sum(e.passed for e in evals)
+    passed = sum(e.passed for e in evals) - 1          # Deployment Strategist NYC + Chicago shows once
     assert info["tabs"] == {"To review": passed, "Apply": 0, "Passed": 0}
     assert sheet.read([REVIEW])[REVIEW][0] == H
     assert all(r[DEC] == "" and "New" in r[FLAGS] for r in tab(sheet, REVIEW))
@@ -343,7 +343,7 @@ def test_unchanged_tabs_are_not_rewritten_and_tabs_shrink(criteria, board, evals
 def test_preference_rank_orders_your_fields_first():
     from src.output.sheet import _preference_rank
     flags = ["New", "AI-forward company", "Preferred field: real estate", "Your edge: AI × hospitality, New"]
-    assert sorted(flags, key=_preference_rank) == [flags[3], flags[2], flags[1], flags[0]]
+    assert sorted(flags, key=_preference_rank) == [flags[3], flags[1], flags[2], flags[0]]   # AI first (Nov 9)
 
 
 def test_company_auto_add_needs_the_company_description(criteria):
@@ -425,3 +425,22 @@ def test_never_watch_boards_close_untouched_postings(criteria):
         "(SELECT posting_id FROM owner_state WHERE COALESCE(interest, '') <> '')", (T2, "marriott international"))
     closed = dict(store.conn.execute("SELECT posting_id, closed_at FROM postings").fetchall())
     assert closed["oracle:m:1"] == T2 and closed["oracle:m:2"] is None
+
+
+def test_no_duplicates_on_the_sheet():
+    """Nov 9: ReadyOn / Clay / Finch showed twice (found by two sources)."""
+    from src.output.sheet import _dedupe
+
+    def row(pid, company, title, first, interest="", closed=False):
+        cells = {"Company": company, "Role": f'=HYPERLINK("https://x/{pid}", "{title}")', "Interest": interest,
+                 "Status": "", "Notes": "", "Next step": "", "Decision": "Pending"}
+        return {"posting_id": pid, "cells": cells, "closed": closed, "first_seen": first}
+    rows = [row("jobspipe:1", "ReadyOn", "Founding Operations Associate", "2026-11-08"),
+            row("jobspipe:2", "ReadyOn", "Founding Operations Associate (NYC)", "2026-11-09"),
+            row("jobspipe:3", "Clay Labs, Inc.", "GTM Operations - New York", "2026-11-07"),
+            row("ashby:clay:9", "Clay", "GTM Operations", "2026-11-09"),
+            row("jsearch:4", "Finch", "Deployment Strategist", "2026-11-01", interest="4"),
+            row("greenhouse:finch:5", "Finch", "Deployment Strategist", "2026-11-09"),
+            row("ashby:other:6", "Finch", "Business Operations Associate", "2026-11-09")]
+    kept = {r["posting_id"] for r in _dedupe(rows)}
+    assert kept == {"jobspipe:1", "ashby:clay:9", "jsearch:4", "ashby:other:6"}

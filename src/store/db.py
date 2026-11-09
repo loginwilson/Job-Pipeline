@@ -105,6 +105,8 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+_SEARCH_LIKE = " OR ".join(f"posting_id LIKE '{p}:%'" for p in ("muse", "jsearch", "adzuna", "jobspipe", "serpapi"))
+
 class Store:
     def __init__(self, path: str | Path = DEFAULT_DB):
         self.path = Path(path)
@@ -165,7 +167,7 @@ class Store:
         """
         row = self.conn.execute(
             "SELECT posting_id, first_seen FROM postings WHERE dedupe_key=? AND posting_id<>? "
-            "AND (posting_id LIKE 'muse:%' OR posting_id LIKE 'jsearch:%') AND merged_into IS NULL",
+            "AND (" + _SEARCH_LIKE + ") AND merged_into IS NULL",
             (dedupe_key, board_id)).fetchone()
         if row is None:
             return None
@@ -194,8 +196,8 @@ class Store:
 
     def open_board_key(self, dedupe_key: str) -> bool:
         """True if a company-board posting with this key is already stored."""
-        return self.conn.execute("SELECT 1 FROM postings WHERE dedupe_key=? AND posting_id NOT LIKE 'muse:%' "
-                                 "AND posting_id NOT LIKE 'jsearch:%'", (dedupe_key,)).fetchone() is not None
+        return self.conn.execute("SELECT 1 FROM postings WHERE dedupe_key=? AND NOT (" + _SEARCH_LIKE + ")",
+                                 (dedupe_key,)).fetchone() is not None
 
     def open_key(self, dedupe_key: str, exclude_prefix: str) -> bool:
         """True if another open posting (any source but `exclude_prefix`) has this key."""

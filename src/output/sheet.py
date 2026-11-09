@@ -297,7 +297,46 @@ def build_rows(store: Store, criteria: Criteria, ts: str, owner_states: dict[str
             flags = row["cells"]["Flags"]
             row["cells"]["Flags"] = "Target company" + (", " + flags if flags else "")
         rows.append(row)
-    return rows
+    return _dedupe(rows)
+
+
+_SEARCH_PREFIXES = {"muse", "jsearch", "adzuna", "jobspipe", "serpapi"}
+_CO_SUFFIX = re.compile(r"\b(?:inc|llc|ltd|corp|corporation|co|company|labs?|technologies|technology|hq|ai|the)\b")
+
+
+def _same_job_key(c: dict) -> str:
+    """Company + title, loosely: 'Clay Labs, Inc.' = 'Clay'; punctuation, seniority marks
+    in brackets and the city are ignored, so one job found by two sources shows once."""
+    co = re.sub(r"[^a-z0-9]", "", _CO_SUFFIX.sub(" ", (c.get("Company") or "").lower()))
+    title = re.sub(r"^=HYPERLINK\(\"[^\"]*\",\s*\"(.*)\"\)$", r"\1", c.get("Role") or "")
+    title = re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", title.lower())
+    title = re.sub(r"\s[-–—|,]\s.*$", "", title)            # 'Ops Associate - New York' / '| Remote'
+    return co + "|" + " ".join(re.findall(r"[a-z0-9]+", title))
+
+
+def _dedupe(rows: list[dict]) -> list[dict]:
+    """No duplicates on the Sheet (Nov 9). Rows you touched always stay; among untouched
+    copies of one job, keep the open one, in your best city, from the company board, found earliest."""
+    def touched(r):
+        c = r["cells"]
+        return bool(c["Interest"] or c["Status"] or c["Notes"] or c["Next step"]) or c["Decision"] != "Pending"
+    def rank(r):
+        return (not touched(r), r["closed"], r.get("tier", 9), (r["posting_id"] or "").split(":")[0] in _SEARCH_PREFIXES,
+                r["first_seen"] or "")
+    groups: dict[str, list[dict]] = {}
+    for r in rows:
+        groups.setdefault(_same_job_key(r["cells"]), []).append(r)
+    keep = set()
+    for g in groups.values():
+        g.sort(key=rank)
+        keep.add(id(g[0]))
+        city = lambda r: re.split(r" \(tier| ·", r["cells"].get("Location") or "")[0].strip()
+        others = [x for x in dict.fromkeys(city(r) for r in g[1:]) if x and x != city(g[0])]
+        if others:                    # one job posted in two cities shows once, best city first
+            g[0]["cells"]["Location"] = f'{g[0]["cells"].get("Location") or ""} · also {", ".join(others)}'
+
+        keep |= {id(r) for r in g[1:] if touched(r)}
+    return [r for r in rows if id(r) in keep]
 
 
 def _pick_cell(st: dict) -> str:
@@ -366,7 +405,9 @@ def _preference_rank(flags: str) -> int:
         return 0                   # a company you picked on the Companies tab
     if "Stretch" in flags:
         return 5                   # reaches last, after every realistic fit
-    for rank, mark in enumerate(("Your edge", "Preferred field", "AI-forward company"), start=1):
+    # Nov 9: mostly AI startups - an AI company (in your fields or not) before a non-AI
+    # hospitality / real-estate company
+    for rank, mark in enumerate(("Your edge", "AI-forward company", "Preferred field"), start=1):
         if mark in flags:
             return rank
     return 4
