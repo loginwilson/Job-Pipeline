@@ -35,8 +35,8 @@ def test_cad_market(make):
 
 def test_multi_city_structured_ranges(make):
     comp = [CompRange(200000, 240000, "USD", "year", label="SF/NY"),
-            CompRange(150000, 170000, "USD", "year", label="Chicago")]
-    p = make(locations=["Chicago, IL"], comp=comp)
+            CompRange(150000, 170000, "USD", "year", label="Los Angeles")]
+    p = make(locations=["Los Angeles, CA"], comp=comp)
     assert p.comp.midpoint_annual == 160000 and p.comp.multi_range_matched
 
 

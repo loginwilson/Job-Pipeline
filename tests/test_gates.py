@@ -37,7 +37,8 @@ def test_location(evaluate):
     assert nyc_remote.passed and "Remote role — lists your city" in nyc_remote.flags   # not solely remote
     multi = evaluate(locations=["NYC, SF, or Remote"], workplace=None, lines=[PAY_OK])
     assert multi.passed and multi.posting.location.best.region == "NYC"
-    assert evaluate(locations=["Austin, TX"], lines=[PAY_OK]).passed       # tier 3 still passes
+    assert evaluate(locations=["Vancouver, BC"], lines=["Salary: CA$150,000 - CA$170,000 per year"]).passed   # tier 3
+    assert not evaluate(locations=["Austin, TX"], lines=[PAY_OK]).passed   # Nov 9: Texas is no longer one of your cities
 
 
 # 3. salary
@@ -354,14 +355,16 @@ def test_field_fit_keeps_your_fields_only(full_criteria):
     # at a real-estate company a general / ops title counts, a sales title doesn't (Nov 8)
     re_co = ["We build AI agents for property management and apartment operators."]
     assert "field" not in fails("Operations Associate", re_co)
-    assert "field" not in fails("Analyst", re_co)
+    assert "field" in fails("Analyst", re_co)          # Nov 9: a bare "Analyst" isn't one of your role types
+    assert "field" not in fails("Business Operations Analyst", re_co)
     assert "field" in fails("Sales Development Representative", re_co)
     for t in ("Investment Banking Analyst", "Compliance Operations Analyst", "Sales Trader", "Tax Associate",
               "Financial Analyst", "Associate Product Manager", "Data Analyst", "Recruiting Coordinator",
               "Underwriting Associate", "Trade Support Associate"):
         assert "field" in fails(t), t
     # a hospitality company's generic title counts
-    assert "field" not in fails("Analyst", ["Marriott is a global hotel company."])
+    assert "field" in fails("Analyst", ["Marriott is a global hotel company."])   # Nov 9: bare titles drop
+    assert "field" not in fails("Revenue Management Analyst", ["Marriott is a global hotel company."])
 
 
 def test_no_years_mid_level_titles(full_criteria):
@@ -460,7 +463,7 @@ def test_edge_ai_in_hospitality_and_real_estate(full_criteria):
     ai_co = ["We are an AI-native logistics platform."] + ["Words about the role."] * 12
     assert "AI-forward company" in g.evaluate(_p(full_criteria, "Business Operations Associate", ai_co)).flags
     hotel = ["We are an AI-powered revenue platform for hotels and resorts."] + ["Words about the role."] * 12
-    ev = g.evaluate(_p(full_criteria, "Analyst", hotel))
+    ev = g.evaluate(_p(full_criteria, "Business Operations Analyst", hotel))
     assert ev.passed and "Your edge: AI × hospitality" in ev.flags, ev.failures
     # Nov 9: finance titles drop even at a real-estate company (financial modelling); HR / product too
     reit = ["We are a REIT that owns multifamily apartments."] + ["Words about the role."] * 12
@@ -469,7 +472,7 @@ def test_edge_ai_in_hospitality_and_real_estate(full_criteria):
     assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, "Recruiting Coordinator", reit)).failures}
     assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, "Associate Product Manager | Housing", reit)).failures}
     # no AI: kept, but no edge flag
-    ev = g.evaluate(_p(full_criteria, "Analyst", reit))
+    ev = g.evaluate(_p(full_criteria, "Business Operations Analyst", reit))
     assert not any(f.startswith("Your edge") for f in ev.flags)
 
 

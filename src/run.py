@@ -904,6 +904,9 @@ def main(argv: list[str] | None = None) -> int:
                       if normalize(r["company"]) not in watch and (r["platform"], r["slug"].lower()) not in watched_boards]
         # Nov 9: big employers whose boards are almost all front-line jobs are not read at all; their
         # roles in your fields still arrive through the job searches. Untouched postings close.
+        skip = set((load_sources_config().get("boards") or {}).get("skip_platforms") or [])
+        if skip:                                  # big-company systems: not read (0 of 64 were yeses, Nov 9)
+            companies = [c for c in companies if c.platform not in skip]
         never_names = (load_sources_config().get("boards") or {}).get("never_watch") or []
         never = {normalize(n) for n in never_names}
         if never:

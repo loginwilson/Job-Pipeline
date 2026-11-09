@@ -20,8 +20,8 @@ T1, T2 = "2026-11-07T10:00:00+00:00", "2026-11-07T11:00:00+00:00"
 
 def test_muse_locations_cover_every_criteria_city(criteria):
     locs = muse_locations(criteria)
-    for want in ("New York, NY", "Manhattan, NY", "Jersey City, NJ", "Chicago, IL", "Miami, FL",
-                 "San Francisco, CA", "Toronto, Canada", "Austin, TX", "Vancouver, Canada"):
+    for want in ("New York, NY", "Manhattan, NY", "Jersey City, NJ",
+                 "San Francisco, CA", "Toronto, Canada", "Vancouver, Canada"):
         assert want in locs
 
 
@@ -172,9 +172,9 @@ def test_newgrad_list_discovery(monkeypatch, criteria):
          "url": "https://job-boards.greenhouse.io/acme/jobs/1"},
         {"company_name": "Faraway", "title": "Analyst", "active": True, "locations": ["Berlin, Germany"],
          "url": "https://jobs.lever.co/faraway/2"},
-        {"company_name": "Gone", "title": "Analyst", "active": False, "locations": ["Chicago, IL"],
+        {"company_name": "Gone", "title": "Analyst", "active": False, "locations": ["San Francisco, CA"],
          "url": "https://jobs.ashbyhq.com/gone/3"},
-        {"company_name": "Own Site", "title": "Analyst", "active": True, "locations": ["Chicago, IL"],
+        {"company_name": "Own Site", "title": "Analyst", "active": True, "locations": ["San Francisco, CA"],
          "url": "https://careers.ownsite.com/jobs/4"},
     ]
     monkeypatch.setattr(newgrad_lists, "fetch", lambda url, s=None: fake)

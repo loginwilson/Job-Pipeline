@@ -56,7 +56,7 @@ class Gates:
 
     def evaluate(self, p: Posting) -> Evaluation:
         ev = Evaluation(posting=p)
-        for rule in (self.real_opening, self.opt_related, self.field_fit, self.title_language, self.has_description, self.specialist_text, self.edge, self.employment_type, self.location, self.salary, self.experience,
+        for rule in (self.real_opening, self.opt_related, self.field_fit, self.role_focus, self.title_language, self.has_description, self.specialist_text, self.edge, self.employment_type, self.location, self.salary, self.experience,
                      self.seniority, self.work_authorization, self.technical_and_credentials, self.timing):
             rule(p, ev)
         ev.field = field_of(p, self.c)
@@ -169,6 +169,16 @@ class Gates:
             return
         data = find_terms(title, ff.get("data_title_terms") or [], first_only=True)
         ev.fail("field", f"{'pure data role' if data else 'not one of your fields'}: {title}")
+
+    def role_focus(self, p: Posting, ev: Evaluation) -> None:
+        """Nov 9: an allow-list, not a block-list. Only the role types you actually say yes to pass
+        (criteria field_fit.role_allow) - plus grad / rotational programs."""
+        allow = (self.c.get("field_fit", default={}) or {}).get("role_allow")
+        if not allow or ev.failures:
+            return
+        if PROGRAM_RX.search(p.title or "") or find_terms(p.title, allow, first_only=True):
+            return
+        ev.fail("field", f"not one of your role types: {p.title}")
 
     def _stretch_banking(self, p: Posting, ev: Evaluation) -> bool:
         """Banking work on real assets (real estate, infrastructure, hospitality / franchise

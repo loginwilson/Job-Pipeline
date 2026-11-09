@@ -42,13 +42,12 @@ location:
   tiers:
     1:
       NYC: [Manhattan, Brooklyn, Queens, Bronx, Staten Island, Jersey City, Hoboken]
+    # Nov 9 (your 153 decisions): every 1-5 was NYC or San Francisco; Texas, Florida and Chicago
+    # were 0 of 59, so they're out. California stays (secondary); Canada stays (no visa needed).
     2:
-      Chicago: [Chicago, Evanston, Oak Park]
-      Florida: [Miami, Miami Beach, Fort Lauderdale, West Palm Beach, Boca Raton, Tampa, Orlando]
       California: [San Francisco, Oakland, Palo Alto, Mountain View, Menlo Park, Redwood City, San Mateo, Sunnyvale, San Jose, Los Angeles, Santa Monica, Culver City, San Diego]
       Toronto: [Toronto, Mississauga, Markham, Vaughan, Oakville]
     3:
-      Texas: [Austin, Dallas, Houston]
       British Columbia: [Vancouver, Burnaby, Richmond, Surrey]
 
 
@@ -285,6 +284,19 @@ field_fit:
   domain_role_terms: [strategy, strategist, operations, development, acquisitions, acquisition, asset management, asset manager,
                       revenue management, revenue manager, planning, feasibility, research, consulting, consultant,
                       advisory, proptech, technology, data, business, corporate, project manager, development manager]
+  # Nov 9: ONLY these role types pass (from the 26 jobs you scored 1-5, which all match). Anything
+  # else drops, whatever company or field words it has. Grad / rotational programs also pass.
+  role_allow: [business operations, bizops, biz ops, strategy & operations, strategy and operations, strategy & ops,
+               strategic operations, operations associate, operations analyst, operations generalist, ops associate,
+               deployment strategist, deployment, implementation, growth strategy, growth operations, revenue operations,
+               revops, revenue strategy, data operations, product operations, founder associate, founders associate,
+               founder's associate, founding bizops, founding operations, founding strategy, founding ops, generalist,
+               chief of staff, special projects, strategy associate, strategy analyst, enterprise strategy, gtm strategy,
+               partnerships associate, gtm associate, ai operations, solutions associate,
+               consulting analyst, strategy consulting, strategy consultant, management consulting analyst,
+               acquisitions analyst, acquisitions associate, asset management analyst, asset management associate,
+               revenue management analyst, revenue management associate, development analyst, development associate,
+               hotel operations analyst, real estate operations]
   core_company_generic_titles: [analyst, associate, coordinator, generalist, specialist, fellow, fellowship, program, rotational, chief of staff, implementation, trainee]
   # "Your edge" flag (listed first): one of the above plus AI in the title or opening description
   ai_terms: [AI, A.I., artificial intelligence, machine learning, LLM, LLMs, agentic, AI agents, AI agent, generative AI, GenAI, conversational AI, AI-native, AI-powered]
