@@ -61,6 +61,12 @@ def _case_sensitive(line: str, terms: list[str]) -> str | None:
     return None
 
 
+def _negated(line: str, term: str) -> bool:
+    """'You will not be expected to write production code' / 'no coding required' (FSH, Nov 9)."""
+    return bool(re.search(r"\b(?:not|no|never|don't|doesn't|won't|without|isn't|aren't|nor)\b[^.;]{0,45}"
+                          + re.escape(term), line, re.I))
+
+
 def is_ai_builder(title: str, criteria: Criteria) -> bool:
     """Automation / GTM-engineering / forward-deployed titles you qualify for (see criteria).
     An 'engineer' title counts only as a GTM or automation engineer: 'Forward Deployed
@@ -99,10 +105,11 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
         softened = bool(find_terms(core, soft, first_only=True))
         # 7. technical
         lang = _case_sensitive(line, req.get("languages", []) or [])
-        phrase = [h for h in find_terms(line, req.get("phrases", []) or []) if h.term.lower() not in ok_phrases][:1]
+        phrase = [h for h in find_terms(line, req.get("phrases", []) or [])
+                  if h.term.lower() not in ok_phrases and not _negated(line, h.term)][:1]
         if lang or phrase:
             # Nov 9: you can do technical work with AI tools, but not when they expect proficiency
-            hard = find_terms(line, tech.get("always_drop_phrases") or [], first_only=True)
+            hard = [h for h in find_terms(line, tech.get("always_drop_phrases") or []) if not _negated(line, h.term)][:1]
             if hard:
                 hits.append(Hit("technical", line, f"expects you to {hard[0].term}"))
                 continue
@@ -120,7 +127,9 @@ def check(p: Posting, criteria: Criteria) -> list[Hit]:
                 continue
         # hard skills you don't have (e.g. financial modeling): softening wording keeps the line,
         # but a tool on the same line (Excel) doesn't - modeling in Excel is still modeling
-        if not softened:
+        # Nov 9 audit: "equally comfortable building a financial model, drafting a customer email..."
+        # describes a generalist; familiarity wording keeps the line here too
+        if not softened and not find_terms(line, tech.get("familiarity_words") or [], first_only=True):
             miss = find_terms(line, criteria.get("missing_skills", default=[]) or [], first_only=True)
             if miss:
                 hits.append(Hit("technical", line, f"requires {miss[0].term}"))

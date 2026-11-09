@@ -66,6 +66,12 @@ salary:
   # no pay posted (Nov 9): kept only for grad programs and AI-forward startups (flags below);
   # everything else - target companies and hotel / real-estate employers included - is dropped
   drop_unknown: true
+  # Nov 9 audit: no posted pay, but your core role type on a startup / tech company board (Ashby,
+  # Greenhouse, Lever ...) - Stripe, Palantir, Base Power, Middesk chiefs of staff / deployment roles
+  unknown_keep_titles: [deployment strategist, forward deployed, chief of staff, founder's associate, founders associate,
+                        founder associate, business operations, bizops, strategy & operations, strategy and operations,
+                        strategy & ops, product operations, ai operations, implementation, generalist, special projects]
+  unknown_keep_platforms: [ashby, greenhouse, lever, gem, workable, rippling, comeet]
   unknown_keep_flags: ["Your edge", "AI-forward company"]   # Nov 9: not "Preferred field" / target company
   markets:
     # program_floor: new-grad / rotational programs pass at this lower base (your choice, Nov 8:
@@ -95,14 +101,15 @@ experience:
                         # a range that starts at 1 or less ("0-2", "1-2 years") still passes
   # (Nov 9: no pay-based seniority rule - high pay isn't the reason, the posting's requirements are)
   # Experience asks with no number that still mean "several years" (drop; the line is shown in Dropped)
-  unstated_senior_terms: [track record of, presented to senior executives, presenting to senior executives,
-                          built and run, built and ran, you have led, you've led, led a team, led teams, managed a team,
+  # Nov 9 audit: generic 'track record of getting things done' / company-voice 'we built and ran' no longer count
+  unstated_senior_terms: [built and run, built and ran, presented to senior executives, presenting to senior executives,
+                          you have led, you've led, led a team, led teams, managed a team,
                           managing a team, people management, experience at an ai, experience at a high-growth,
                           experience at a high growth, experience at a fast-growing, internal job level,
                           prior experience as a, prior experience in a similar role, experience in a similar role,
-                          extensive experience, significant experience, deep experience, many years of experience, several years of experience, multiple years of experience, several years experience, spent years, seasoned professional, mentor junior, mentor less experienced, mentoring junior, mentor and develop junior, train and mentor less experienced, track record in, proven track record, proven experience leading, experience leading, you've lived in, you have lived in, first business operations lead, business operations lead, "operated, not just advised", negotiate it yourself, have navigated, manage and grow people, want to manage and grow, you've managed complex, managed complex, trusted advisor to c-suite, experience as a founder, experience as a chief of staff, as a founder associate, comparable startup operator, develop into a deal maker, strong experience in building, proven ability to turn data into clear business narratives]
+                          extensive experience, significant experience, deep experience, many years of experience, several years of experience, multiple years of experience, several years experience, spent years, seasoned professional, mentor junior, mentor less experienced, mentoring junior, mentor and develop junior, train and mentor less experienced, proven experience leading, experience leading, you've lived in, you have lived in, "operated, not just advised", negotiate it yourself, have navigated, manage and grow people, want to manage and grow, you've managed complex, managed complex, experience as a founder, experience as a chief of staff, as a founder associate, comparable startup operator, develop into a deal maker, strong experience in building, proven ability to turn data into clear business narratives, track record of leading, track record of managing, track record of building and scaling, track record of scaling, track record in an operations, you've built and run, you have built and run, you've built and scaled, you have built and scaled, our first business operations lead]
   # With NO years stated, these mid-level titles drop unless the title also has an entry cue (your choice, Nov 8)
-  no_years_mid_level_titles: [manager, account executive, consultant, officer, advisor, producer, broker, executive, partner]
+  no_years_mid_level_titles: [manager, account executive, officer, advisor, producer, broker, executive, business partner]   # Nov 9 audit: plain "Consultant" is the entry grade at consulting firms; "Partner Deployment Strategist" isn't a rank
   entry_title_cues: [associate, assistant, junior, jr, entry, new grad, graduate, early career, analyst, coordinator, trainee, program, apprentice, " I", "1", campus, university, "2027", "2026"]
   pass_clean: [new grad, new graduate, entry level, early career, recent graduate, "0-1 years"]
   # headings that mark requirement sections (also used by rules 7 and 8)
@@ -121,11 +128,11 @@ experience:
 seniority:
   drop_title_terms: [senior, "sr.", sr, staff, principal, director, "head of", head, vp, svp, evp, avp, "vice president", chief, "executive director", leader, experienced, lateral, experienced hire, FVP, SVP, RVP, first vice president, regional vice president, SMTS, senior member, distinguished, fellow engineer, supervisor, group account, group strategist, group product manager, group creative, group copy, group project manager, supv, associate partner, assoc partner, consulting partner, consult partner, dean, vice dean]
   senior_title_in_description: true   # "Experience Owner" whose text says "the Sr Experience Owner"
-  keep_titles_with: [chief of staff]   # level words inside these phrases don't count (years rule still applies)
+  keep_titles_with: [chief of staff, member of technical staff, member of the technical staff, member of staff, special projects staff, "associate/sr", "associate / sr", "associate/senior associate", "associate / senior associate", "(sr.)", "(sr)", "associate (senior)"]   # Nov 9 audit: MTS is a flat startup title; two-level titles include plain Associate   # level words inside these phrases don't count (years rule still applies)
   drop_level_numerals: [III, IV, V, "3", "4", "5"]   # "Analyst III", "Consultant 4"
   lead:
     drop_when_level: true          # "Lead Analyst", "Team Lead", "Product Lead"
-    keep_phrases: [lead generation, lead gen, onboarding lead]
+    keep_phrases: [lead generation, lead gen, onboarding lead, entry level, entry-level, lead management, lead agent, sales leads]
   manager_titles:
     keep: [associate product manager, product manager, program manager, project manager, implementation manager, customer success manager, account manager, partner manager, partnerships manager, product operations manager, assistant manager, manager in training, management trainee]
     drop_when:

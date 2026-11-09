@@ -301,7 +301,10 @@ class Gates:
                 ev.fail("salary", f"paid hourly, no amount posted (below the {floor:,} floor): {p.title}")
                 return
             keep = sal.get("unknown_keep_flags") or []
+            core_board = (p.raw is not None and p.raw.platform in (sal.get("unknown_keep_platforms") or [])
+                          and find_terms(p.title, sal.get("unknown_keep_titles") or [], first_only=True))
             if (sal.get("drop_unknown") and p.description_lines          # never on the title-only first pass
+                    and not core_board
                     and not any(f.startswith(k) for f in ev.flags for k in keep)
                     and not PROGRAM_RX.search(p.title or "")):
                 ev.fail("salary", "no salary posted, and not a grad program or an AI-forward company")
@@ -332,8 +335,12 @@ class Gates:
             top = max(asks, key=lambda a: a.years)
             ev.fail("experience", f"{top.years:g}+ yrs {top.kind}: {top.line}")
             return
-        vague = find_terms(p.description_lines, self.c.get("experience", "unstated_senior_terms", default=[]) or [],
-                           first_only=True)
+        # Nov 9 audit: company voice ("we built and ran our own servicer", "our first ... lead") isn't
+        # asking anything of you
+        vague = [h for h in find_terms(p.description_lines,
+                                       self.c.get("experience", "unstated_senior_terms", default=[]) or [])
+                 if not re.search(r"\b(?:we|we've|we have|our team|the company)\s+(?:\w+\s+){0,2}" + re.escape(h.term),
+                                  h.line, re.I)][:1]
         if vague:
             ev.fail("experience", f"'{vague[0].term}' (several years implied): {vague[0].line}")
             return
@@ -451,7 +458,9 @@ class Gates:
             ev.fail("start_date", f"title says '{hit[0].term}': {p.title}")
             return
         start = t.earliest_start()
-        if tm.get("drop_start_before_graduation") and start and start.start < grad:
+        # Nov 9 audit: a posting offering several cohorts ("January or summer 2027") is fine if one
+        # of them starts after graduation
+        if tm.get("drop_start_before_graduation") and t.starts and all(w.start < grad for w in t.starts):
             ev.fail("start_date", f"starts before graduation ({grad[0]}-{grad[1]:02d}): {start.text}")
             return
         if t.grad_windows and all(w.end < grad for w in t.grad_windows):

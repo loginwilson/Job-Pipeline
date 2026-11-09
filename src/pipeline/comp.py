@@ -150,6 +150,7 @@ def find_text_ranges(lines: list[str], criteria: Criteria, market_currency: str 
                                 period or "year", prefix.strip()[-80:], kind, text))
         if spans or not _PAY_WORDS.search(text):
             continue
+        singles: list[_Found] = []
         for m in _SINGLE_RE.finditer(text):
             if not (m.group("c1") or m.group("t1")) or (m.group("k1") or "").lower() == "m":
                 continue
@@ -162,8 +163,15 @@ def find_text_ranges(lines: list[str], criteria: Criteria, market_currency: str 
             if not (_PAY_WORDS.search(prefix) or re.match(r"\s*(?:base|salary)\b", after, re.I)):
                 continue                                  # "$90K base with $150K OTE" counts too
             kind = "ote" if _is_ote(prefix, criteria) or _is_ote(after, criteria) else "base"
-            found.append(_Found(v, v, _currency(m.group("c1"), m.group("t1"), market_currency),
-                                period or "year", prefix.strip()[-80:], kind, text))
+            singles.append(_Found(v, v, _currency(m.group("c1"), m.group("t1"), market_currency),
+                                  period or "year", prefix.strip()[-80:], kind, text))
+        # Nov 9 audit: "$99,750 (L1) or $117,600 (L2)" - two pay levels on one line are a range
+        base = [f for f in singles if f.kind == "base"]
+        if len(base) >= 2 and len({(f.currency, f.period) for f in base}) == 1:
+            b = base[0]
+            singles = [f for f in singles if f.kind != "base"] + [
+                _Found(min(f.lo for f in base), max(f.hi for f in base), b.currency, b.period, b.label, "base", text)]
+        found += singles
     return found
 
 

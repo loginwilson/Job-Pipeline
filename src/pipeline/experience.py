@@ -108,6 +108,20 @@ def parse_experience(kind_lines: list[tuple[str, str]], title: str, criteria: Cr
                                   r"supporting|running|owning|managing|selling|of\s+\w+)\b", tail, re.I)
             if not in_req_section and not _EXPERIENCE_WORD.search(tail) and not (as_requirement and field_tail):
                 continue
+            before = line[max(0, m.start() - 60):m.start()]
+            # Nov 9 audit: a timeline or the company's own history isn't an ask ("over the next 18
+            # months", "our 30+ years", "compresses 10 years of learning")
+            if re.search(r"\b(?:next|past|last|coming|within|compress\w*|spanning|for)\s+(?:the\s+)?$", before, re.I) or \
+                    (not in_req_section and re.search(r"\b(?:we|we've|our|company|firm|founded|history|decades?)\b[^.;]{0,40}$|^(?!.*\b(?:candidate|you|applicant|person|hire|someone|individual)\b).*\bhas\s+(?:over\s+|more than\s+|nearly\s+)?$",
+                                                      before, re.I)):
+                continue
+            # "a bachelor's degree, OR five years of equivalent experience": the degree is enough
+            if re.search(r"\bor\b[^.;]{0,25}$", before, re.I) and re.search(r"\bequivalent\b", tail[:40], re.I) \
+                    and re.search(r"\b(?:degree|bachelor)", line, re.I):
+                continue
+            # "zero to two years" / "from a recent graduate up to 2 years" allow 0 (Hyphenate, Instawork)
+            if re.search(r"\b(?:zero|0|no|none)\s*(?:to|-|–)\s*$", before, re.I) or re.search(r"\bup to\s*$", before, re.I):
+                lo = 0.0
             years = lo / 12 if unit.startswith("month") else lo
             if kind == "required":
                 ask_kind = "required"     # a required section stays required even if the line says "a plus"

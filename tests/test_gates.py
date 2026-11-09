@@ -710,3 +710,40 @@ def test_nov9_full_read_misses(full_criteria):
                        ("Deployment Strategist", "Basic technical acumen, including familiarity with APIs, JSON, SQL."),
                        ("Business Operations Associate", "Comfortable with no-code tools, plus strong written communication.")]:
         assert passes(title, req), (title, req)
+
+
+def test_nov9_near_miss_audit_false_drops(criteria, full_criteria):
+    """Nov 9 audit of 1,120 dropped jobs: real lines that were dropped by mistake."""
+    from src.pipeline.experience import parse_experience
+    from src.pipeline.qualifications import check
+    from src.config import Company
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.pipeline.normalize import normalize_posting
+    from src.sources.base import RawPosting
+    years = lambda kind, line: max([a.years for a in parse_experience([(kind, line)], "Associate", criteria).asks] or [0])
+    assert years("required", "Zero to two years of experience, or finishing your degree now") == 0
+    assert years("required", "Anywhere from a recent graduate up to 2 years of experience") == 0
+    assert years("required", "Help us scale the team over the next 18 months") == 0
+    assert years("other", "Star Mountain Capital has 30+ years of experience investing in small businesses") == 0
+    assert years("required", "Bachelor's degree in a related field, OR five years of equivalent experience") == 0
+    assert years("required", "The ideal candidate has 3+ years of experience in ops") == 3     # still an ask
+    g, m = Gates(full_criteria), LocationMatcher(full_criteria)
+
+    def ev(title, lines, platform="ashby"):
+        raw = RawPosting(platform=platform, slug="x", native_id=title, title=title, url="https://x", team=None,
+                         locations=["New York, NY"], workplace_type="in_office", employment_type="Full-time",
+                         country=None, description_lines=lines, comp_ranges=[])
+        return g.evaluate(normalize_posting(raw, Company("Acme", platform, "x"), full_criteria, m))
+    seniority = lambda t: "seniority" in {f.gate for f in ev(t, []).failures}
+    assert not seniority("Member of Technical Staff (Commercial) - Strategy Consulting track")
+    assert not seniority("Strategy and Operations, Associate/Sr Associate (Housing)")
+    assert not seniority("Technical Training Lead - (Entry Level)")
+    assert seniority("Senior Strategy & Operations Associate") and seniority("Staff Operations Analyst")
+    intro = ["## About", "We are an AI startup in New York building software for operations teams. " * 3]
+    tech = lambda line: {h.rule for h in check(ev("Generalist", intro + ["## Requirements", "- " + line]).posting, full_criteria)}
+    assert "technical" not in tech("You can write a script and read enough code to talk to an engineer. You will not be expected to write production code.")
+    assert "technical" not in tech("Equally comfortable building a financial model, drafting a customer email, or cleaning data")
+    assert "technical" in tech("You will write production code in our Python services")
+    pay = "\n".join(["## About", "We are a payments company. " * 10])
+    assert "salary" not in {f.gate for f in ev("Chief of Staff", pay.split("\n") + ["## Role", "- Partner with the CEO on priorities."]).failures}

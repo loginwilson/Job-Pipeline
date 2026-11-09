@@ -64,3 +64,11 @@ def test_pay_written_the_ways_postings_actually_write_it(criteria):
     assert (r.min, r.max, r.ote_only) == (60000, 70000, False)
     assert pay("Annual salary is $90k + equity.").midpoint_annual == 90000
     assert not pay("$120K OTE").known
+
+
+def test_two_pay_levels_on_one_line_are_a_range(criteria):
+    """Nov 9 audit: Recidiviz '$99,750 (L1) or $117,600 (L2)' was read as $99,750 only."""
+    from src.pipeline.comp import parse_comp
+    r = parse_comp(["The salary for this position is $99,750 (L1) or $117,600 (L2), depending on experience."],
+                   [], [], criteria, "US", None, "full_time", None)
+    assert (r.min, r.max) == (99750, 117600)

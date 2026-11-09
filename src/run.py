@@ -251,7 +251,10 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
             counts["reasons"]["duplicate (other search source)"] += 1
             continue        # the same job is already in from another search source
         # a full copy is kept only for postings that pass (the ones you may apply to)
-        snapshot = (p.raw.raw if p.raw else {}) if (ev.passed or store.is_tracked(p.posting_id)) else None
+        # also near misses (dropped by a late rule: pay, years, level, tech) so a rule fix can bring
+        # them back on the next re-check (Nov 9 audit)
+        near = bool(ev.failures) and ev.failures[0].gate in NEAR_MISS_GATES
+        snapshot = (p.raw.raw if p.raw else {}) if (ev.passed or near or store.is_tracked(p.posting_id)) else None
         info = store.upsert_posting(p.posting_id, p.company, p.title, p.url, p.posted_at,
                                     snapshot, ts, dedupe_key=key)
         if not is_search:
@@ -510,6 +513,8 @@ def _refetch_old_search_copies(store: Store, ts: str) -> None:
     log.info("JSearch re-fetch: %d stored results refreshed, %d no longer listed", len(got), len(ids) - len(got))
 
 
+NEAR_MISS_GATES = ("salary", "experience", "seniority", "technical", "credentials", "start_date", "work_authorization")
+_NEAR_SQL = "(s.passed = 1 OR s.gate IN ('salary','experience','seniority','technical','credentials','start_date'))"
 _STILL_PASSING: list = []      # stored search results that still pass (their boards get looked up)
 
 
@@ -519,12 +524,14 @@ def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> 
     src, changed = JSearchSource(), 0
     _refetch_old_search_copies(store, ts)
     rows = store.conn.execute(
-        "SELECT p.posting_id, p.company, p.title, p.url, p.snapshot FROM postings p JOIN scores s USING(posting_id) "
-        "WHERE p.posting_id LIKE 'jsearch:%' AND p.closed_at IS NULL AND p.merged_into IS NULL "
-        "AND s.passed = 1").fetchall()
+        "SELECT p.posting_id, p.company, p.title, p.url, p.snapshot, s.passed FROM postings p JOIN scores s "
+        "USING(posting_id) WHERE p.posting_id LIKE 'jsearch:%' AND p.closed_at IS NULL AND p.merged_into IS NULL "
+        "AND " + _NEAR_SQL).fetchall()
     for r in rows:
         try:
             job = (json.loads(r["snapshot"] or "null") or {}).get("job")
+            if not job and not r["passed"]:
+                continue              # a near miss stored without its text can't be re-read
             if not job:
                 # stored before full copies were kept: the title alone still decides most
                 # rules (field, level, job type), so a title that fails today's rules drops
@@ -557,7 +564,7 @@ def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> 
     muse_rows = store.conn.execute(
         "SELECT p.posting_id, p.company, p.snapshot FROM postings p JOIN scores s USING(posting_id) "
         "WHERE p.posting_id LIKE 'muse:%' AND p.closed_at IS NULL AND p.merged_into IS NULL "
-        "AND s.passed = 1 AND p.snapshot IS NOT NULL").fetchall()
+        "AND " + _NEAR_SQL + " AND p.snapshot IS NOT NULL").fetchall()
     muse = MuseSource(load_sources_config().get("muse") or {})
     for r in muse_rows:
         try:
@@ -588,7 +595,7 @@ def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> 
         for r in store.conn.execute(
                 "SELECT p.posting_id, p.company, p.snapshot FROM postings p JOIN scores s USING(posting_id) "
                 f"WHERE p.posting_id LIKE '{prefix}:%' AND p.closed_at IS NULL AND p.merged_into IS NULL "
-                "AND s.passed = 1 AND p.snapshot IS NOT NULL").fetchall():
+                "AND " + _NEAR_SQL + " AND p.snapshot IS NOT NULL").fetchall():
             try:
                 job = (json.loads(r["snapshot"]) or {}).get("job")
                 if not job:
