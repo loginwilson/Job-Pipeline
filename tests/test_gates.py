@@ -344,7 +344,7 @@ def test_field_fit_keeps_your_fields_only(full_criteria):
     g = Gates(full_criteria)
     fails = lambda t, lines=(): {f.gate for f in g.evaluate(_p(full_criteria, t, list(lines))).failures}
     for t in ("Hotel Revenue Management Analyst", "Real Estate Acquisitions Analyst", "Business Operations Associate",
-              "Strategy Consulting Analyst", "CMBS and Real Estate Finance Analyst", "Chief of Staff",
+              "Strategy Consulting Analyst", "Chief of Staff",
               "Deployment Strategist", "Revenue Operations Associate"):
         assert "field" not in fails(t), t
     # sales / marketing / consulting titles were turned off Nov 8 (still kept at a hospitality or
@@ -462,9 +462,10 @@ def test_edge_ai_in_hospitality_and_real_estate(full_criteria):
     hotel = ["We are an AI-powered revenue platform for hotels and resorts."] + ["Words about the role."] * 12
     ev = g.evaluate(_p(full_criteria, "Analyst", hotel))
     assert ev.passed and "Your edge: AI × hospitality" in ev.flags, ev.failures
-    # finance at a real-estate company is your concentration; HR / product there still drop
+    # Nov 9: finance titles drop even at a real-estate company (financial modelling); HR / product too
     reit = ["We are a REIT that owns multifamily apartments."] + ["Words about the role."] * 12
-    assert "field" not in {f.gate for f in g.evaluate(_p(full_criteria, "Financial Analyst", reit)).failures}
+    assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, "Financial Analyst", reit)).failures}
+    assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, "CMBS and Real Estate Finance Analyst", reit)).failures}
     assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, "Recruiting Coordinator", reit)).failures}
     assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, "Associate Product Manager | Housing", reit)).failures}
     # no AI: kept, but no edge flag
@@ -472,28 +473,20 @@ def test_edge_ai_in_hospitality_and_real_estate(full_criteria):
     assert not any(f.startswith("Your edge") for f in ev.flags)
 
 
-def test_investment_banking_jobs_with_strategy_titles(full_criteria):
-    """JPMorgan 'Strategic Financing Solutions – Associate' passed on 'strategic' in the title."""
+def test_investment_banking_jobs_drop_even_on_real_assets(full_criteria):
+    """Nov 9: the 'banking x real assets' stretch is OFF - IB / structured-finance roles are financial
+    modelling, which you've ruled out (Moelis, Morgan Stanley IB Real Estate, Deutsche Bank)."""
     from src.pipeline.gates import Gates
     g = Gates(full_criteria)
     body = ["The team sits between Banking and Sales and Trading in Capital Markets.",
             "Analyze Digital Infrastructure ABS and Whole Business Securitizations.",
             "Work with rating agencies and trading desks; prior investment banking front office role."] + ["More words."] * 10
-    # banking on real assets (infrastructure ABS, whole business securitizations) is a stretch:
-    # kept and flagged (your choice, Nov 8)
-    for title in ("Strategic Financing Solutions – Associate", "Strategy Associate"):
-        ev = g.evaluate(_p(full_criteria, title, body))
-        assert ev.passed and "Stretch: banking × real assets" in ev.flags, (title, ev.failures)
-    # other banking still drops: no real assets, or a trading / research / wealth title
-    plain = ["The team sits between Banking and Sales and Trading in Capital Markets.",
-             "Analyze leveraged finance and syndicated loans for technology clients.",
-             "Work with rating agencies and trading desks; prior investment banking front office role."] + ["More words."] * 10
-    for title in ("Strategic Financing Solutions – Associate", "Strategy Associate"):
-        assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, title, plain)).failures}, title
-    assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, "Equity Research Associate", body)).failures}
-    # the same vocabulary at a real-estate company is your concentration (CMBS / RE finance)
+    for title in ("Strategic Financing Solutions – Associate", "Investment Banking Real Estate Analyst - New York",
+                  "Structured Finance Analyst", "Equity Research Associate"):
+        assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, title, body)).failures}, title
     re_body = ["We are a commercial real estate lender."] + body
-    assert "field" not in {f.gate for f in g.evaluate(_p(full_criteria, "Strategy Associate", re_body)).failures}
+    for title in ("Commercial Real Estate Lending Analyst", "Analyst Real Estate Finance", "Hotel Valuation Analyst"):
+        assert "field" in {f.gate for f in g.evaluate(_p(full_criteria, title, re_body)).failures}, title
 
 
 def test_financial_modeling_is_a_missing_hard_skill(evaluate):

@@ -277,19 +277,19 @@ field_fit:
   core_company_terms:
     hospitality_travel: [hotel, hotels, hospitality, resort, resorts, travel company, travel platform, travel industry, airline, airlines, cruise, vacation rental, vacation rentals, short-term rental, short-term rentals, guest experience, restaurants, restaurant industry]
     real_estate: [real estate, property management, property managers, multifamily, apartment communities, apartments, renters, landlords, leasing teams, proptech, commercial real estate, homebuyers, homebuilders, real estate development, REIT, construction industry, construction technology, construction tech, future of construction, revolutionizing construction, construction companies, construction teams, general contractors, the nation's builders, housing providers, housing operators]
-  core_company_allows: [corporate_finance, banking_markets]
+  core_company_allows: []   # Nov 9: banking / finance titles drop even at real-estate & hotel companies (financial modelling)
   # at a hospitality / real-estate company, these general titles count too (sales / marketing
   # titles there still drop: you want business operations, Nov 8)
   # roles that make a hotel / real-estate title an office job in your field (with "Hotel", "Real Estate"...)
+  # (no finance / investment / valuation / capital-markets words: those are financial-modelling jobs, Nov 9)
   domain_role_terms: [strategy, strategist, operations, development, acquisitions, acquisition, asset management, asset manager,
-                      revenue management, revenue manager, investment, investments, underwriting analyst, finance, financial analyst,
-                      portfolio, capital markets, transactions, transaction, planning, feasibility, research, consulting, consultant,
-                      advisory, valuation, proptech, technology, data, business, corporate, project manager, development manager]
+                      revenue management, revenue manager, planning, feasibility, research, consulting, consultant,
+                      advisory, proptech, technology, data, business, corporate, project manager, development manager]
   core_company_generic_titles: [analyst, associate, coordinator, generalist, specialist, fellow, fellowship, program, rotational, chief of staff, implementation, trainee]
   # "Your edge" flag (listed first): one of the above plus AI in the title or opening description
   ai_terms: [AI, A.I., artificial intelligence, machine learning, LLM, LLMs, agentic, AI agents, AI agent, generative AI, GenAI, conversational AI, AI-native, AI-powered]
   unrelated_title_terms:  # drop, even when a kept-family word is also in the title
-    banking_markets: [investment banking, banker, banking, financing solutions, structured finance, structured financing, securitization, securitized, origination, syndicate, syndication, leveraged finance, debt capital markets, equity capital markets, DCM, ECM, M&A, mergers and acquisitions, trader, trading, quant, quantitative, capital markets, derivatives, securities, clearing, settlement, fixed income, equities, equity research, wealth, private bank, private client, brokerage, prime brokerage, fund accounting, portfolio manager, treasury, lending, loan, credit analyst, structured products, investment services, investment operations, fund services]
+    banking_markets: [investment bank, investment analyst, investment associate, investment strategist, private equity, credit analyst, credit associate, underwriter, investment banking, banker, banking, financing solutions, structured finance, structured financing, securitization, securitized, origination, syndicate, syndication, leveraged finance, debt capital markets, equity capital markets, DCM, ECM, M&A, mergers and acquisitions, trader, trading, quant, quantitative, capital markets, derivatives, securities, clearing, settlement, fixed income, equities, equity research, wealth, private bank, private client, brokerage, prime brokerage, fund accounting, portfolio manager, treasury, lending, loan, credit analyst, structured products, investment services, investment operations, fund services]
     legal_compliance: [legal, counsel, paralegal, compliance, regulatory, AML, KYC, audit, auditor, risk, fraud, investigator, sanctions, privacy]
     front_line: [attendant, laundry, lifeguard, housekeeper, housekeeping, room attendant, bell person, bellperson, bellman, valet,
                  doorman, concierge, front office, front desk, guest service, guest services, guest experience, guest relations,
@@ -300,7 +300,7 @@ field_fit:
     sales_reps: [real estate agent, realtor, buyer's agent, buyer agent, listing agent, leasing agent, real estate salesperson, licensed agent, development representative, sales representative, business development rep, sales development rep, account executive, BDR, SDR]   # Nov 9: "Strategic Business Development Representative" (Algolia)
     accounting_insurance: [accounting, accountant, tax, controller, controllership, bookkeeper, payroll, accounts payable, accounts receivable, underwriter, underwriting, claims, actuarial, actuary, insurance, reinsurance, broker]
     hr_people: [talent, recruiter, recruiting, talent acquisition, sourcer, human resources, HR, people partner, people operations, compensation, benefits, HRIS, talent operations]
-    corporate_finance: [financial analyst, FP&A, finance analyst, finance associate, financial planning, strategic finance, corporate finance, finance & strategy, finance and strategy]
+    corporate_finance: [valuation, real estate finance, finance analyst, underwriting, lending, financial analyst, FP&A, finance analyst, finance associate, financial planning, strategic finance, corporate finance, finance & strategy, finance and strategy]
     product: [product manager, product management, associate product manager, APM, product owner, product designer, program manager]
     design: [designer, graphic design, art director, illustrator, animator, video editor, videographer, photographer, UX, UI, motion design]
     tech: [IT, information technology, help desk, desktop support, security, cybersecurity, network, systems administrator, salesforce administrator, salesforce consultant, servicenow, workday, sap, dynamics 365, crm consultant, technical support, solutions architect, hardware, firmware, manufacturing, production, warehouse, big data, sales engineer, solutions engineer, GTM engineer, go to market engineer, sales engineering, solutions engineering, engineer]
@@ -333,6 +333,9 @@ banking_text:
 # dropping (your choice, Nov 8: probably a reach, still worth applying - e.g. JPMorgan
 # Strategic Financing Solutions: digital infrastructure ABS, whole business securitizations).
 stretch_banking:
+  # OFF since Nov 9: investment-banking / structured-finance analyst roles are financial-modelling
+  # jobs, which you've ruled out - every banking title drops, real estate or not
+  enabled: false
   min_terms: 2           # distinct real-asset terms in the description
   real_asset_terms: [real estate, commercial real estate, CRE, CMBS, RMBS, REIT, REITs, real assets, infrastructure, digital infrastructure, data centers, data center, cell towers, towers, fiber, project finance, hospitality, hotel, hotels, lodging, franchise, franchises, franchisors, whole business securitization, whole business securitizations, property, properties, multifamily, housing, land, single-family rental, net lease]
   # a banking title with one of these is read in full before it is dropped

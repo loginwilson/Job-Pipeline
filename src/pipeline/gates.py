@@ -175,7 +175,7 @@ class Gates:
         securitizations) is next to your real-estate-finance concentration: kept as a stretch.
         True = keep (flagged). With no description yet, a financing-type title waits for it."""
         sb = self.c.get("stretch_banking", default=None)
-        if not sb or find_terms(p.title, sb.get("never_titles") or [], first_only=True):
+        if not sb or sb.get("enabled") is False or find_terms(p.title, sb.get("never_titles") or [], first_only=True):
             return False
         if not p.description_lines:
             # title-only first pass: read the description before deciding
