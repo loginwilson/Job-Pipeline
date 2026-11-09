@@ -67,8 +67,10 @@ class MuseSource(Source):
         last = None
         for attempt in range(3):
             try:
-                r = session.get(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
-                                timeout=TIMEOUT_S)
+                headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+                if os.environ.get("MUSE_API_KEY"):
+                    headers["X-Muse-Api-Key"] = os.environ["MUSE_API_KEY"]   # some docs pass it as a header
+                r = session.get(url, headers=headers, timeout=TIMEOUT_S)
                 if r.status_code == 429 or r.status_code >= 500:
                     raise requests.HTTPError(f"HTTP {r.status_code}")
                 r.raise_for_status()
