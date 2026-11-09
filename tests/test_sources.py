@@ -88,3 +88,15 @@ def test_workable_parse_and_link():
     r = WorkableSource().parse(payload, "tickpick")[0]
     assert r.locations == ["New York, New York, United States"] and r.country == "US"
     assert r.native_id == "5840ECEB50" and "- Bachelor's degree" in r.description_lines
+
+
+def test_jsearch_skips_reposting_sites():
+    """Nov 9: trabajo.org / Jobrapido are reposting sites - never the link, never the employer."""
+    from src.sources.jsearch import JSearchSource
+    job = lambda emp, links: {"job_id": emp, "job_title": "Operations Associate", "employer_name": emp,
+                              "job_apply_link": links[0], "job_city": "New York", "job_state": "NY",
+                              "apply_options": [{"apply_link": u, "is_direct": False} for u in links]}
+    out = JSearchSource.__new__(JSearchSource).parse({"data": [
+        job("Jobrapido", ["https://us.jobrapido.com/1"]),
+        job("Skylight", ["https://us.trabajo.org/job-1", "https://jobs.ashbyhq.com/skylight/1"])]})
+    assert [(r.company, r.url) for r in out] == [("Skylight", "https://jobs.ashbyhq.com/skylight/1")]

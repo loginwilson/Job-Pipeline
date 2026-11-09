@@ -74,6 +74,17 @@ def job_details(job_ids: list[str], country: str = "us", session: requests.Sessi
         raise SourceError(f"JSearch job-details failed: {exc}") from exc
 
 
+
+# reposting sites (Nov 9: "Trabajo seems like a crappy posting board"): never the job's link,
+# never the employer
+_AGGREGATORS = re.compile(r"trabajo|jobrapido|jooble|talent\.com|lensa|jobilize|adzuna|ziprecruiter|"
+                          r"simplyhired|careerbuilder|jobsora|whatjobs|learn4good|bebee|jobleads|"
+                          r"recruit\.net|myjobhelper|jobcase|tallo|snagajob", re.I)
+
+
+def _aggregator(text: str) -> bool:
+    return bool(_AGGREGATORS.search(text or ""))
+
 class JSearchSource(Source):
     platform = "jsearch"
 
@@ -93,8 +104,13 @@ class JSearchSource(Source):
                 for name, items in (j.get("job_highlights") or {}).items():
                     lines.append("## " + name)
                     lines += [f"- {it}" for it in items or []]
+                if _aggregator(j.get("employer_name") or ""):
+                    continue                     # e.g. "Jobrapido": a job site, not the employer
                 options = j.get("apply_options") or []
-                url = next((o["apply_link"] for o in options if o.get("is_direct")), None) or j.get("job_apply_link") or ""
+                links = [o.get("apply_link") or "" for o in options if o.get("is_direct")] + \
+                        [o.get("apply_link") or "" for o in options] + [j.get("job_apply_link") or ""]
+                # the employer's own page, not a reposting site (trabajo.org and the like)
+                url = next((u for u in links if u and not _aggregator(u)), None) or next((u for u in links if u), "")
                 emp = j.get("job_employment_type") or ", ".join(j.get("job_employment_types") or [])
                 out.append(RawPosting(
                     platform=self.platform, slug=re.sub(r"[^a-z0-9]+", "-", (j.get("employer_name") or "").lower()).strip("-"),
