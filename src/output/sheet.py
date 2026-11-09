@@ -304,13 +304,27 @@ _SEARCH_PREFIXES = {"muse", "jsearch", "adzuna", "jobspipe", "serpapi"}
 _CO_SUFFIX = re.compile(r"\b(?:inc|llc|ltd|corp|corporation|co|company|labs?|technologies|technology|hq|ai|the)\b")
 
 
+_PLACE_TAIL = re.compile(
+    r"\b(?:remote|hybrid|on-?site|in[- ]office|new york|nyc|ny|manhattan|brooklyn|jersey city|hoboken|nj|"
+    r"san francisco|sf|bay area|california|ca|los angeles|la|san diego|palo alto|mountain view|chicago|il|miami|"
+    r"florida|fl|tampa|orlando|toronto|ontario|vancouver|canada|austin|dallas|houston|texas|tx|boston|seattle|"
+    r"denver|atlanta|washington|dc|london|us|usa|u\.s\.|united states|north america|americas|emea|apac)\b")
+
+
 def _same_job_key(c: dict) -> str:
     """Company + title, loosely: 'Clay Labs, Inc.' = 'Clay'; punctuation, seniority marks
     in brackets and the city are ignored, so one job found by two sources shows once."""
     co = re.sub(r"[^a-z0-9]", "", _CO_SUFFIX.sub(" ", (c.get("Company") or "").lower()))
     title = re.sub(r"^=HYPERLINK\(\"[^\"]*\",\s*\"(.*)\"\)$", r"\1", c.get("Role") or "")
     title = re.sub(r"\([^)]*\)|\[[^\]]*\]", " ", title.lower())
-    title = re.sub(r"\s[-–—|,]\s.*$", "", title)            # 'Ops Associate - New York' / '| Remote'
+    # 'Ops Associate - New York' / '| Remote' is the same job as 'Ops Associate'; a team after the
+    # dash is not ('Chief of Staff - Finance' and 'Chief of Staff - Product' are two jobs)
+    m = re.search(r"\s[-–—|,]\s(.*)$", title)
+    if m:
+        tail = m.group(1)
+        city = re.split(r" \(tier| ·|,", (c.get("Location") or "").lower())[0].strip()
+        if _PLACE_TAIL.search(tail) or (city and city in tail):
+            title = title[:m.start()]
     return co + "|" + " ".join(re.findall(r"[a-z0-9]+", title))
 
 

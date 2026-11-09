@@ -23,6 +23,7 @@ import logging
 import re
 import sys
 import time
+from datetime import datetime
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -279,6 +280,10 @@ def store_evaluations(store: Store, company, evals: list[Evaluation], ts: str, c
     return counts
 
 
+class _OutOfTime(Exception):
+    """This run's time for company boards ran out before this board was started."""
+
+
 def add_stats(stats: dict, source: str, c: dict) -> None:
     s = stats.setdefault(source, {"seen": 0, "new": 0, "passed": 0, "new_passed": 0, "reasons": Counter()})
     for k in ("seen", "new", "passed", "new_passed"):
@@ -338,6 +343,18 @@ def run_jsearch(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> l
     sess = requests.Session()
     for pair, first in plan:
         window = cfg.get("first_fill_window", "month") if first else cfg.get("window", "3days")
+        if not first:
+            # the rotation takes weeks to come back to a pair: look back as far as it has been
+            last = store.conn.execute("SELECT last_searched FROM search_pairs WHERE source='jsearch' AND pair=?",
+                                      (pair,)).fetchone()
+            try:
+                gap = (datetime.fromisoformat(ts) - datetime.fromisoformat(last["last_searched"])).days if last else 99
+            except (TypeError, ValueError):
+                gap = 99
+            if gap > 7:
+                window = "month"
+            elif gap > 3:
+                window = "week"
         try:
             payload = jsearch_search(pair, pairs[pair].get("country", "us"), window, sess)
         except SourceError as exc:
@@ -865,9 +882,22 @@ def main(argv: list[str] | None = None) -> int:
     serp_evals = None
     if store is not None and not single:
         cfg = load_sources_config()
-        muse_evals, muse_complete = run_muse(store, cfg.get("muse") or {}, criteria, gates, matcher, ts)
-        recheck_search_postings(store, criteria, gates, matcher, ts)     # before today's searches use the budget
-        jsearch_evals = run_jsearch(store, cfg.get("jsearch") or {}, criteria, gates, matcher, ts)
+        # each step is guarded: one failing source never stops the run before the Sheet is written
+        try:
+            muse_evals, muse_complete = run_muse(store, cfg.get("muse") or {}, criteria, gates, matcher, ts)
+        except Exception as exc:
+            log.error("The Muse error: %s", exc)
+            totals["errors"] += 1
+        try:
+            recheck_search_postings(store, criteria, gates, matcher, ts)     # before today's searches use the budget
+        except Exception as exc:
+            log.error("re-check error: %s", exc)
+            totals["errors"] += 1
+        try:
+            jsearch_evals = run_jsearch(store, cfg.get("jsearch") or {}, criteria, gates, matcher, ts)
+        except Exception as exc:
+            log.error("JSearch error: %s", exc)
+            totals["errors"] += 1
         try:
             adzuna_evals = run_adzuna(store, cfg.get("adzuna") or {}, criteria, gates, matcher, ts)
         except Exception as exc:  # a new source never stops the run
@@ -984,8 +1014,14 @@ def main(argv: list[str] | None = None) -> int:
         jobs.append((company, payload, hours, cache, set(cache or {})))
 
     # b) fetch + rules in parallel (network-bound)
+    # a run that outlasts the job's time limit is killed before it writes the Sheet, so boards
+    # not started within the budget wait for the next run (nothing of theirs is closed)
+    deadline = t0 + 60 * float(os.environ.get("PIPELINE_BOARD_MINUTES", "34"))
+
     def _poll(job):
         company, payload, _, cache, _ = job
+        if payload is None and time.time() > deadline:
+            return None, _OutOfTime()
         try:
             return evaluate_company(company, payload, criteria, gates, matcher, None, ts, cache), None
         except Exception as exc:      # one bad board never stops the run
@@ -994,10 +1030,14 @@ def main(argv: list[str] | None = None) -> int:
         results = list(pool.map(_poll, jobs))
 
     # c) store sequentially, in watchlist order
+    skipped_for_time = 0
     for (company, payload, hours, cache, before), (evals, exc) in zip(jobs, results):
         if cache is not None:
             store.save_details(f"{company.platform}:{company.slug}:",
                                {k: v for k, v in cache.items() if k not in before}, ts)
+        if isinstance(exc, _OutOfTime):
+            skipped_for_time += 1
+            continue
         if exc is not None:
             log.error("board error: %s:%s %s", company.platform, company.slug, exc)
             totals["errors"] += 1
@@ -1009,19 +1049,29 @@ def main(argv: list[str] | None = None) -> int:
             print(report(evals, company.name, verbose=not args.brief))
             print()
             continue
+        first_empty = store.board_first_empty(company.name, len(evals))
         status = store.board_ok(company.name, company.platform, len(evals), ts)
         if status != "OK":
             log.warning("%s board: %s", company.name, status)
         if store is not None:
             store.source_complete(f"board:{company.platform}:{company.slug}", ts)
         board_keys |= {dedupe_key(e) for e in evals}
-        board_companies.add(normalize(company.name))
-        if getattr(evals, "truncated", False):
+        truncated = getattr(evals, "truncated", False)
+        if truncated:
             log.warning("%s: more postings than one poll can read; nothing marked closed", company.name)
-        c = store_evaluations(store, company, evals, ts, criteria, close=not getattr(evals, "truncated", False))
+        if first_empty:
+            # a board that had postings and now answers with none is more often a glitch than a
+            # hiring freeze: nothing closes until the next poll says so again
+            log.warning("%s: board came back empty; postings stay open until it repeats", company.name)
+        if not truncated and not first_empty:
+            board_companies.add(normalize(company.name))    # fully read: a job-site copy not on it is stale
+        c = store_evaluations(store, company, evals, ts, criteria, close=not truncated and not first_empty)
         store.note_board_passes(company.name, c["passed"], ts)
         add_stats(stats, SOURCE_NAMES.get(company.platform, company.platform), c)
         log.info("%s: %d postings, %d new, %d passed", company.name, c["seen"], c["new"], c["passed"])
+
+    if skipped_for_time:
+        log.warning("%d boards not reached in this run's time; they are read on the next run", skipped_for_time)
 
     # 4. search postings not already on a company board
     if muse_evals is not None:
@@ -1086,6 +1136,9 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Sheet: %s (%d requests in one write)",
                  ", ".join(f"{t} {n}" for t, n in res["tabs"].items()), res["requests"])
     store.close()
+    if not single and totals["errors"] and totals["boards_polled"] == 0:
+        log.error("no company board could be read this run")
+        return 1          # shows as a failed run (GitHub emails you) instead of a quiet green one
     return 0
 
 

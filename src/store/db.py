@@ -224,9 +224,19 @@ class Store:
         return len(missing)
 
     def compact(self) -> None:
-        """Drop full copies of postings that fail the rules; reclaim space now and then."""
-        self.conn.execute("UPDATE postings SET snapshot=NULL WHERE snapshot IS NOT NULL AND posting_id IN "
-                          "(SELECT posting_id FROM scores WHERE passed=0)")
+        """Drop full copies of postings that fail the rules; reclaim space now and then.
+        Kept: open job-site results dropped by a late rule (pay, years, level, tech) - the re-check
+        needs their text to bring them back after a rule fix - and anything you marked or added."""
+        self.conn.execute(
+            "UPDATE postings SET snapshot=NULL WHERE snapshot IS NOT NULL AND posting_id IN "
+            "(SELECT posting_id FROM scores WHERE passed=0) "
+            "AND NOT ((" + _SEARCH_LIKE + ") AND closed_at IS NULL AND merged_into IS NULL AND posting_id IN "
+            "(SELECT posting_id FROM scores WHERE gate IN "
+            "('salary','experience','seniority','technical','credentials','start_date','work_authorization'))) "
+            "AND posting_id NOT IN (SELECT posting_id FROM forced_in) "
+            "AND posting_id NOT IN (SELECT posting_id FROM owner_state WHERE "
+            "COALESCE(decision,'') NOT IN ('', 'Pending') OR COALESCE(interest,'')<>'' OR "
+            "COALESCE(status,'')<>'' OR COALESCE(notes,'')<>'')")
         self.conn.commit()
         if str(self.path) != ":memory:":
             self.conn.execute("VACUUM")
@@ -523,6 +533,13 @@ class Store:
             "count_last=excluded.count_last, status=excluded.status",
             (company, platform, ts, count, prev_count, status))
         return status
+
+    def board_first_empty(self, company: str, count: int) -> bool:
+        """True when a board that had postings at its last poll answers with none (call before board_ok)."""
+        if count:
+            return False
+        prev = self.conn.execute("SELECT count_last FROM board_health WHERE company=?", (company,)).fetchone()
+        return prev is not None and bool(prev["count_last"])
 
     def note_board_passes(self, company: str, passed: int, ts: str) -> None:
         self.conn.execute("UPDATE board_health SET first_polled=COALESCE(first_polled, ?) WHERE company=?", (ts, company))
