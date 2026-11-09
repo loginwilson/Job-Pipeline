@@ -907,6 +907,13 @@ def main(argv: list[str] | None = None) -> int:
         skip = set((load_sources_config().get("boards") or {}).get("skip_platforms") or [])
         if skip:                                  # big-company systems: not read (0 of 64 were yeses, Nov 9)
             companies = [c for c in companies if c.platform not in skip]
+            for plat in skip:                     # their untouched postings close; anything you scored stays
+                store.conn.execute(
+                    "UPDATE postings SET closed_at=? WHERE closed_at IS NULL AND merged_into IS NULL "
+                    "AND posting_id LIKE ? AND posting_id NOT IN (SELECT posting_id FROM owner_state "
+                    "WHERE COALESCE(interest, '') <> '' OR COALESCE(status, '') <> '' "
+                    "OR COALESCE(decision, '') NOT IN ('', 'Pending'))", (ts, f"{plat}:%"))
+            store.commit()
         never_names = (load_sources_config().get("boards") or {}).get("never_watch") or []
         never = {normalize(n) for n in never_names}
         if never:
