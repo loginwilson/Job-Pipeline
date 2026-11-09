@@ -328,6 +328,37 @@ def _same_job_key(c: dict) -> str:
     return co + "|" + " ".join(re.findall(r"[a-z0-9]+", title))
 
 
+def _company_words(c: dict) -> list[str]:
+    return re.findall(r"[a-z0-9]+", _CO_SUFFIX.sub(" ", (c.get("Company") or "").lower()))
+
+
+def _merge_company_variants(groups: dict[str, list[dict]]) -> None:
+    """'Finch' (job site) and 'Finch Legal' (its own board) are one company: the same title in the
+    same city under a company name that is the other's first word(s) is the same job (Nov 9)."""
+    city = lambda r: re.split(r" \(tier| ·|,", (r["cells"].get("Location") or "").lower())[0].strip()
+    by_title: dict[str, list[str]] = {}
+    for k in groups:
+        by_title.setdefault(k.split("|", 1)[1], []).append(k)
+    for keys in by_title.values():
+        if len(keys) < 2:
+            continue
+        keys.sort(key=lambda k: len(_company_words(groups[k][0]["cells"])))
+        for i, short in enumerate(keys):
+            if short not in groups:
+                continue
+            sw = _company_words(groups[short][0]["cells"])
+            if not sw:
+                continue
+            for long in keys[i + 1:]:
+                if long not in groups:
+                    continue
+                lw = _company_words(groups[long][0]["cells"])
+                if lw[:len(sw)] == sw and len(lw) > len(sw) \
+                        and {city(r) for r in groups[short]} & {city(r) for r in groups[long]}:
+                    groups[long].extend(groups.pop(short))
+                    break
+
+
 def _dedupe(rows: list[dict]) -> list[dict]:
     """No duplicates on the Sheet (Nov 9). Rows you touched always stay; among untouched
     copies of one job, keep the open one, in your best city, from the company board, found earliest."""
@@ -340,6 +371,7 @@ def _dedupe(rows: list[dict]) -> list[dict]:
     groups: dict[str, list[dict]] = {}
     for r in rows:
         groups.setdefault(_same_job_key(r["cells"]), []).append(r)
+    _merge_company_variants(groups)
     keep = set()
     for g in groups.values():
         g.sort(key=rank)

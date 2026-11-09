@@ -126,3 +126,20 @@ def test_catch_all_posting_is_not_an_opening(full_criteria):
              "specific role that matches their skillsets. Let us know what you'd like to work on!"])
     assert ev.failures and ev.failures[0].gate == "not_a_real_opening"
     assert _ev(full_criteria, "Generalist", BODY + [PAY]).passed
+
+
+def test_job_site_copy_under_a_shorter_company_name_is_a_duplicate():
+    from src.output.sheet import _dedupe
+
+    def row(co, role, loc, pid, interest=""):
+        return {"cells": {"Company": co, "Role": role, "Location": loc, "Interest": interest, "Status": "",
+                          "Notes": "", "Next step": "", "Decision": "Pending"},
+                "closed": False, "tier": 1, "posting_id": pid, "first_seen": "2026-11-09"}
+    rows = [row("Finch", "Strategy & Operations, Demands", "NYC (tier 1) · in office", "jobspipe::1"),
+            row("Finch Legal", "Strategy & Operations, Demands", "NYC (tier 1) · in office", "ashby:f:2", "3"),
+            row("Finch Legal", "Revenue Operations", "NYC (tier 1) · in office", "ashby:f:3"),
+            row("Apple", "Operations Associate", "NYC (tier 1)", "ashby:a:4"),
+            row("Apple Leisure Group", "Operations Associate", "Chicago (tier 2)", "ashby:alg:5")]
+    out = [r["posting_id"] for r in _dedupe(rows)]
+    assert "jobspipe::1" not in out and "ashby:f:2" in out and "ashby:f:3" in out
+    assert "ashby:a:4" in out and "ashby:alg:5" in out      # different city: not merged
