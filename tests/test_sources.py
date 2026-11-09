@@ -144,3 +144,33 @@ def test_yc_startups_in_your_cities_become_board_guesses(criteria):
     assert ("ashby", "canarytechnologies") in c and ("lever", "canarytechnologies") in c
     assert ("ashby", "goradar") in c and ("ashby", "radar") not in c      # generic name: website name only
     assert not any(v == "Faraway Co" for v in c.values())                 # not in your cities
+
+
+def test_adzuna_parse_and_daily_plan(criteria, monkeypatch):
+    """Nov 9: Adzuna (free key). Estimated salaries aren't used; job sites aren't employers."""
+    import src.run as run
+    import src.sources.adzuna as adz
+    from src.store.db import Store
+    payload = {"results": [
+        {"id": 1, "title": "Business Operations Associate", "description": "Own ops projects across the company.",
+         "redirect_url": "https://www.adzuna.com/details/1", "created": "2026-11-08T10:00:00Z",
+         "company": {"display_name": "Acme AI"}, "location": {"display_name": "New York, NY"},
+         "salary_min": 110000, "salary_max": 130000, "salary_is_predicted": "0", "contract_time": "full_time"},
+        {"id": 2, "title": "Ops Analyst", "description": "x", "redirect_url": "https://x/2",
+         "company": {"display_name": "Acme AI"}, "location": {"display_name": "New York, NY"},
+         "salary_min": 50000, "salary_max": 60000, "salary_is_predicted": "1"},
+        {"id": 3, "title": "Ops", "company": {"display_name": "Jobrapido"}, "location": {"display_name": "NYC"}}]}
+    raws = adz.AdzunaSource().parse(payload)
+    assert [r.native_id for r in raws] == ["1", "2"] and raws[0].company == "Acme AI"
+    assert raws[0].comp_ranges[0].min == 110000 and raws[1].comp_ranges == []      # an estimate isn't pay
+    asked = []
+    monkeypatch.setenv("ADZUNA_APP_ID", "x")
+    monkeypatch.setenv("ADZUNA_APP_KEY", "y")
+    monkeypatch.setattr(adz, "search", lambda what, where, max_days_old, session: asked.append((what, where)) or payload)
+    cfg = {"enabled": True, "requests_per_day": 2, "focus": [{"keywords": "bizops", "city": "New York, NY"}],
+           "keywords": ["hotel"], "cities": ["Miami, FL", "Chicago, IL"]}
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    evs = run.run_adzuna(Store(":memory:"), cfg, criteria, Gates(criteria), LocationMatcher(criteria),
+                         "2026-11-09T10:00:00+00:00")
+    assert asked == [("bizops", "New York, NY"), ("hotel", "Miami, FL")] and len(evs) == 4

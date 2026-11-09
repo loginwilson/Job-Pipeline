@@ -136,9 +136,9 @@ def _fetch_with_details(src, company, criteria, gates, matcher, store, ts, cache
     return raws
 
 
-SOURCE_NAMES = {"lever": "Lever", "greenhouse": "Greenhouse", "ashby": "Ashby", "muse": "The Muse",
+SOURCE_NAMES = {"lever": "Lever", "greenhouse": "Greenhouse", "ashby": "Ashby", "muse": "The Muse", "adzuna": "Adzuna",
                 "smartrecruiters": "SmartRecruiters", "jsearch": "JSearch", "workday": "Workday", "oracle": "Oracle", "workable": "Workable"}
-SEARCH_PLATFORMS = ("muse", "jsearch")
+SEARCH_PLATFORMS = ("muse", "jsearch", "adzuna")
 
 
 def evaluate_raws(raws, criteria, gates, matcher, company: Company | None = None) -> list[Evaluation]:
@@ -347,6 +347,42 @@ def run_jsearch(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> l
     store.spend("jsearch", spent, ts)
     store.commit()
     log.info("JSearch: %d searches, %d postings", spent, len(evals))
+    return evals
+
+
+def run_adzuna(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> list[Evaluation] | None:
+    """Adzuna: today's budget on your focus searches first, then the least-recently searched pairs."""
+    from .sources.adzuna import AdzunaSource, search as adzuna_search
+    if not cfg.get("enabled") or not (os.environ.get("ADZUNA_APP_ID") and os.environ.get("ADZUNA_APP_KEY")):
+        return None
+    budget = store.budget_left("adzuna", int(cfg.get("requests_per_day", 0)), ts)
+    if budget <= 0:
+        return None
+    pairs = {f"{kw} in {c}": (kw, c) for kw in cfg.get("keywords", []) for c in cfg.get("cities", [])}
+    focus = {f"{f['keywords']} in {f['city']}": (f["keywords"], f["city"]) for f in cfg.get("focus") or []}
+    pairs.update(focus)
+    done_today = {r["pair"] for r in store.conn.execute(
+        "SELECT pair FROM search_pairs WHERE source='adzuna' AND substr(last_searched, 1, 10)=?", (ts[:10],))}
+    plan = [(p, False) for p in focus if p not in done_today][:budget]
+    plan += store.next_pairs("adzuna", [p for p in pairs if p not in focus and p not in done_today],
+                             budget - len(plan))
+    src, evals, spent, sess = AdzunaSource(), [], 0, requests.Session()
+    for pair, first in plan:
+        what, where = pairs[pair]
+        try:
+            payload = adzuna_search(what, where, max_days_old=int(cfg.get("first_fill_days", 30) if first
+                                                                   else cfg.get("max_days_old", 3)), session=sess)
+        except SourceError as exc:
+            log.error("Adzuna: %s", exc)
+            store.board_error("Adzuna (search)", "adzuna", str(exc), ts)
+            break
+        spent += 1
+        raws = src.parse(payload)
+        store.mark_pair("adzuna", pair, len(raws), ts)
+        evals += evaluate_raws(raws, criteria, gates, matcher)
+    store.spend("adzuna", spent, ts)
+    store.commit()
+    log.info("Adzuna: %d searches, %d postings", spent, len(evals))
     return evals
 
 
@@ -683,16 +719,21 @@ def main(argv: list[str] | None = None) -> int:
     t0 = time.time()
 
     # 1–2. search sources + discovery (full runs only)
-    muse_evals, muse_complete, jsearch_evals = (None, False, None)
+    muse_evals, muse_complete, jsearch_evals, adzuna_evals = (None, False, None, None)
     if store is not None and not single:
         cfg = load_sources_config()
         muse_evals, muse_complete = run_muse(store, cfg.get("muse") or {}, criteria, gates, matcher, ts)
         recheck_search_postings(store, criteria, gates, matcher, ts)     # before today's searches use the budget
         jsearch_evals = run_jsearch(store, cfg.get("jsearch") or {}, criteria, gates, matcher, ts)
+        try:
+            adzuna_evals = run_adzuna(store, cfg.get("adzuna") or {}, criteria, gates, matcher, ts)
+        except Exception as exc:  # a new source never stops the run
+            log.error("Adzuna error: %s", exc)
         known = {normalize(c.name) for c in companies} | {normalize(r["company"]) for r in store.discovered_boards()}
-        if muse_evals or jsearch_evals:
+        if muse_evals or jsearch_evals or adzuna_evals:
             try:
-                discover(store, (muse_evals or []) + (jsearch_evals or []), cfg.get("discovery") or {}, known, ts)
+                discover(store, (muse_evals or []) + (jsearch_evals or []) + (adzuna_evals or []),
+                         cfg.get("discovery") or {}, known, ts)
             except Exception as exc:  # discovery problems never stop the run
                 log.error("discovery error: %s", exc)
                 totals["errors"] += 1
@@ -809,9 +850,16 @@ def main(argv: list[str] | None = None) -> int:
                               board_companies=board_companies)
         add_stats(stats, "JSearch", c)
         log.info("JSearch: %d postings stored, %d passed", c["seen"], c["passed"])
+    if adzuna_evals is not None:
+        c = store_evaluations(store, Company(name="Adzuna", platform="adzuna", slug="search"), adzuna_evals, ts,
+                              criteria, prefix="adzuna:__none__", board_keys=board_keys,
+                              board_companies=board_companies)
+        add_stats(stats, "Adzuna", c)
+        log.info("Adzuna: %d postings stored, %d passed", c["seen"], c["passed"])
     if store is not None and not single:
         js = (load_sources_config().get("jsearch") or {})
         store.close_stale("jsearch:", int(js.get("close_after_days_unseen", 7)), ts)
+        store.close_stale("adzuna:", int((load_sources_config().get("adzuna") or {}).get("close_after_days_unseen", 7)), ts)
     if store is None:
         return 0
     store.mark_evergreen(int(criteria.get("freshness", "evergreen_after_days", default=180)), ts)
