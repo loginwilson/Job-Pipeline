@@ -261,9 +261,8 @@ class Gates:
             keep = sal.get("unknown_keep_flags") or []
             if (sal.get("drop_unknown") and p.description_lines          # never on the title-only first pass
                     and not any(f.startswith(k) for f in ev.flags for k in keep)
-                    and not PROGRAM_RX.search(p.title or "")
-                    and (p.company or "").strip().lower() not in self.targets):
-                ev.fail("salary", "no salary posted, and not a target company, grad program or your edge")
+                    and not PROGRAM_RX.search(p.title or "")):
+                ev.fail("salary", "no salary posted, and not a grad program or an AI-forward company")
                 return
             ev.flag("Salary unknown")
             return

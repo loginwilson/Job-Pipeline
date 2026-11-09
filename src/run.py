@@ -902,6 +902,22 @@ def main(argv: list[str] | None = None) -> int:
         companies += [Company(name=r["company"], platform=r["platform"], slug=r["slug"])
                       for r in store.discovered_boards()
                       if normalize(r["company"]) not in watch and (r["platform"], r["slug"].lower()) not in watched_boards]
+        # Nov 9: big employers whose boards are almost all front-line jobs are not read at all; their
+        # roles in your fields still arrive through the job searches. Untouched postings close.
+        never_names = (load_sources_config().get("boards") or {}).get("never_watch") or []
+        never = {normalize(n) for n in never_names}
+        if never:
+            companies = [c for c in companies if normalize(c.name) not in never]
+            for name in never_names:
+                store.conn.execute(
+                    "UPDATE postings SET closed_at=? WHERE closed_at IS NULL AND merged_into IS NULL "
+                    "AND posting_id NOT LIKE 'jsearch:%' AND posting_id NOT LIKE 'adzuna:%' "
+                    "AND posting_id NOT LIKE 'serpapi:%' AND posting_id NOT LIKE 'jobspipe:%' "
+                    "AND lower(trim(company)) = ? "
+                    "AND posting_id NOT IN (SELECT posting_id FROM owner_state WHERE COALESCE(interest, '') <> '' "
+                    "OR COALESCE(status, '') <> '' OR COALESCE(decision, '') NOT IN ('', 'Pending'))",
+                    (ts, name.strip().lower()))
+            store.commit()
 
     # 3. company boards
     board_keys: set[str] = set()

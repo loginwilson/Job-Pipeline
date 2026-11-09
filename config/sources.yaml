@@ -124,6 +124,9 @@ jsearch:                    # Google for Jobs via JSearch (OpenWeb Ninja) — ke
   close_after_days_unseen: 7
 
 boards:                     # how often each kind of company board is polled (default: every run, hourly)
+  # Nov 9: whole boards that are almost all hotel-floor / leasing jobs - not read; their corporate
+  # roles still come in through Google Jobs / Adzuna searches
+  never_watch: [Hilton, Marriott International, Greystar, Cushman & Wakefield, Expedia Group]
   every_hours:
     oracle: 6               # same for Oracle career sites
     workday: 6              # large career sites, details fetched only for postings that could pass

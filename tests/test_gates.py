@@ -523,7 +523,7 @@ def test_grad_programs_pass_at_90k(evaluate):
 
 
 def test_unknown_salary_rule(criteria):
-    """Nov 9: no pay posted -> dropped, unless a target company, a grad program or your edge."""
+    """Nov 9: no pay posted -> dropped, unless a grad program or an AI-forward company."""
     import copy
     from src.config import Criteria
     from src.pipeline.gates import Gates
@@ -533,8 +533,8 @@ def test_unknown_salary_rule(criteria):
     no_pay = lambda t: g.evaluate(_p(criteria, t, ["Great benefits and a strong team."], pay=""))
     assert "salary" in {f.gate for f in no_pay("Operations Analyst").failures}
     assert "salary" not in {f.gate for f in no_pay("2027 Operations Development Program").failures}
-    g.targets.add("x")                                      # a company on your target list
-    assert "salary" not in {f.gate for f in no_pay("Operations Analyst").failures}
+    g.targets.add("x")                       # Nov 9: a target company no longer excuses missing pay
+    assert "salary" in {f.gate for f in no_pay("Operations Analyst").failures}
 
 
 def test_a_job_site_is_never_the_employer(criteria):

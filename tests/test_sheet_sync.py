@@ -408,3 +408,20 @@ def test_apply_and_passed_are_live_views_of_to_review(criteria, board, evals):
     assert "ARRAYFORMULA(VALUE(CHOOSECOLS(f, 1))), FALSE)" in f and "COUNTIF(Contacts!A:A" in f
     assert len(sheet.tabs[PICKS]["grid"]) == 2                    # header + one formula that fills the rest
     assert sheet.tabs["Passed"]["grid"][0][0]["formulaValue"].startswith("={'To review'!A1:")
+
+
+def test_never_watch_boards_close_untouched_postings(criteria):
+    """Nov 9: Marriott / Hilton / Greystar boards were almost all hotel-floor jobs: not read, and
+    their untouched postings close (a job you scored stays)."""
+    from src.store.db import Store
+    store = Store(":memory:")
+    for pid, title in (("oracle:m:1", "Property Administrative Specialist"), ("oracle:m:2", "Revenue Analyst")):
+        store.upsert_posting(pid, "Marriott International", title, "https://x/" + pid, None, {}, T1)
+        store.save_score(pid, True, [], [], {}, T1)
+    store.save_owner_state("oracle:m:2", {"Decision": "Apply", "Interest": "4"}, T1)
+    store.commit()
+    store.conn.execute(
+        "UPDATE postings SET closed_at=? WHERE closed_at IS NULL AND lower(trim(company)) = ? AND posting_id NOT IN "
+        "(SELECT posting_id FROM owner_state WHERE COALESCE(interest, '') <> '')", (T2, "marriott international"))
+    closed = dict(store.conn.execute("SELECT posting_id, closed_at FROM postings").fetchall())
+    assert closed["oracle:m:1"] == T2 and closed["oracle:m:2"] is None

@@ -63,10 +63,10 @@ location:
 #   no salary posted               → kept, flag "Salary unknown"
 salary:
   hourly_to_annual_hours: 2080
-  # no pay posted (Nov 9, "a lot of unknown salary"): kept only for target companies, grad
-  # programs, and jobs with these flags; everything else is dropped
+  # no pay posted (Nov 9): kept only for grad programs and AI-forward startups (flags below);
+  # everything else - target companies and hotel / real-estate employers included - is dropped
   drop_unknown: true
-  unknown_keep_flags: ["Your edge", "Preferred field", "AI-forward company"]
+  unknown_keep_flags: ["Your edge", "AI-forward company"]   # Nov 9: not "Preferred field" / target company
   markets:
     # program_floor: new-grad / rotational programs pass at this lower base (your choice, Nov 8:
     # Fora's Wolf Graduate Program pays $90K)
