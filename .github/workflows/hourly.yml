@@ -62,6 +62,18 @@ jobs:
           PIPELINE_CHECK_ALL: ${{ inputs.check_all && '1' || '0' }}
         run: python -m src.run
 
+      - name: Export unscored postings for review
+        if: always()
+        run: python -m src.dump_review || true
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: review-dump
+          path: review_dump.json
+          retention-days: 3
+          if-no-files-found: ignore
+
       - name: Save database
         if: always()
         uses: actions/cache/save@v4
