@@ -38,7 +38,7 @@ HEADERS = ["Interest", "Status", "Next step", "Due", "Notes", "Company", "Role",
            "Applied on", "Link", "Posting ID"]
 # Apply: a live, sorted view of your 1-5s (a formula - it changes the moment you type)
 APPLY_HEADERS = ["Interest", "Status", "Applied on", "Next step", "Due", "Notes", "Contacts", "Company", "Role",
-                 "Location", "Salary", "Experience ask", "Flags", "Link"]
+                 "Link", "Location", "Salary", "Experience ask", "Flags"]
 OWNER_HEADERS = ("Decision", "Interest", "Status", "Notes", "Next step", "Due")
 ID_COL = HEADERS.index("Posting ID")
 PICK_OPTIONS = ["Pass", "1", "2", "3", "4", "5"]      # the Interest column
@@ -441,8 +441,6 @@ def _apply_view(meta: dict) -> list[dict]:
         if h == "Contacts":
             cols.append(f'ARRAYFORMULA(IF(COUNTIF(Contacts!A:A, {c("Company")})=0, "", '
                         f'COUNTIF(Contacts!A:A, {c("Company")})))')
-        elif h == "Role":
-            cols.append(f'ARRAYFORMULA(IF({c("Link")}="", {c("Role")}, HYPERLINK({c("Link")}, {c("Role")})))')
         else:
             cols.append(c(h))
     score = f"IFERROR(VALUE('{JOBS}'!A2:A), 0)"
@@ -462,6 +460,7 @@ def _apply_view(meta: dict) -> list[dict]:
         {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
                         "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
                         "fields": "userEnteredFormat.textFormat.bold"}},
+        _interest_format(sid),
     ]
     col = {h: _col_letter(i) for i, h in enumerate(APPLY_HEADERS)}
     full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(APPLY_HEADERS)}
@@ -480,6 +479,14 @@ def _apply_view(meta: dict) -> list[dict]:
             reqs.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [full], "booleanRule": {
                 "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": f}]}, "format": fmt}}}})
     return reqs
+
+
+def _interest_format(sid: int) -> dict:
+    """Interest as plain text, left-aligned: a picked '4' and a typed 4 look the same."""
+    return {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": 1},
+                           "cell": {"userEnteredFormat": {"numberFormat": {"type": "TEXT"},
+                                                          "horizontalAlignment": "LEFT"}},
+                           "fields": "userEnteredFormat.numberFormat,userEnteredFormat.horizontalAlignment"}}
 
 
 def _clear_tab(sid: int) -> list[dict]:
@@ -532,6 +539,7 @@ def _grid_tab(m: dict, headers: list[str], grid: list[list], existing_len: int, 
         {"setDataValidation": {"range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": need_rows,
                                          "startColumnIndex": 0, "endColumnIndex": len(headers)}}},
         _validation(sid, col["Interest"], PICK_OPTIONS, need_rows),
+        _interest_format(sid),
     ]
     if "Status" in col:
         reqs.append(_validation(sid, col["Status"], STATUS_OPTIONS, need_rows))
