@@ -143,3 +143,10 @@ def test_job_site_copy_under_a_shorter_company_name_is_a_duplicate():
     out = [r["posting_id"] for r in _dedupe(rows)]
     assert "jobspipe::1" not in out and "ashby:f:2" in out and "ashby:f:3" in out
     assert "ashby:a:4" in out and "ashby:alg:5" in out      # different city: not merged
+
+
+def test_track_record_of_owning_problems_is_not_senior(full_criteria):
+    ev = _ev(full_criteria, "Associate, Business Operations & Analytics", BODY[:4] + [
+        "1+ years of experience at a consulting firm, investment bank, or high-growth technology company.",
+        "Track record of owning ambiguous problems and delivering impact.", BODY[5], PAY])
+    assert ev.passed, ev.failures
