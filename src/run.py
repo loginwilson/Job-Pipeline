@@ -507,6 +507,9 @@ def _refetch_old_search_copies(store: Store, ts: str) -> None:
     log.info("JSearch re-fetch: %d stored results refreshed, %d no longer listed", len(got), len(ids) - len(got))
 
 
+_STILL_PASSING: list = []      # stored search results that still pass (their boards get looked up)
+
+
 def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> int:
     """Open JSearch results are only fetched once; re-apply today's rules to them every run
     (from the stored copy) so a rule fix also removes search results that no longer qualify."""
@@ -542,6 +545,8 @@ def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> 
             continue
         if not ev.passed:
             changed += 1
+        else:
+            _STILL_PASSING.append(ev)
         store.save_score(r["posting_id"], ev.passed, [{"gate": f.gate, "matched": f.matched} for f in ev.failures],
                          ev.flags, display_fields(ev), ts)
     # The Muse: stored copies are the full result, so they re-check the same way
@@ -565,6 +570,8 @@ def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> 
             continue
         if not ev.passed:
             changed += 1
+        else:
+            _STILL_PASSING.append(ev)
         store.save_score(r["posting_id"], ev.passed, [{"gate": f.gate, "matched": f.matched} for f in ev.failures],
                          ev.flags, display_fields(ev), ts)
     # Adzuna / SerpApi / JobsPipe: the stored copy is the full result, so today's rules apply to it too
@@ -597,6 +604,8 @@ def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> 
                 continue
             if not ev.passed:
                 changed += 1
+            else:
+                _STILL_PASSING.append(ev)
             store.save_score(r["posting_id"], ev.passed, [{"gate": f.gate, "matched": f.matched} for f in ev.failures],
                              ev.flags, display_fields(ev), ts)
     store.commit()
@@ -722,7 +731,8 @@ def discover_from_yc(store: Store, cfg: dict, known: set[str], matcher, ts: str)
     return found
 
 
-def discover(store: Store, evals: list[Evaluation], cfg: dict, known: set[str], ts: str) -> list[Company]:
+def discover(store: Store, evals: list[Evaluation], cfg: dict, known: set[str], ts: str,
+             retry_daily: set[str] | None = None) -> list[Company]:
     """Probe for the company boards behind search results. Returns newly found boards."""
     if not cfg.get("enabled", True):
         return []
@@ -764,7 +774,10 @@ def discover(store: Store, evals: list[Evaluation], cfg: dict, known: set[str], 
     # 2. otherwise try likely board names (several companies at once)
     todo = []
     for name, info in sorted(by_company.items()):
-        if normalize(name) in known or not store.probe_due(name, int(cfg.get("retry_unfound_after_days", 30)), ts):
+        # a search result still on your list gets its board looked up again daily (Nov 9: Clera's
+        # Adzuna copy lacked the lines that rule it out; its own Ashby posting has them)
+        days = 1 if normalize(name) in (retry_daily or set()) else int(cfg.get("retry_unfound_after_days", 30))
+        if normalize(name) in known or not store.probe_due(name, days, ts):
             continue
         if len(todo) >= int(cfg.get("max_new_companies_per_run", 40)):
             break
@@ -858,10 +871,12 @@ def main(argv: list[str] | None = None) -> int:
         except Exception as exc:  # a new source never stops the run
             log.error("JobsPipe error: %s", exc)
         known = {normalize(c.name) for c in companies} | {normalize(r["company"]) for r in store.discovered_boards()}
-        if muse_evals or jsearch_evals or adzuna_evals or jobspipe_evals:
+        if muse_evals or jsearch_evals or adzuna_evals or jobspipe_evals or _STILL_PASSING:
             try:
-                discover(store, (muse_evals or []) + (jsearch_evals or []) + (adzuna_evals or []) + (jobspipe_evals or []),
-                         cfg.get("discovery") or {}, known, ts)
+                discover(store, (muse_evals or []) + (jsearch_evals or []) + (adzuna_evals or []) + (jobspipe_evals or [])
+                         + _STILL_PASSING, cfg.get("discovery") or {}, known, ts,
+                         retry_daily={normalize(e.posting.company) for e in _STILL_PASSING})
+                _STILL_PASSING.clear()
             except Exception as exc:  # discovery problems never stop the run
                 log.error("discovery error: %s", exc)
                 totals["errors"] += 1
