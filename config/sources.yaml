@@ -16,7 +16,7 @@ discovery:                  # companies found by search → their own job board 
   retry_unfound_after_days: 30
 
 serpapi:                    # SerpApi Google Jobs (free monthly allowance; key: SERPAPI_API_KEY)
-  enabled: true
+  enabled: false   # Nov 9: back to the sources that produced your good fits
   requests_per_day: 5       # ~150 a month; raise to match your plan's monthly allowance / 30
   focus:
     - {keywords: "business operations OR strategy and operations OR bizops", city: "New York, New York, United States"}
@@ -28,7 +28,7 @@ serpapi:                    # SerpApi Google Jobs (free monthly allowance; key: 
   cities: ["San Francisco, California, United States", "Los Angeles, California, United States"]
 
 jobspipe:                   # JobsPipe ONE-TIME sweep (free 1,000 credits, never renew; key: JOBSPIPE_API_KEY)
-  enabled: true
+  enabled: false   # Nov 9: back to the sources that produced your good fits
   total_credits: 950        # stops here; 1 credit = 1 job, 25 per page on the free plan
   filters:                  # applied to every search
     job_title_not: [senior, sr., director, head of, vp, vice president, principal, staff, lead, engineer,
@@ -62,7 +62,7 @@ jobspipe:                   # JobsPipe ONE-TIME sweep (free 1,000 credits, never
                      strategy associate, founders associate, deployment strategist, real estate, hospitality, hotel]
 
 adzuna:                     # Adzuna job search (free key: GitHub secrets ADZUNA_APP_ID + ADZUNA_APP_KEY)
-  enabled: true
+  enabled: false   # Nov 9: back to the sources that produced your good fits
   requests_per_day: 24      # free plan allows ~250 a day; each search returns up to 50 postings
   max_days_old: 3
   first_fill_days: 30       # a search's first run looks back a month

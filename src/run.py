@@ -914,6 +914,14 @@ def main(argv: list[str] | None = None) -> int:
                     "WHERE COALESCE(interest, '') <> '' OR COALESCE(status, '') <> '' "
                     "OR COALESCE(decision, '') NOT IN ('', 'Pending'))", (ts, f"{plat}:%"))
             store.commit()
+        for src_name in ("adzuna", "serpapi", "jobspipe"):     # a source that's switched off: its untouched jobs close
+            if not (load_sources_config().get(src_name) or {}).get("enabled"):
+                store.conn.execute(
+                    "UPDATE postings SET closed_at=? WHERE closed_at IS NULL AND merged_into IS NULL "
+                    "AND posting_id LIKE ? AND posting_id NOT IN (SELECT posting_id FROM owner_state "
+                    "WHERE COALESCE(interest, '') <> '' OR COALESCE(status, '') <> '' "
+                    "OR COALESCE(decision, '') NOT IN ('', 'Pending'))", (ts, f"{src_name}:%"))
+        store.commit()
         never_names = (load_sources_config().get("boards") or {}).get("never_watch") or []
         never = {normalize(n) for n in never_names}
         if never:
