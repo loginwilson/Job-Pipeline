@@ -27,7 +27,7 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 50          # a full check-everything run takes ~30 min
     steps:
       - uses: actions/checkout@v4
 
