@@ -22,10 +22,10 @@ serpapi:                    # SerpApi Google Jobs (free monthly allowance; key: 
   focus:
     - {keywords: "business operations OR strategy and operations OR bizops", city: "New York, New York, United States"}
     - {keywords: "deployment strategist OR implementation specialist OR AI operations", city: "New York, New York, United States"}
-    - {keywords: "real estate OR proptech OR hospitality OR hotel associate", city: "New York, New York, United States"}
+    - {keywords: "chief of staff OR founders associate OR founder's associate", city: "New York, New York, United States"}
   keywords:
     - business operations OR strategy associate
-    - real estate OR hospitality associate
+    - deployment strategist OR chief of staff OR founders associate
   cities: ["San Francisco, California, United States", "Chicago, Illinois, United States", "Miami, Florida, United States",
            "Los Angeles, California, United States", "Austin, Texas, United States"]
 
@@ -74,15 +74,17 @@ adzuna:                     # Adzuna job search (free key: GitHub secrets ADZUNA
     - {keywords: "business operations strategy bizops", city: "New York, NY"}
     - {keywords: "deployment strategist implementation specialist AI operations", city: "New York, NY"}
     - {keywords: "operations associate strategy associate founders associate", city: "New York, NY"}
-    - {keywords: "real estate proptech asset management acquisitions", city: "New York, NY"}
-    - {keywords: "hospitality hotel travel revenue management", city: "New York, NY"}
+    # Nov 9: mostly AI startups / ops / deployment; real estate & hospitality as fields within AI
+    - {keywords: "chief of staff founders associate generalist", city: "New York, NY"}
+    - {keywords: "AI startup operations proptech hospitality", city: "New York, NY"}
     - {keywords: "business operations strategy associate", city: "San Francisco, CA"}
+    - {keywords: "deployment strategist implementation specialist AI operations", city: "San Francisco, CA"}
   keywords:                 # then rotating through your other cities
     - business operations strategy
     - operations associate strategy associate
-    - real estate proptech
-    - hospitality hotel
     - deployment strategist implementation
+    - chief of staff founders associate
+    - AI operations associate
   cities: ["Jersey City, NJ", "Chicago, IL", "Miami, FL", "Los Angeles, CA", "San Diego, CA", "Austin, TX",
            "Dallas, TX", "Houston, TX", "Tampa, FL", "Orlando, FL"]
 
@@ -96,14 +98,14 @@ jsearch:                    # Google for Jobs via JSearch (OpenWeb Ninja) — ke
     - {keywords: "business operations OR strategy and operations OR bizops", city: "New York, NY"}
     - {keywords: "deployment strategist OR implementation specialist OR AI operations OR founding operations", city: "New York, NY"}
     - {keywords: "operations associate OR strategy associate OR founders associate", city: "New York, NY"}
-    - {keywords: "real estate OR proptech OR hospitality OR hotel", city: "New York, NY"}
+    - {keywords: "chief of staff OR founders associate OR generalist", city: "New York, NY"}
   keywords:                 # your fields (Nov 8): hospitality, real estate, business ops / strategy, AI in those
     - business operations OR strategy and operations
     - operations associate OR strategy associate
     - real estate OR proptech
-    - real estate analyst OR acquisitions analyst OR asset management analyst
+    - chief of staff OR founders associate
     - hospitality OR hotel
-    - revenue management OR hotel operations
+    - deployment strategist OR implementation specialist
     - proptech OR real estate technology OR AI real estate
     - hospitality technology OR travel tech OR AI hospitality
     - new grad OR rotational program OR leadership development program
