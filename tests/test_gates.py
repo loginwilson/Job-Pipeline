@@ -52,8 +52,10 @@ def test_salary(evaluate):
     assert unknown.passed and "Salary unknown" in unknown.flags
     ote = evaluate(lines=["OTE: $150,000 - $200,000 with uncapped commission."])
     assert ote.passed and "Salary unknown (OTE only)" in ote.flags
-    ca = evaluate(locations=["Toronto, ON"], lines=["Salary $125,000 - $135,000 per year"])
-    assert ca.passed and "Low base — check incentives" in ca.flags     # C$ between 120K and 140K
+    # Nov 10: Canada floor C$100K (bottom C$80K); under C$120K is flagged as a low base
+    ca = evaluate(locations=["Toronto, ON"], lines=["Salary $95,000 - $110,000 per year"])
+    assert ca.passed and "Low base — check incentives" in ca.flags
+    assert "salary" in gates_of(evaluate(locations=["Toronto, ON"], lines=["Salary $70,000 - $95,000 per year"]))
 
 
 def test_salary_rarely_meets_floor(evaluate):
