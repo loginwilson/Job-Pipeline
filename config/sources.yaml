@@ -93,7 +93,7 @@ coresignal:                 # LinkedIn postings via Coresignal (free credits, ne
   searches_per_day: 8       # about half a credit each
   collects_per_day: 12      # one credit per full posting; only postings never seen before
   pace_through_day: true
-  first_fill_days: 7        # a search's first run looks back a week
+  first_fill_days: 14       # a search's first run looks back two weeks (Mogul, VectorShift: posted Nov 3)
   window_days: 3
   close_after_days_unseen: 21
   focus_cities: ["New York"]          # every day, first
