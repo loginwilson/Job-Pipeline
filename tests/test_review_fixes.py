@@ -231,3 +231,42 @@ def test_title_that_says_remote_is_a_remote_job(full_criteria):
 def test_raydar_is_a_recruiter_not_an_employer(full_criteria):
     ev = _ev(full_criteria, "Associate Deployment Strategist", BODY + [PAY], company="Raydar", platform="workable")
     assert ev.failures and ev.failures[0].gate == "not_a_real_opening"
+
+
+def test_coresignal_parse_and_recruiters():
+    from src.sources.coresignal import CoresignalSource
+    job = {"id": 506439292, "title": "Chief of Staff", "company_name": "Mogul", "location": "New York, NY",
+           "description": "<p>Mogul builds AI for real estate.</p><ul><li>Use AI to automate workflows</li></ul>",
+           "salary": "USD 125000-175000 YEAR", "employment_type": "Full-time", "url": "https://www.linkedin.com/jobs/view/1",
+           "country": "United States"}
+    raw = CoresignalSource().parse(job)[0]
+    assert raw.native_id == "506439292" and raw.company == "Mogul"
+    assert raw.comp_ranges[0].min == 125000 and raw.comp_ranges[0].max == 175000
+    assert "Use AI to automate workflows" in raw.description_lines
+    assert raw.country == "US"
+    assert CoresignalSource().parse(dict(job, company_name="Jobot")) == []
+
+
+def test_run_coresignal_collects_only_new_ids_within_the_cap(monkeypatch):
+    import json as _json
+    from src import run as R
+    from src.config import load_criteria
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.sources import coresignal as CS
+    monkeypatch.setenv("CORESIGNAL_API_KEY", "x")
+    fetched = []
+    monkeypatch.setattr(CS, "search", lambda t, c, since, s=None: [3, 2, 1])
+    def fake_collect(i, s=None):
+        fetched.append(i)
+        return {"id": i, "title": "Chief of Staff", "company_name": f"Co{i}", "location": "New York, NY",
+                "description": "<p>We build AI.</p>", "url": "u"}
+    monkeypatch.setattr(CS, "collect", fake_collect)
+    c = load_criteria()
+    s = Store(":memory:")
+    cfg = {"enabled": True, "searches_per_day": 1, "collects_per_day": 2, "pace_through_day": False,
+           "focus_cities": ["New York"], "titles": ["chief of staff"]}
+    evs = R.run_coresignal(s, cfg, c, Gates(c), LocationMatcher(c), TS)
+    assert fetched == [3, 2] and len(evs) == 2                     # newest first, capped at 2
+    pending = [r["pair"] for r in s.conn.execute("SELECT pair FROM search_pairs WHERE source='coresignal_pending'")]
+    assert pending == ["1"]

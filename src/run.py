@@ -138,8 +138,9 @@ def _fetch_with_details(src, company, criteria, gates, matcher, store, ts, cache
 
 
 SOURCE_NAMES = {"lever": "Lever", "greenhouse": "Greenhouse", "ashby": "Ashby", "muse": "The Muse", "adzuna": "Adzuna", "jobspipe": "JobsPipe", "serpapi": "Google Jobs (SerpApi)",
-                "smartrecruiters": "SmartRecruiters", "jsearch": "JSearch", "workday": "Workday", "oracle": "Oracle", "workable": "Workable"}
-SEARCH_PLATFORMS = ("muse", "jsearch", "adzuna", "jobspipe", "serpapi")
+                "smartrecruiters": "SmartRecruiters", "jsearch": "JSearch", "workday": "Workday", "oracle": "Oracle", "workable": "Workable",
+                "coresignal": "Coresignal (LinkedIn)"}
+SEARCH_PLATFORMS = ("muse", "jsearch", "adzuna", "jobspipe", "serpapi", "coresignal")
 
 
 def evaluate_raws(raws, criteria, gates, matcher, company: Company | None = None) -> list[Evaluation]:
@@ -408,6 +409,75 @@ def run_adzuna(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> li
     return evals
 
 
+def run_coresignal(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> list[Evaluation] | None:
+    """Coresignal (LinkedIn postings): a few cheap title searches a day, then full postings fetched
+    only for ids never seen before, within a daily credit cap (free credits never renew)."""
+    from datetime import timedelta
+    from .sources.coresignal import CoresignalSource, collect, search as cs_search
+    if not cfg.get("enabled") or not os.environ.get("CORESIGNAL_API_KEY"):
+        return None
+    paced = bool(cfg.get("pace_through_day", True))
+    s_budget = store.budget_left("coresignal", int(cfg.get("searches_per_day", 0)), ts, paced=paced)
+    c_budget = store.budget_left("coresignal_collect", int(cfg.get("collects_per_day", 0)), ts, paced=paced)
+    if c_budget <= 0:
+        return None
+    pairs = {f"{t} in {c}": (t, c) for t in cfg.get("titles", []) for c in cfg.get("cities", [])}
+    focus = {f"{t} in {c}": (t, c) for t in cfg.get("titles", []) for c in (cfg.get("focus_cities") or [])}
+    pairs.update(focus)
+    done_today = {r["pair"] for r in store.conn.execute(
+        "SELECT pair FROM search_pairs WHERE source='coresignal' AND substr(last_searched, 1, 10)=?", (ts[:10],))}
+    plan = [(p, False) for p in focus if p not in done_today][:s_budget]
+    plan += store.next_pairs("coresignal", [p for p in pairs if p not in focus and p not in done_today],
+                             s_budget - len(plan))
+    sess, spent, ids = requests.Session(), 0, []
+    now = datetime.fromisoformat(ts)
+    for pair, first in plan:
+        title, city = pairs[pair]
+        days = int(cfg.get("first_fill_days", 7) if first else cfg.get("window_days", 3))
+        try:
+            found = cs_search(title, city, (now - timedelta(days=days)).strftime("%Y-%m-%d"), sess)
+        except SourceError as exc:
+            log.error("Coresignal: %s", exc)
+            store.board_error("Coresignal (search)", "coresignal", str(exc), ts)
+            break
+        spent += 1
+        store.mark_pair("coresignal", pair, len(found), ts)
+        ids += found
+    store.spend("coresignal", spent, ts)
+    # ids found before (by an earlier search) are pending; fetch the newest unseen ones first
+    pending = {r["pair"] for r in store.conn.execute(
+        "SELECT pair FROM search_pairs WHERE source='coresignal_pending'")}
+    stored = {r["posting_id"].rsplit(":", 1)[-1] for r in store.conn.execute(
+        "SELECT posting_id FROM postings WHERE posting_id LIKE 'coresignal:%'")}
+    queue = sorted({str(i) for i in ids} | pending, key=lambda x: -int(x))
+    queue = [i for i in queue if i not in stored]
+    src, evals, got = CoresignalSource(), [], 0
+    for jid in queue:
+        if got >= c_budget:
+            store.conn.execute("INSERT OR IGNORE INTO search_pairs VALUES ('coresignal_pending', ?, ?, 0)", (jid, ts))
+            continue
+        try:
+            job = collect(int(jid), sess)
+        except SourceError as exc:
+            log.error("Coresignal: %s", exc)
+            store.board_error("Coresignal (collect)", "coresignal", str(exc), ts)
+            break
+        got += 1
+        store.conn.execute("DELETE FROM search_pairs WHERE source='coresignal_pending' AND pair=?", (jid,))
+        raws = src.parse(job)
+        if not raws:            # a recruiter's posting: remembered so it isn't paid for again
+            store.upsert_posting(f"coresignal:skipped:{jid}", job.get("company_name") or "", job.get("title") or "",
+                                 job.get("url") or "", None, None, ts, dedupe_key=f"coresignal-skip-{jid}")
+            store.conn.execute("UPDATE postings SET closed_at=? WHERE posting_id=?", (ts, f"coresignal:skipped:{jid}"))
+            continue
+        evals += evaluate_raws(raws, criteria, gates, matcher)
+        time.sleep(0.25)
+    store.spend("coresignal_collect", got, ts)
+    store.commit()
+    log.info("Coresignal: %d searches, %d new postings fetched (%d waiting)", spent, got, max(0, len(queue) - got))
+    return evals
+
+
 def run_jobspipe(store: Store, cfg: dict, criteria, gates, matcher, ts: str) -> list[Evaluation] | None:
     """One-time JobsPipe sweep (its free 1,000 credits never renew): each search pages until its
     share is spent; every employer board named in a result's link is watched from then on."""
@@ -552,7 +622,7 @@ def _rescue_midpoint_pay_drops(store: Store, criteria, gates=None, matcher=None,
         "JOIN scores s USING(posting_id) "
         "WHERE s.passed = 0 AND s.gate = 'salary' AND p.closed_at IS NULL AND p.merged_into IS NULL "
         "AND p.snapshot IS NULL AND (" + " OR ".join(f"p.posting_id LIKE '{x}:%'" for x in
-                                                    ("jsearch", "adzuna", "serpapi", "jobspipe", "muse")) + ")").fetchall()
+                                                    ("jsearch", "adzuna", "serpapi", "jobspipe", "muse", "coresignal")) + ")").fetchall()
     rescued = 0
     for r in rows:
         try:
@@ -663,7 +733,9 @@ def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> 
     from .sources.adzuna import AdzunaSource
     from .sources.jobspipe import JobsPipeSource
     from .sources.serpapi import SerpApiSource
+    from .sources.coresignal import CoresignalSource
     parsers = {"adzuna": lambda j: AdzunaSource().parse({"results": [j]}),
+               "coresignal": lambda j: CoresignalSource().parse(j),
                "serpapi": lambda j: SerpApiSource().parse({"jobs_results": [j]}),
                "jobspipe": lambda j: JobsPipeSource().parse({"data": [j]})}
     for prefix, parse in parsers.items():
@@ -946,6 +1018,7 @@ def main(argv: list[str] | None = None) -> int:
     # 1–2. search sources + discovery (full runs only)
     muse_evals, muse_complete, jsearch_evals, adzuna_evals, jobspipe_evals = (None, False, None, None, None)
     serp_evals = None
+    coresignal_evals = None
     if store is not None and not single:
         cfg = load_sources_config()
         # each step is guarded: one failing source never stops the run before the Sheet is written
@@ -976,11 +1049,16 @@ def main(argv: list[str] | None = None) -> int:
             jobspipe_evals = run_jobspipe(store, cfg.get("jobspipe") or {}, criteria, gates, matcher, ts)
         except Exception as exc:  # a new source never stops the run
             log.error("JobsPipe error: %s", exc)
+        try:
+            coresignal_evals = run_coresignal(store, cfg.get("coresignal") or {}, criteria, gates, matcher, ts)
+        except Exception as exc:  # a new source never stops the run
+            log.error("Coresignal error: %s", exc)
         known = {normalize(c.name) for c in companies} | {normalize(r["company"]) for r in store.discovered_boards()}
-        if muse_evals or jsearch_evals or serp_evals or adzuna_evals or jobspipe_evals or _STILL_PASSING:
+        if muse_evals or jsearch_evals or serp_evals or adzuna_evals or jobspipe_evals or coresignal_evals \
+                or _STILL_PASSING:
             try:
                 discover(store, (muse_evals or []) + (jsearch_evals or []) + (serp_evals or []) + (adzuna_evals or [])
-                         + (jobspipe_evals or [])
+                         + (jobspipe_evals or []) + (coresignal_evals or [])
                          + _STILL_PASSING, cfg.get("discovery") or {}, known, ts,
                          retry_daily={normalize(e.posting.company) for e in _STILL_PASSING})
                 _STILL_PASSING.clear()
@@ -1039,7 +1117,7 @@ def main(argv: list[str] | None = None) -> int:
                     "WHERE COALESCE(interest, '') <> '' OR COALESCE(status, '') <> '' "
                     "OR COALESCE(decision, '') NOT IN ('', 'Pending'))", (ts, f"{plat}:%"))
             store.commit()
-        for src_name in ("adzuna", "serpapi", "jobspipe"):     # a source that's switched off: its untouched jobs close
+        for src_name in ("adzuna", "serpapi", "jobspipe", "coresignal"):     # a source that's switched off: its untouched jobs close
             if not (load_sources_config().get(src_name) or {}).get("enabled"):
                 store.conn.execute(
                     "UPDATE postings SET closed_at=? WHERE closed_at IS NULL AND merged_into IS NULL "
@@ -1175,11 +1253,18 @@ def main(argv: list[str] | None = None) -> int:
                               board_companies=board_companies)
         add_stats(stats, "JobsPipe", c)
         log.info("JobsPipe: %d postings stored, %d passed", c["seen"], c["passed"])
+    if coresignal_evals is not None:
+        c = store_evaluations(store, Company(name="Coresignal (LinkedIn)", platform="coresignal", slug="search"),
+                              coresignal_evals, ts, criteria, prefix="coresignal:__none__", board_keys=board_keys,
+                              board_companies=board_companies)
+        add_stats(stats, "Coresignal (LinkedIn)", c)
+        log.info("Coresignal: %d postings stored, %d passed", c["seen"], c["passed"])
     if store is not None and not single:
         js = (load_sources_config().get("jsearch") or {})
         store.close_stale("jsearch:", int(js.get("close_after_days_unseen", 7)), ts)
         store.close_stale("serpapi:", int(js.get("close_after_days_unseen", 7)), ts)
         store.close_stale("adzuna:", int((load_sources_config().get("adzuna") or {}).get("close_after_days_unseen", 7)), ts)
+        store.close_stale("coresignal:", int((load_sources_config().get("coresignal") or {}).get("close_after_days_unseen", 21)), ts)
     if store is None:
         return 0
     moved = store.carry_reposts(ts)

@@ -113,7 +113,7 @@ def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-_SEARCH_LIKE = " OR ".join(f"posting_id LIKE '{p}:%'" for p in ("muse", "jsearch", "adzuna", "jobspipe", "serpapi"))
+_SEARCH_LIKE = " OR ".join(f"posting_id LIKE '{p}:%'" for p in ("muse", "jsearch", "adzuna", "jobspipe", "serpapi", "coresignal"))
 
 class Store:
     def __init__(self, path: str | Path = DEFAULT_DB):

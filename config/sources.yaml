@@ -88,6 +88,20 @@ adzuna:                     # Adzuna job search (free key: GitHub secrets ADZUNA
   cities: ["Jersey City, NJ", "Chicago, IL", "Miami, FL", "Los Angeles, CA", "San Diego, CA", "Austin, TX",
            "Dallas, TX", "Houston, TX", "Tampa, FL", "Orlando, FL"]
 
+coresignal:                 # LinkedIn postings via Coresignal (free credits, never renew; key: CORESIGNAL_API_KEY)
+  enabled: true
+  searches_per_day: 8       # about half a credit each
+  collects_per_day: 12      # one credit per full posting; only postings never seen before
+  pace_through_day: true
+  first_fill_days: 7        # a search's first run looks back a week
+  window_days: 3
+  close_after_days_unseen: 21
+  focus_cities: ["New York"]          # every day, first
+  cities: ["Chicago", "San Francisco", "Miami", "Toronto", "Los Angeles", "Austin"]
+  titles: [deployment strategist, business operations, chief of staff, founder's associate, founders associate,
+           operations associate, implementation specialist, product operations, strategy and operations,
+           generalist, forward deployed, ai operations]
+
 jsearch:                    # Google for Jobs via JSearch (OpenWeb Ninja) — key: JSEARCH_API_KEY
   enabled: true
   requests_per_day: 6       # free plan = 200/month. Pro ($25, 10,000/month) → set to 300

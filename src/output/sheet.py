@@ -300,7 +300,7 @@ def build_rows(store: Store, criteria: Criteria, ts: str, owner_states: dict[str
     return _dedupe(rows)
 
 
-_SEARCH_PREFIXES = {"muse", "jsearch", "adzuna", "jobspipe", "serpapi"}
+_SEARCH_PREFIXES = {"muse", "jsearch", "adzuna", "jobspipe", "serpapi", "coresignal"}
 _CO_SUFFIX = re.compile(r"\b(?:inc|llc|ltd|corp|corporation|co|company|labs?|technologies|technology|hq|ai|the)\b")
 
 

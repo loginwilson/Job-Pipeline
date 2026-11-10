@@ -35,7 +35,7 @@ def main(path: str = "data/pipeline.db", out: str = "review_dump.json") -> None:
         print(f"NEAR | {r['gate']} | {r['company']} | {r['title']} | {r['url']} | {(r['matched'] or '')[:200]}")
     # job-site results (LinkedIn / Indeed links can't be opened): print their stored text to the log
     for r in rows:
-        if r["posting_id"].split(":")[0] in ("jsearch", "adzuna", "jobspipe", "serpapi", "muse"):
+        if r["posting_id"].split(":")[0] in ("jsearch", "adzuna", "jobspipe", "serpapi", "muse", "coresignal"):
             job = (r["snapshot"] or {}).get("job", r["snapshot"]) or {}
             text = " ".join(str(job.get(k) or "") for k in ("description", "job_description", "contents",
                                                               "salary", "salary_min", "salary_max", "job_highlights"))
