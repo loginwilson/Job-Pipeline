@@ -666,7 +666,14 @@ def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> 
     """Open JSearch results are only fetched once; re-apply today's rules to them every run
     (from the stored copy) so a rule fix also removes search results that no longer qualify."""
     src, changed = JSearchSource(), 0
-    _rescue_midpoint_pay_drops(store, criteria, gates, matcher, ts)
+    # Nov 10: the midpoint-rule rescue is off - those results had no text left and most had closed.
+    # What it brought back drops again unless you've already scored it
+    store.conn.execute(
+        "UPDATE scores SET passed=0, gate='salary', matched='re-check without the posting text (most had closed)', "
+        "failures=json_array(json_object('gate','salary','matched','re-check without the posting text')) "
+        "WHERE passed=1 AND flags LIKE '%Re-checked: top of the pay range%' AND posting_id NOT IN "
+        "(SELECT posting_id FROM owner_state WHERE COALESCE(decision,'') NOT IN ('', 'Pending') "
+        "OR COALESCE(interest,'')<>'' OR COALESCE(status,'')<>'' OR COALESCE(notes,'')<>'')")
     _refetch_old_search_copies(store, ts)
     rows = store.conn.execute(
         "SELECT p.posting_id, p.company, p.title, p.url, p.snapshot, s.passed FROM postings p JOIN scores s "

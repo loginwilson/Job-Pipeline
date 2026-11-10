@@ -340,8 +340,12 @@ class Gates:
         floor = m.get("floor", 0)
         if m.get("program_floor") and PROGRAM_RX.search(p.title or ""):
             floor = m["program_floor"]              # grad programs: lower pay minimum (your choice, Nov 8)
+        bottom = mid * (comp.min / raw_mid) if comp.min and raw_mid else top
         if top < floor:
             ev.fail("salary", f"top of range {comp.currency or ''} {top:,.0f} below floor {floor:,}: "
+                              f"{comp.matched_text}")
+        elif m.get("min_floor") and bottom < m["min_floor"]:
+            ev.fail("salary", f"bottom of range {comp.currency or ''} {bottom:,.0f} below {m['min_floor']:,}: "
                               f"{comp.matched_text}")
         elif (comp.min and mid * (comp.min / raw_mid) < floor) or mid < m.get("comfortable", 0):
             ev.flag("Low base — check incentives")

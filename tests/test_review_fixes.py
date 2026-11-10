@@ -200,7 +200,7 @@ def test_yc_guess_ignores_a_stem_whose_domain_ending_is_part_of_the_name():
     assert ("ashby", "radar") in yc_candidates([co("Radar", "https://radar.com")], m)
 
 
-def test_old_midpoint_pay_drops_are_rechecked_with_the_title_rules(full_criteria):
+def _old_midpoint_rescue_unused(full_criteria):   # Nov 10: rescue switched off (results had closed)
     from src.config import load_criteria
     from src.pipeline.gates import Gates
     from src.pipeline.locations import LocationMatcher
@@ -270,3 +270,10 @@ def test_run_coresignal_collects_only_new_ids_within_the_cap(monkeypatch):
     assert fetched == [3, 2] and len(evs) == 2                     # newest first, capped at 2
     pending = [r["pair"] for r in s.conn.execute("SELECT pair FROM search_pairs WHERE source='coresignal_pending'")]
     assert pending == ["1"]
+
+
+def test_bottom_of_range_must_reach_80k(full_criteria):
+    low = _ev(full_criteria, "Operations Associate", BODY + ["The salary range for this position is $70,000 - $100,000/year."])
+    assert low.failures and low.failures[0].gate == "salary" and "bottom of range" in low.failures[0].matched
+    assert _ev(full_criteria, "Operations Associate", BODY + ["The salary range is $80,000 - $100,000/year."]).passed
+    assert _ev(full_criteria, "Operations Associate", BODY + [PAY]).passed

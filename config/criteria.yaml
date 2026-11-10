@@ -73,8 +73,10 @@ salary:
   markets:
     # program_floor: new-grad / rotational programs pass at this lower base (your choice, Nov 8:
     # Fora's Wolf Graduate Program pays $90K)
-    US: {currency: USD, comfortable: 120000, floor: 100000, program_floor: 90000}
-    CA: {currency: CAD, comfortable: 140000, floor: 120000, program_floor: 108000}
+    # min_floor (Nov 10, your rule): the BOTTOM of the range must reach this too - a $70-100K
+    # range touches $100K but is a low-pay job
+    US: {currency: USD, comfortable: 120000, floor: 100000, program_floor: 90000, min_floor: 80000}
+    CA: {currency: CAD, comfortable: 140000, floor: 120000, program_floor: 108000, min_floor: 96000}
   # OTE / commission is never treated as base. An OTE-only posting is kept as
   # "Salary unknown (OTE only)" — commission on top of base is an incentive.
   never_count_as_base: [OTE, on-target earnings, commission, uncapped earnings]
