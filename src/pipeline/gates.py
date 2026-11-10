@@ -336,11 +336,11 @@ class Gates:
         mid = comp.midpoint_annual
         # Nov 9 (your rule): the job counts if ANY of the range reaches the floor - $90-130K passes
         raw_mid = ((comp.min or 0) + (comp.max or 0)) / 2 if (comp.min or comp.max) else 0
-        top = mid * (comp.max / raw_mid) if comp.max and raw_mid else mid
+        top = round(mid * (comp.max / raw_mid)) if comp.max and raw_mid else mid   # round: 119,999.99 is 120K
         floor = m.get("floor", 0)
         if m.get("program_floor") and PROGRAM_RX.search(p.title or ""):
             floor = m["program_floor"]              # grad programs: lower pay minimum (your choice, Nov 8)
-        bottom = mid * (comp.min / raw_mid) if comp.min and raw_mid else top
+        bottom = round(mid * (comp.min / raw_mid)) if comp.min and raw_mid else top
         if top < floor:
             ev.fail("salary", f"top of range {comp.currency or ''} {top:,.0f} below floor {floor:,}: "
                               f"{comp.matched_text}")

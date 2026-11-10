@@ -7,7 +7,7 @@
 #   - never: acquisitions / asset management, sales, marketing, banking / finance roles,
 #     engineering, design / product, HR, legal, accounting, front-line, staffing agencies
 #   - 1 year of experience max; nothing senior
-#   - any part of the posted pay range reaches $100K (US grad programs $80K, Canadian C$90K); the bottom must reach $80K in the US, C$100K in Canada (grad programs C$80K)
+#   - any part of the posted pay range reaches $100K (Canada C$120K; grad programs $80K / C$100K); the bottom must reach $80K in the US and C$100K in Canada
 #   - your cities, not fully remote, full-time, OPT / TN possible, no coding proficiency
 # Each rule below is a DROP rule unless it says "flag". A flag never removes
 # a posting; it adds a note in the Flags column.
@@ -77,8 +77,8 @@ salary:
     # range touches $100K but is a low-pay job. Grad programs too (they reach program_floor instead)
     US: {currency: USD, comfortable: 120000, floor: 100000, program_floor: 80000, min_floor: 80000,
          program_min_floor: 80000}   # Nov 10: a US grad program passes at $80K; you judge its placement upside
-    CA: {currency: CAD, comfortable: 120000, floor: 100000, program_floor: 90000, min_floor: 100000,
-         program_min_floor: 80000}   # Nov 10: the whole range at C$100K+ (grad programs: C$90K, from C$80K)
+    CA: {currency: CAD, comfortable: 140000, floor: 120000, program_floor: 100000, min_floor: 100000,
+         program_min_floor: 100000}   # Nov 10: bottom C$100K, must hit C$120K (grad programs: C$100K, from C$100K)
   # OTE / commission is never treated as base. An OTE-only posting is kept as
   # "Salary unknown (OTE only)" — commission on top of base is an incentive.
   never_count_as_base: [OTE, on-target earnings, commission, uncapped earnings]

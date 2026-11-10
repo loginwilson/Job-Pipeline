@@ -286,13 +286,14 @@ def test_grad_programs_reach_90k_and_start_at_80k(full_criteria):
     assert "salary" in {f.gate for f in low.failures}
 
 
-def test_canada_whole_range_100k_but_grad_programs_from_80k(full_criteria):
+def test_canada_bottom_100k_must_hit_120k_grad_100k(full_criteria):
     to = ("Toronto, ON",)
-    assert _ev(full_criteria, "Operations Associate", BODY + ["Salary $100,000 - $120,000 per year"], locations=to).passed
-    assert _ev(full_criteria, "Operations Associate", BODY + ["Salary $90,000 - $120,000 per year"],
-               locations=to).failures[0].gate == "salary"
-    prog = _ev(full_criteria, "New Grad Rotational Program", BODY + ["Salary $80,000 - $95,000 per year"], locations=to)
-    assert "salary" not in {f.gate for f in prog.failures}
+    ok = lambda t, pay: "salary" not in {f.gate for f in _ev(full_criteria, t, BODY + [pay], locations=to).failures}
+    assert ok("Operations Associate", "Salary $100,000 - $120,000 per year")
+    assert not ok("Operations Associate", "Salary $100,000 - $115,000 per year")       # doesn't hit C$120K
+    assert not ok("Operations Associate", "Salary $90,000 - $130,000 per year")        # starts under C$100K
+    assert ok("New Grad Rotational Program", "Salary $100,000 per year")
+    assert not ok("New Grad Rotational Program", "Salary $90,000 - $110,000 per year")
 
 
 def test_us_grad_program_passes_at_80k(full_criteria):
