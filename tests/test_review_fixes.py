@@ -198,3 +198,23 @@ def test_yc_guess_ignores_a_stem_whose_domain_ending_is_part_of_the_name():
     out = yc_candidates([co("Parallel Bio", "https://parallel.bio")], m)
     assert ("ashby", "parallel") not in out
     assert ("ashby", "radar") in yc_candidates([co("Radar", "https://radar.com")], m)
+
+
+def test_old_midpoint_pay_drops_are_rechecked_with_the_title_rules(full_criteria):
+    from src.config import load_criteria
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.run import _rescue_midpoint_pay_drops
+    c = load_criteria()
+    s = Store(":memory:")
+
+    def add(pid, title, matched):
+        s.upsert_posting(pid, "Co", title, "u", None, None, TS, dedupe_key=pid)
+        s.save_score(pid, False, [{"gate": "salary", "matched": matched}], [], {"location": "NYC (tier 1)"}, TS)
+    add("jobspipe::1", "Growth Strategy Analyst, GTM Data",
+        "midpoint USD 87,500 below floor 100,000: structured: JobsPipe 75000-100000")
+    add("jobspipe::2", "Real Estate Agent", "midpoint USD 80,000 below floor 100,000: structured: JobsPipe 60000-100000")
+    add("jobspipe::3", "Operations Associate", "midpoint USD 60,000 below floor 100,000: structured: JobsPipe 50000-70000")
+    assert _rescue_midpoint_pay_drops(s, c, Gates(c), LocationMatcher(c), TS) == 1
+    passed = lambda pid: s.conn.execute("SELECT passed FROM scores WHERE posting_id=?", (pid,)).fetchone()["passed"]
+    assert passed("jobspipe::1") == 1 and passed("jobspipe::2") == 0 and passed("jobspipe::3") == 0

@@ -23,12 +23,16 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write               # lets a finished run start the next one (see the last step)
 
 jobs:
   run:
     runs-on: ubuntu-latest
     timeout-minutes: 50          # a full check-everything run takes ~30 min
     steps:
+      - name: Note start time
+        run: echo "RUN_STARTED=$(date +%s)" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
@@ -80,3 +84,16 @@ jobs:
         with:
           path: data/pipeline.db
           key: pipeline-db-${{ github.run_id }}
+
+      # Nov 10: GitHub skips most scheduled slots (7 runs in 13 hours overnight). Each run now
+      # starts the next one itself, about 15 minutes after it began; the schedule above only
+      # restarts the chain if it ever stops. A queued run replaces any other queued one, so
+      # chains never pile up.
+      - name: Start the next run
+        if: ${{ !cancelled() }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          wait=$(( 900 - ($(date +%s) - RUN_STARTED) ))
+          if [ "$wait" -gt 0 ]; then sleep "$wait"; fi
+          gh workflow run hourly.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME"

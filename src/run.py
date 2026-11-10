@@ -34,7 +34,7 @@ from .config import CONFIG_DIR, Company, load_criteria, load_watchlist, load_yam
 from .output.console import report
 from .output.sheet import backend_from_env, sync_all
 from .store.db import DEFAULT_DB, Store, now_iso
-from .pipeline.gates import Evaluation, Gates
+from .pipeline.gates import PROGRAM_RX, Evaluation, Gates
 from .pipeline.locations import LocationMatcher
 from .pipeline.normalize import normalize_posting
 from .resolve.discover import board_from_url, find_board, verify_board
@@ -535,10 +535,68 @@ _NEAR_SQL = "(s.passed = 1 OR s.gate IN ('salary','experience','seniority','tech
 _STILL_PASSING: list = []      # stored search results that still pass (their boards get looked up)
 
 
+_STRUCT_RANGE = re.compile(r"structured: [A-Za-z]+(?: [A-Za-z()]+)? ([\d.]+)-([\d.]+)")
+
+
+def _rescue_midpoint_pay_drops(store: Store, criteria, gates=None, matcher=None, ts: str = "") -> int:
+    """Job-site results judged under the retired midpoint pay rule whose text is gone (the old
+    cleanup erased it): their stored verdict still holds the posted range. When pay was the ONLY
+    rule they failed and any part of that range reaches your floor, they pass now (Nov 10 check:
+    Charlie Health / BMO / KeyBank / U.S. Bank BTIG roles were stuck on 'midpoint below floor')."""
+    markets = criteria.get("salary", "markets", default={}) or {}
+    floor_us = (markets.get("US") or {}).get("floor", 100000)
+    floor_ca = (markets.get("CA") or {}).get("floor", 120000)
+    prog_us = (markets.get("US") or {}).get("program_floor", floor_us)
+    rows = store.conn.execute(
+        "SELECT p.posting_id, p.company, p.title, p.url, s.failures, s.flags, s.display FROM postings p "
+        "JOIN scores s USING(posting_id) "
+        "WHERE s.passed = 0 AND s.gate = 'salary' AND p.closed_at IS NULL AND p.merged_into IS NULL "
+        "AND p.snapshot IS NULL AND (" + " OR ".join(f"p.posting_id LIKE '{x}:%'" for x in
+                                                    ("jsearch", "adzuna", "serpapi", "jobspipe", "muse")) + ")").fetchall()
+    rescued = 0
+    for r in rows:
+        try:
+            fails = json.loads(r["failures"] or "[]")
+        except ValueError:
+            continue
+        if len(fails) != 1 or "midpoint" not in (fails[0].get("matched") or ""):
+            continue
+        m = _STRUCT_RANGE.search(fails[0]["matched"])
+        if not m:
+            continue
+        hi = float(m.group(2))
+        if hi < 1000:
+            hi *= 2080                                     # hourly
+        canada = "CAD" in fails[0]["matched"]
+        floor = floor_ca if canada else (prog_us if PROGRAM_RX.search(r["title"] or "") else floor_us)
+        if hi < floor:
+            continue
+        if gates is not None:
+            # that verdict predates today's role-type rules: the title must still pass them
+            from .sources.base import RawPosting
+            plat = r["posting_id"].split(":", 1)[0]
+            stub = RawPosting(platform=plat, slug="", native_id=r["posting_id"].rsplit(":", 1)[-1],
+                              title=r["title"] or "", url=r["url"] or "", locations=[])
+            quick = gates.evaluate(normalize_posting(stub, Company(name=r["company"] or "", platform=plat, slug=""),
+                                                     criteria, matcher))
+            title_fails = [f for f in quick.failures if f.gate not in ("salary", "location")]
+            if title_fails:
+                store.save_score(r["posting_id"], False, [{"gate": f.gate, "matched": f.matched} for f in title_fails],
+                                 quick.flags, json.loads(r["display"] or "{}"), ts)
+                continue
+        flags = json.loads(r["flags"] or "[]") + ["Re-checked: top of the pay range reaches your floor"]
+        store.save_score(r["posting_id"], True, [], flags, json.loads(r["display"] or "{}"), ts)
+        rescued += 1
+    if rescued:
+        log.info("Pay re-check: %d job-site results passed the old midpoint rule's check now", rescued)
+    return rescued
+
+
 def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> int:
     """Open JSearch results are only fetched once; re-apply today's rules to them every run
     (from the stored copy) so a rule fix also removes search results that no longer qualify."""
     src, changed = JSearchSource(), 0
+    _rescue_midpoint_pay_drops(store, criteria, gates, matcher, ts)
     _refetch_old_search_copies(store, ts)
     rows = store.conn.execute(
         "SELECT p.posting_id, p.company, p.title, p.url, p.snapshot, s.passed FROM postings p JOIN scores s "
