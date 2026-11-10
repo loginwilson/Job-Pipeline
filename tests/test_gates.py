@@ -519,7 +519,8 @@ def test_grad_programs_pass_at_90k(evaluate):
     gates = lambda title, pay: {f.gate for f in evaluate(title=title, lines=[f"Base salary: {pay}"]).failures}
     assert "salary" not in gates("The Wolf Graduate Program (2027)", "$90,000")
     assert "salary" in gates("Business Operations Associate", "$90,000")       # other roles: $100K as before
-    assert "salary" in gates("Rotational Development Program", "$80,000")
+    assert "salary" not in gates("Rotational Development Program", "$80,000")   # Nov 10: US programs pass at $80K
+    assert "salary" in gates("Rotational Development Program", "$75,000")
 
 
 def test_unknown_salary_rule(criteria):
