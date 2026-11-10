@@ -226,3 +226,8 @@ def test_title_that_says_remote_is_a_remote_job(full_criteria):
         assert ev.failures and ev.failures[0].gate == "location", t
     assert _ev(full_criteria, "Operations Associate (Hybrid / Remote-friendly)", BODY + [PAY]).passed
     assert _ev(full_criteria, "Remote Operations Coordinator Lead", BODY + [PAY]).failures[0].gate != "location"
+
+
+def test_raydar_is_a_recruiter_not_an_employer(full_criteria):
+    ev = _ev(full_criteria, "Associate Deployment Strategist", BODY + [PAY], company="Raydar", platform="workable")
+    assert ev.failures and ev.failures[0].gate == "not_a_real_opening"
