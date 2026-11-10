@@ -35,7 +35,7 @@ the Dropped tab with the rule and the exact text that triggered it.
 | Role type | business / strategy operations, deployment / implementation, chief of staff / founder's associate, generalist, growth / revenue / data / product operations, or a grad / rotational program. AI-builder titles (GTM engineer, automation) only when coding familiarity is enough |
 | Never | acquisitions / asset management, sales, marketing, banking / finance roles, engineering, design / product, HR, legal, accounting, front-line jobs, staffing agencies. At finance firms only operations / generalist roles; at hotel companies only corporate-level roles |
 | Experience | asks for 1 year at most (a range starting at 0 or 1 passes), and nothing in the title or text marks it as senior |
-| Pay | any part of the posted base range reaches $100K (grad programs $90K; Canada C$100K; in the US the bottom of a range must also reach $80K, except grad programs). OTE doesn't count. No posted pay is kept only for grad programs, AI-forward companies and your core role types on startup boards |
+| Pay | any part of the posted base range reaches $100K (grad programs $90K; Canada C$100K; in the US the bottom of a range must also reach $80K, grad programs included). OTE doesn't count. No posted pay is kept only for grad programs, AI-forward companies and your core role types on startup boards |
 | Location | NYC · Chicago / Florida / California / Toronto · Texas / Vancouver; not solely remote |
 | Type | full-time (no internship, contract, temp, co-op, part-time) |
 | Work authorization | no US citizenship / clearance requirement ("no sponsorship" is only flagged: OPT / TN usually fine); related to your degree for OPT |

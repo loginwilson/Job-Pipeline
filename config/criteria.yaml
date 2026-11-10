@@ -7,7 +7,7 @@
 #   - never: acquisitions / asset management, sales, marketing, banking / finance roles,
 #     engineering, design / product, HR, legal, accounting, front-line, staffing agencies
 #   - 1 year of experience max; nothing senior
-#   - any part of the posted pay range reaches $100K (grad programs $90K; Canada C$100K); US ranges must also start at $80K+ (not grad programs)
+#   - any part of the posted pay range reaches $100K (grad programs $90K; Canada C$100K); US ranges, grad programs included, must also start at $80K+
 #   - your cities, not fully remote, full-time, OPT / TN possible, no coding proficiency
 # Each rule below is a DROP rule unless it says "flag". A flag never removes
 # a posting; it adds a note in the Flags column.
@@ -74,7 +74,7 @@ salary:
     # program_floor: new-grad / rotational programs pass at this lower base (your choice, Nov 8:
     # Fora's Wolf Graduate Program pays $90K)
     # min_floor (Nov 10, your rule, US only): the BOTTOM of the range must reach this too - a $70-100K
-    # range touches $100K but is a low-pay job. Grad programs are judged only by program_floor
+    # range touches $100K but is a low-pay job. Grad programs too (they reach program_floor instead)
     US: {currency: USD, comfortable: 120000, floor: 100000, program_floor: 90000, min_floor: 80000}
     CA: {currency: CAD, comfortable: 120000, floor: 100000, program_floor: 90000}   # Nov 10: must hit C$100K; no bottom rule
   # OTE / commission is never treated as base. An OTE-only posting is kept as

@@ -344,7 +344,7 @@ class Gates:
         if top < floor:
             ev.fail("salary", f"top of range {comp.currency or ''} {top:,.0f} below floor {floor:,}: "
                               f"{comp.matched_text}")
-        elif m.get("min_floor") and bottom < m["min_floor"] and not PROGRAM_RX.search(p.title or ""):
+        elif m.get("min_floor") and bottom < m["min_floor"]:
             ev.fail("salary", f"bottom of range {comp.currency or ''} {bottom:,.0f} below {m['min_floor']:,}: "
                               f"{comp.matched_text}")
         elif (comp.min and mid * (comp.min / raw_mid) < floor) or mid < m.get("comfortable", 0):
