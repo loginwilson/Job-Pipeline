@@ -56,6 +56,7 @@ def test_salary(evaluate):
     ca = evaluate(locations=["Toronto, ON"], lines=["Salary $95,000 - $110,000 per year"])
     assert ca.passed and "Low base — check incentives" in ca.flags
     assert "salary" in gates_of(evaluate(locations=["Toronto, ON"], lines=["Salary $70,000 - $95,000 per year"]))
+    assert "salary" not in gates_of(evaluate(locations=["Toronto, ON"], lines=["Salary $70,000 - $100,000 per year"]))
 
 
 def test_salary_rarely_meets_floor(evaluate):

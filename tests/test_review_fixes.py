@@ -277,3 +277,10 @@ def test_bottom_of_range_must_reach_80k(full_criteria):
     assert low.failures and low.failures[0].gate == "salary" and "bottom of range" in low.failures[0].matched
     assert _ev(full_criteria, "Operations Associate", BODY + ["The salary range is $80,000 - $100,000/year."]).passed
     assert _ev(full_criteria, "Operations Associate", BODY + [PAY]).passed
+
+
+def test_grad_programs_are_judged_only_by_their_90k_floor(full_criteria):
+    prog = _ev(full_criteria, "Associate, Rotational Leadership Program", BODY + ["The salary range is $75,000 - $110,000/year."])
+    assert "salary" not in {f.gate for f in prog.failures}
+    low = _ev(full_criteria, "Associate, Rotational Leadership Program", BODY + ["The salary range is $70,000 - $85,000/year."])
+    assert "salary" in {f.gate for f in low.failures}
