@@ -61,7 +61,7 @@ jobs:
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           JOBSPIPE_API_KEY: ${{ secrets.JOBS_PIPE_KEY || secrets.JOBSPIPE_API_KEY }}
           SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
-          CORESIGNAL_API_KEY: ${{ secrets.CORESIGNAL_API_KEY }}
+          CORESIGNAL_API_KEY: ${{ secrets.CORESIGNAL_API_KEY || secrets.CORESIGNAL_KEY || secrets.CORE_SIGNAL_API_KEY || secrets.CORE_SIGNAL_KEY || secrets.CORESIGNAL || secrets.CORESIGNAL_API }}
           ALERTS_IMAP_USER: ${{ secrets.ALERTS_IMAP_USER }}
           ALERTS_IMAP_APP_PASSWORD: ${{ secrets.ALERTS_IMAP_APP_PASSWORD }}
           PIPELINE_CHECK_ALL: ${{ inputs.check_all && '1' || '0' }}
