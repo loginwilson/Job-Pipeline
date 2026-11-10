@@ -80,7 +80,7 @@ def job_details(job_ids: list[str], country: str = "us", session: requests.Sessi
 _AGGREGATORS = re.compile(r"trabajo|jobrapido|jooble|talent\.com|lensa|jobilize|adzuna|ziprecruiter|"
                           r"simplyhired|careerbuilder|jobsora|whatjobs|learn4good|bebee|jobleads|"
                           r"recruit\.net|myjobhelper|jobcase|tallo|snagajob|snatch ?up|fde times|^careers at |"
-                          r"hiring ?cafe|job ?board|elitegen|selectiva|executive ?placements|raydar", re.I)   # + staffing / consulting body shops
+                          r"hiring ?cafe|job ?board|elitegen|selectiva|executive ?placements|raydar|jobot|referment|scout global", re.I)   # + staffing / consulting body shops
 
 
 def _aggregator(text: str) -> bool:
