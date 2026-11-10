@@ -301,3 +301,9 @@ def test_us_grad_program_passes_at_80k(full_criteria):
     assert "salary" not in {f.gate for f in prog.failures}
     assert "salary" in {f.gate for f in _ev(full_criteria, "Operations Associate Program (New Grad)",
                                              BODY + ["The base salary is $75,000 per year."]).failures}
+
+
+def test_audit_background_ask_is_accounting(full_criteria):
+    ev = _ev(full_criteria, "Product Operations Associate, Finance Transformation", BODY[:4] + [
+        "1–2 years of experience in audit or assurance at a Big Four or other accounting firms", BODY[5], PAY])
+    assert ev.failures and ev.failures[0].gate == "technical"
