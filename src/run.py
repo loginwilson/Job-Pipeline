@@ -739,8 +739,16 @@ def yc_candidates(companies: list[dict], matcher) -> dict[tuple[str, str], str]:
             continue
         host = urlparse(c.get("website") or "").netloc.lower().removeprefix("www.")
         stem = host.split(".")[0] if host else ""
+        # parallel.bio is "Parallel Bio": its stem 'parallel' is another company's board
+        # (Parallel Web Systems). A domain ending that is part of the name doesn't make the stem unique
+        tld = host.rsplit(".", 1)[-1] if "." in host else ""
+        if stem and tld not in ("com", "ai", "io", "co", "app", "so", "dev", "xyz", "us", "net", "org") \
+                and tld in (c.get("name") or "").lower().split():
+            stem = ""
         for slug in candidate_slugs(c.get("name") or "", stem or None)[:3]:
-            if slug != stem and len(slug) < 7:
+            words = re.findall(r"[a-z0-9]+", (c.get("name") or "").lower())
+            first_word_only = len(words) > 1 and slug == words[0]      # 'parallel' for "Parallel Bio"
+            if slug != stem and (len(slug) < 7 or first_word_only):
                 continue
             for platform in ("ashby", "greenhouse", "lever"):
                 out.setdefault((platform, slug), c["name"])
@@ -953,6 +961,9 @@ def main(argv: list[str] | None = None) -> int:
             store.commit()
         except Exception as exc:  # never stops the run
             log.error("target company boards: %s", exc)
+        for c in load_watchlist():         # a watchlist name corrects an older discovered name
+            store.conn.execute("UPDATE postings SET company=? WHERE posting_id LIKE ? AND company<>?",
+                               (c.name, f"{c.platform}:{c.slug}:%", c.name))
         watch = {normalize(c.name) for c in companies}
         watched_boards = {(c.platform, c.slug.lower()) for c in companies}
         companies += [Company(name=r["company"], platform=r["platform"], slug=r["slug"])

@@ -187,3 +187,14 @@ def test_hourly_wage_plus_commission_is_base_pay(full_criteria):
              locations=("Vancouver, BC",))
     assert not ev.posting.comp.ote_only
     assert ev.failures and ev.failures[0].gate == "salary" and "below floor" in ev.failures[0].matched
+
+
+def test_yc_guess_ignores_a_stem_whose_domain_ending_is_part_of_the_name():
+    from src.config import load_criteria
+    from src.pipeline.locations import LocationMatcher
+    from src.run import yc_candidates
+    m = LocationMatcher(load_criteria())
+    co = lambda name, site: {"name": name, "website": site, "all_locations": "New York, NY"}
+    out = yc_candidates([co("Parallel Bio", "https://parallel.bio")], m)
+    assert ("ashby", "parallel") not in out
+    assert ("ashby", "radar") in yc_candidates([co("Radar", "https://radar.com")], m)

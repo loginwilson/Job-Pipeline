@@ -11,6 +11,9 @@
 - name: Palantir
   platform: lever
   slug: palantir
+- name: Parallel Web Systems     # Nov 9: YC discovery had filed this board under "Parallel Bio"
+  platform: ashby
+  slug: parallel
 - name: WithCoverage
   platform: greenhouse
   slug: withcoverage
