@@ -218,3 +218,11 @@ def test_old_midpoint_pay_drops_are_rechecked_with_the_title_rules(full_criteria
     assert _rescue_midpoint_pay_drops(s, c, Gates(c), LocationMatcher(c), TS) == 1
     passed = lambda pid: s.conn.execute("SELECT passed FROM scores WHERE posting_id=?", (pid,)).fetchone()["passed"]
     assert passed("jobspipe::1") == 1 and passed("jobspipe::2") == 0 and passed("jobspipe::3") == 0
+
+
+def test_title_that_says_remote_is_a_remote_job(full_criteria):
+    for t in ("Generalist - Remote", "AI Deployment Specialist (Remote)", "Remote - Operations Associate"):
+        ev = _ev(full_criteria, t, BODY + [PAY])
+        assert ev.failures and ev.failures[0].gate == "location", t
+    assert _ev(full_criteria, "Operations Associate (Hybrid / Remote-friendly)", BODY + [PAY]).passed
+    assert _ev(full_criteria, "Remote Operations Coordinator Lead", BODY + [PAY]).failures[0].gate != "location"

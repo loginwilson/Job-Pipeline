@@ -46,6 +46,9 @@ class Evaluation:
             self.flags.append(text)
 
 
+_REMOTE_TITLE = re.compile(r"[-–—|,(\[]\s*remote\b|\bremote\s*[)\]]|^\s*remote\s*[-–—|:]", re.I)
+
+
 class Gates:
     def __init__(self, criteria: Criteria):
         self.c = criteria
@@ -281,6 +284,12 @@ class Gates:
     # 2. location ----------------------------------------------------------
     def location(self, p: Posting, ev: Evaluation) -> None:
         loc = self.c.get("location", default={}) or {}
+        # "Generalist - Remote" / "AI Deployment Specialist (Remote)": the title says it's a remote job
+        # even when a city is listed (Nov 10)
+        if loc.get("drop_fully_remote", True) and _REMOTE_TITLE.search(p.title or "") \
+                and not re.search(r"\bhybrid\b|remote[- ]friendly|or remote|remote or", p.title or "", re.I):
+            ev.fail("location", f"the title says remote: {p.title}")
+            return
         if p.location.fully_remote and loc.get("drop_fully_remote", True):
             ev.fail("location", f"fully remote: {', '.join(p.locations) or p.work_arrangement}")
         elif not p.location.offices:
