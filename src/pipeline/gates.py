@@ -344,10 +344,14 @@ class Gates:
         if top < floor:
             ev.fail("salary", f"top of range {comp.currency or ''} {top:,.0f} below floor {floor:,}: "
                               f"{comp.matched_text}")
-        elif m.get("min_floor") and bottom < m["min_floor"]:
-            ev.fail("salary", f"bottom of range {comp.currency or ''} {bottom:,.0f} below {m['min_floor']:,}: "
+            return
+        low = m.get("min_floor")
+        if PROGRAM_RX.search(p.title or "") and m.get("program_min_floor"):
+            low = m["program_min_floor"]               # grad programs lead to a full-time placement
+        if low and bottom < low:
+            ev.fail("salary", f"bottom of range {comp.currency or ''} {bottom:,.0f} below {low:,}: "
                               f"{comp.matched_text}")
-        elif (comp.min and mid * (comp.min / raw_mid) < floor) or mid < m.get("comfortable", 0):
+        elif (comp.min and bottom < floor) or mid < m.get("comfortable", 0):
             ev.flag("Low base — check incentives")
 
     # 4. experience ----------------------------------------------------------
