@@ -746,6 +746,9 @@ def _contacts_tab(meta: dict) -> list[dict]:
                                   "endColumnIndex": col["Write-up"] + 1},
                         "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP", "verticalAlignment": "TOP"}},
                         "fields": "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment"}},
+        # clears dropdowns left from the old layout (its "Job" / "Status" lists sat on other columns)
+        {"setDataValidation": {"range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": rows,
+                                         "startColumnIndex": 0, "endColumnIndex": len(CONTACT_HEADERS)}}},
         _range_validation(sid, col["Company"], f"='{PICKS}'!{ac['Company']}2:{ac['Company']}", rows),
         _validation(sid, col["Wave"], CONTACT_WAVES, rows),
         _validation(sid, col["Status"], CONTACT_STATUS, rows),
@@ -765,6 +768,61 @@ def _contacts_tab(meta: dict) -> list[dict]:
                 "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": formula}]},
                 "format": fmt}}}})
     return reqs
+
+
+CONTACT_IMPORT_PREFIX = "contacts -"     # a spreadsheet titled "Contacts - <Company>" shared with the pipeline
+_CONTACT_SYNONYMS = {"role / team": "Title", "role": "Title", "position": "Title", "linkedin url": "LinkedIn",
+                     "profile": "LinkedIn", "how you're connected": "Connection", "connected": "Connection",
+                     "job": "Covers", "posting": "Covers", "role covered": "Covers", "note": "Write-up",
+                     "connection note": "Write-up", "message": "Write-up", "sent": "Note sent"}
+
+
+def contact_import_rows(imports: list[tuple[str, list[list[str]]]], existing: list[list[str]]) -> list[dict]:
+    """Rows from contact sheets ("Contacts - EliseAI") not already on Contacts (same company + name).
+    Columns are matched by header name, so their order doesn't matter; Follow up / Job link are computed."""
+    def key(company, name):
+        return (re.sub(r"\W+", "", (company or "").lower()), re.sub(r"\W+", "", (name or "").lower()))
+    have = set()
+    if existing:
+        h = [str(x).strip() for x in existing[0]]
+        ci, ni = (h.index("Company") if "Company" in h else 0), (h.index("Name") if "Name" in h else 1)
+        have = {key(_pad(r, len(h))[ci], _pad(r, len(h))[ni]) for r in existing[1:] if any(r)}
+    out = []
+    for _title, grid in imports:
+        if not grid:
+            continue
+        cols = {}
+        for i, h in enumerate(grid[0]):
+            hl = str(h).strip().lower()
+            name = next((c for c in CONTACT_HEADERS if c.lower() == hl), None) or _CONTACT_SYNONYMS.get(hl)
+            if name and name not in ("Follow up", "Job link") and name not in cols:
+                cols[name] = i
+        if "Name" not in cols or "Company" not in cols:
+            continue
+        for r in grid[1:]:
+            r = list(r) + [""] * (len(grid[0]) - len(r))
+            row = {c: str(r[i]).strip() for c, i in cols.items()}
+            k = key(row.get("Company"), row.get("Name"))
+            if not k[1] or k in have:
+                continue
+            have.add(k)
+            if row.get("Wave", "").endswith(".0"):
+                row["Wave"] = row["Wave"][:-2]
+            out.append(row)
+    return out
+
+
+def _contact_append_requests(sid: int, start_row: int, rows: list[dict]) -> list[dict]:
+    """Your contact rows below the last one; the computed columns (Follow up, Job link) are left alone."""
+    if not rows:
+        return []
+    fu, jl = CONTACT_HEADERS.index("Follow up"), CONTACT_HEADERS.index("Job link")
+    left = [[_cell(r.get(h, "")) for h in CONTACT_HEADERS[:fu]] for r in rows]
+    mid = [[_cell(r.get(h, "")) for h in CONTACT_HEADERS[fu + 1:jl]] for r in rows]
+    return [{"updateCells": {"start": {"sheetId": sid, "rowIndex": start_row, "columnIndex": 0},
+                             "rows": [{"values": v} for v in left], "fields": "userEnteredValue"}},
+            {"updateCells": {"start": {"sheetId": sid, "rowIndex": start_row, "columnIndex": fu + 1},
+                             "rows": [{"values": v} for v in mid], "fields": "userEnteredValue"}}]
 
 
 def _simple_tab(meta: dict, tab: str, header: list[str], rows: list[list], existing_len: int) -> list[dict]:
@@ -876,6 +934,12 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
     for tab, (header, rows) in other_tab_rows(store, criteria, ts, unparsed).items():
         per_tab[tab] = _simple_tab(meta, tab, header, rows, len(existing.get(tab, [])))
     per_tab[CONTACTS] = _contacts_tab(meta)
+    imports = backend.contact_imports() if hasattr(backend, "contact_imports") else []
+    new_contacts = contact_import_rows(imports, existing.get(CONTACTS) or [])
+    if new_contacts:
+        start = max(1, len(existing.get(CONTACTS) or []))
+        per_tab[CONTACTS] += _contact_append_requests(meta[CONTACTS]["id"], start, new_contacts)
+        log.info("Contacts: %d added from %s", len(new_contacts), ", ".join(t for t, _ in imports))
     per_tab[PICKS] = _apply_view(meta)
     per_tab[PASSED] = _view_tab(meta, PASSED, f"'{JOBS}'!A2:A=\"Pass\"")
     # A rewrite makes an open Sheet reload and recalculate (it froze on big tabs), so a tab
@@ -951,6 +1015,7 @@ class GspreadBackend:
     def __init__(self, sheet_id: str, service_account_info: dict):
         import gspread
         gc = gspread.service_account_from_dict(service_account_info)
+        self.gc = gc
         self.ss = gc.open_by_key(sheet_id)
 
     def ensure_tabs(self, tabs: list[str]) -> dict[str, dict]:
@@ -993,6 +1058,17 @@ class GspreadBackend:
                 if s["properties"]["title"] in names]
         if reqs and len(reqs) < len(meta["sheets"]):
             self.ss.batch_update({"requests": reqs})
+
+    def contact_imports(self) -> list[tuple[str, list[list[str]]]]:
+        """Spreadsheets shared with the pipeline whose title starts "Contacts - " (first tab)."""
+        out = []
+        try:
+            for sp in self.gc.openall():
+                if sp.title.strip().lower().startswith(CONTACT_IMPORT_PREFIX) and sp.id != self.ss.id:
+                    out.append((sp.title, sp.sheet1.get_all_values()))
+        except Exception as exc:          # never stops the Sheet write
+            log.warning("contact sheets: %s", exc)
+        return out
 
     def read(self, tabs: list[str]) -> dict[str, list[list[str]]]:
         res = self.ss.values_batch_get([f"'{t}'!A:Z" for t in tabs])
@@ -1059,8 +1135,10 @@ class FakeBackend:
                     while len(tab["grid"]) <= r0 + i:
                         tab["grid"].append([])
                     new = [c.get("userEnteredValue", {}) for c in row["values"]]
+                    c0 = body["start"].get("columnIndex", 0)
                     old = tab["grid"][r0 + i]           # like Sheets: only the cells sent change
-                    tab["grid"][r0 + i] = new + old[len(new):]
+                    old = old + [{}] * max(0, c0 - len(old))
+                    tab["grid"][r0 + i] = old[:c0] + new + old[c0 + len(new):]
                 if len(tab["grid"]) > tab["rows"]:
                     raise ValueError("updateCells exceeds grid limits")
             elif kind == "updateSheetProperties":

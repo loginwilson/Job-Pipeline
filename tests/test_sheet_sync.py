@@ -192,7 +192,7 @@ def test_contacts_link_to_jobs_on_apply_and_old_tabs_go(criteria, board, evals):
     assert head[:11] == CONTACT_HEADERS[:11] and head[12] == "Status"           # Follow up / Job link are formulas
     assert "Follow up" in str(head[11]) and "Job link" in str(head[13])
     rules = [r["setDataValidation"]["rule"]["condition"] for r in sheet.tabs["Contacts"]["other"]
-             if "setDataValidation" in r]
+             if "rule" in r.get("setDataValidation", {})]
     assert {"type": "ONE_OF_RANGE", "values": [{"userEnteredValue": "='Apply'!H2:H"}]} in rules   # Company
     assert any(c.get("values") == [{"userEnteredValue": v} for v in ("1", "2", "Hold")] for c in rules)  # Wave
     pid = tab(sheet, REVIEW)[0][ID_COL]
@@ -446,3 +446,24 @@ def test_no_duplicates_on_the_sheet():
             row("ashby:other:6", "Finch", "Business Operations Associate", "2026-11-09")]
     kept = {r["posting_id"] for r in _dedupe(rows)}
     assert kept == {"jobspipe:1", "ashby:clay:9", "jsearch:4", "ashby:other:6"}
+
+
+def test_contact_sheets_shared_with_the_pipeline_are_added_once(criteria, board, evals):
+    from src.output.sheet import CONTACT_HEADERS
+    store, sheet = Store(":memory:"), FakeBackend()
+    grid = [["Company", "Name", "Title", "Covers", "LinkedIn", "Connection", "Wave", "Why", "Angle", "Write-up",
+             "Note sent", "Follow up", "Status"],
+            ["EliseAI", "Marcus Frankel", "Strategy Manager", "Growth Strategy Analyst", "https://x", "2nd", "1",
+             "Why text", "Angle text", "Hi Marcus", "", "", "Not sent"],
+            ["EliseAI", "Alison Nordell", "Strategy", "Growth Strategy Analyst", "https://y", "3rd", "Hold",
+             "", "", "", "", "", "On file"]]
+    sheet.contact_imports = lambda: [("Contacts - EliseAI", grid)]
+    run(store, sheet, board, evals, criteria, T1)
+    rows = sheet.read(["Contacts"])["Contacts"]
+    assert [r[1] for r in rows[1:3]] == ["Marcus Frankel", "Alison Nordell"]
+    assert rows[1][CONTACT_HEADERS.index("Why")] == "Why text" and rows[1][CONTACT_HEADERS.index("Status")] == "Not sent"
+    sheet.set_cell("Contacts", 1, CONTACT_HEADERS.index("Status"), "Sent")       # your edit
+    run(store, sheet, board, evals, criteria, T2)
+    rows = sheet.read(["Contacts"])["Contacts"]
+    assert len([r for r in rows[1:] if any(r)]) == 2                               # not added twice
+    assert rows[1][CONTACT_HEADERS.index("Status")] == "Sent"                    # your edit kept
