@@ -831,8 +831,8 @@ def _parse_day(v: str):
 
 
 def contact_fills(existing: list[list[str]]) -> list[tuple[int, int, dict]]:
-    """(row, col, cell) writes on your rows - only into empty cells:
-    - Due = Last contact + 7 when Status is Sent and Due is empty (you can overwrite it);
+    """(row, col, cell) writes on your rows:
+    - Due = Last contact + 7 when Status is Sent and Due is empty or on / before Last contact;
     - a new row's Status = Not sent, and Next step = Send note (Priority 1 / 2) or None (Hold)."""
     from datetime import timedelta
     if not existing or [str(x).strip() for x in existing[0][:len(CONTACT_HEADERS)]] != CONTACT_HEADERS:
@@ -847,9 +847,13 @@ def contact_fills(existing: list[list[str]]) -> list[tuple[int, int, dict]]:
             out.append((i, _ccol("Status"), _cell("Not sent")))
         if not str(r[_ccol("Next step")]).strip() and pr and (not status or status == "Not sent"):
             out.append((i, _ccol("Next step"), _cell("None" if pr.lower() in ("3", "hold") else "Send note")))
-        if status == "Sent" and not str(r[_ccol("Due")]).strip():
+        if status == "Sent":
+            # Nov 11: Due becomes Last contact + 7 when it's empty OR still holds a date on or before the
+            # send (a planned send date gets replaced by the follow-up date); a later date you set stays
             last = _parse_day(str(r[_ccol("Last contact")]))
-            if last:
+            due_v = str(r[_ccol("Due")]).strip()
+            due = _parse_day(due_v)
+            if last and (not due_v or (due and due <= last)):
                 d = last + timedelta(days=CONTACT_FOLLOW_UP_DAYS)
                 out.append((i, _ccol("Due"), {"userEnteredValue": {"formulaValue": f"=DATE({d.year},{d.month},{d.day})"}}))
     return out
@@ -858,6 +862,35 @@ def contact_fills(existing: list[list[str]]) -> list[tuple[int, int, dict]]:
 def _contact_fill_requests(sid: int, fills: list[tuple[int, int, dict]]) -> list[dict]:
     return [{"updateCells": {"start": {"sheetId": sid, "rowIndex": r, "columnIndex": c},
                              "rows": [{"values": [cell]}], "fields": "userEnteredValue"}} for r, c, cell in fills]
+
+
+def eliseai_nov11_edits(existing: list[list[str]]) -> list[tuple[int, int, dict]]:
+    """One-time (Nov 11, your request): EliseAI Due by priority (1 -> 2026-11-11, 2 -> 2026-11-18) and
+    priority 2 Notes by the posting(s) the person covers. Only empty cells are written."""
+    if not existing or [str(x).strip() for x in existing[0][:len(CONTACT_HEADERS)]] != CONTACT_HEADERS:
+        return []
+    growth, revops = "growth strategy analyst", "revenue operations associate"
+    out = []
+    for i, r in enumerate(existing[1:], start=1):
+        r = _pad(list(r), len(CONTACT_HEADERS))
+        if str(r[_ccol("Company")]).strip().lower() != "eliseai" or not str(r[_ccol("Name")]).strip():
+            continue
+        pr = re.sub(r"\.0$", "", str(r[_ccol("Priority")]).strip())
+        if not str(r[_ccol("Due")]).strip() and pr in ("1", "2"):
+            y, mo, d = (2026, 11, 11) if pr == "1" else (2026, 11, 18)
+            out.append((i, _ccol("Due"), {"userEnteredValue": {"formulaValue": f"=DATE({y},{mo},{d})"}}))
+        if pr == "2" and not str(r[_ccol("Notes")]).strip():
+            job = str(r[_ccol("Job")]).lower()
+            if growth in job and revops in job:
+                note = "Send after a coffee with someone on her team, or if both sides are quiet."
+            elif growth in job:
+                note = "Send only if the Growth Strategy side is quiet."
+            elif revops in job:
+                note = "Send only if the Revenue Operations side is quiet."
+            else:
+                continue
+            out.append((i, _ccol("Notes"), _cell(note)))
+    return out
 
 
 CONTACT_IMPORT_PREFIX = "contacts -"     # a spreadsheet titled "Contacts - <Company>" shared with the pipeline
@@ -1015,6 +1048,13 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
         log.info("Contacts: %d added from %s", len(new_contacts), ", ".join(t for t, _ in imports))
     per_tab[CONTACTS] += _contacts_tab(meta)
     views = _contact_filter_views(meta)
+    if contacts and not store.conn.execute("SELECT 1 FROM sheet_tabs WHERE tab='__contacts_eliseai_v1'").fetchone():
+        edits = eliseai_nov11_edits(contacts)
+        if edits:
+            per_tab[CONTACTS] = _contact_fill_requests(meta[CONTACTS]["id"], edits) + per_tab[CONTACTS]
+            store.conn.execute("INSERT OR REPLACE INTO sheet_tabs (tab, content_hash, written_at) "
+                               "VALUES ('__contacts_eliseai_v1', '', ?)", (ts,))
+            log.info("Contacts: %d EliseAI Due / Notes cells set (one time)", len(edits))
     per_tab[PICKS] = _apply_view(meta)
     per_tab[PASSED] = _view_tab(meta, PASSED, f"'{JOBS}'!A2:A=\"Pass\"")
     # A rewrite makes an open Sheet reload and recalculate (it froze on big tabs), so a tab

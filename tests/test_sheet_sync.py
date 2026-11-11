@@ -492,3 +492,30 @@ def test_rows_from_the_old_14_column_contacts_layout_are_cleared_once(criteria, 
     run(store, sheet, board, evals, criteria, T2)
     rows = sheet.read(["Contacts"])["Contacts"]
     assert rows[0] == CONTACT_HEADERS and len([r for r in rows[1:] if any(r)]) == 0
+
+
+def test_due_replaced_when_on_or_before_the_send_date():
+    from src.output.sheet import CONTACT_HEADERS as H, contact_fills
+    row = [""] * len(H)
+    row[H.index("Name")], row[H.index("Priority")], row[H.index("Next step")] = "Sasha", "1", "Follow up"
+    row[H.index("Status")], row[H.index("Last contact")], row[H.index("Due")] = "Sent", "2026-11-11", "2026-11-11"
+    assert [c["userEnteredValue"]["formulaValue"] for _, _, c in contact_fills([H, row])] == ["=DATE(2026,11,18)"]
+    row[H.index("Due")] = "2026-11-25"                       # a later date you chose stays
+    assert contact_fills([H, row]) == []
+
+
+def test_eliseai_one_time_due_and_notes():
+    from src.output.sheet import CONTACT_HEADERS as H, eliseai_nov11_edits
+    def row(name, pr, job):
+        r = [""] * len(H)
+        r[H.index("Company")], r[H.index("Name")], r[H.index("Priority")], r[H.index("Job")] = "EliseAI", name, pr, job
+        return r
+    g, rv = "Growth Strategy Analyst, Future Platforms | Housing", "Revenue Operations Associate"
+    grid = [H, row("A", "1", g), row("B", "2", g), row("C", "2", rv), row("D", "2", f"{g}; {rv}"), row("E", "3", g)]
+    got = {(r, H[c]): (cell["userEnteredValue"].get("formulaValue") or cell["userEnteredValue"].get("stringValue"))
+           for r, c, cell in eliseai_nov11_edits(grid)}
+    assert got[(1, "Due")] == "=DATE(2026,11,11)" and got[(2, "Due")] == "=DATE(2026,11,18)"
+    assert got[(2, "Notes")] == "Send only if the Growth Strategy side is quiet."
+    assert got[(3, "Notes")] == "Send only if the Revenue Operations side is quiet."
+    assert got[(4, "Notes")].startswith("Send after a coffee")
+    assert not any(r == 5 for r, _ in got)                     # priority 3 untouched
