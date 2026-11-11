@@ -30,11 +30,28 @@ I'll send the posting (pasted text or a link) and how much I want it: **top pick
 2. **Tailor the resume.** Reorder and rewrite bullets from my real experience so the most relevant work is first and uses the posting's vocabulary where it's truthful. Keep it to one page. Give me the full revised text, and under it a short list of what you changed and why so I can check it fast.
 3. **Cover letter, only if the application asks.** Under 250 words. Open with why this company and this role specifically, then one or two concrete things I've done that map to the job, then a close. No summary of my resume.
 4. **Short application answers.** If the form has questions ("Why us?", "Tell us about something you built"), draft them in my voice, at the length the form asks for.
-5. **LinkedIn outreach.** I apply first, then reach out: the same day for top picks, within 24 hours otherwise. I'll show you the company's LinkedIn People page, either through the Claude in Chrome extension when I'm on my laptop or as screenshots from my phone or iPad.
-   - Pick two to four people to contact and rank them. Favor, in order: the likely hiring manager or team lead for this role; someone currently in the same or an adjacent role; NYU alumni or anyone with a hospitality / real estate background like mine; a recruiter only if no one else fits. At a startup under about 30 people, a founder is a reasonable target for chief of staff, founder's associate and generalist roles. Tell me in one line why each person.
-   - Draft a connection note for each (LinkedIn caps these at 300 characters; count them) and a longer follow-up message for after they accept. Each one should mention something specific to that person or their team, say that I've applied and for which role, and ask for one small thing: a 15-minute chat or a single question about the team. Never ask for a referral in the first message.
-   - You only read LinkedIn. I send every message myself. Don't click connect, send, or message on my behalf.
-6. **Log it.** End with a block I can paste into my tracker: company, role, date applied, who I contacted, date, and the follow-up date (7 days after a message with no reply; one follow-up, then drop it).
+5. **LinkedIn outreach.** I apply first, then reach out: the same day for top picks, within 24 hours otherwise. I'll show you the company's LinkedIn People page as screenshots or pasted text.
+   - Rank the people: Priority 1 = reach out first (likely hiring manager or team lead, someone in the same or an adjacent role, NYU alumni, anyone with a real estate / hospitality background like mine); Priority 2 = backup, only if the 1s are quiet after a week; Priority 3 = relevant person on file, I won't reach out. A recruiter only if no one else fits. At a startup under about 30 people, a founder is a reasonable Priority 1 for chief of staff, founder's associate and generalist roles.
+   - For each Priority 1 and 2, write a connection note (300 characters max; count them). It mentions something specific to that person or their team, says I've applied and for which role, and asks for one small thing: a 15-minute chat or one question about the team. Never ask for a referral in the first message.
+   - You only read what I show you. I send every message myself.
+   - Give me the contacts as a contact sheet (format below) so I can paste it straight into my tracker.
+6. **Log it.** End with one line I can paste into my tracker: company, role, date applied (YYYY-MM-DD).
+
+## Contact sheet format
+
+A CSV with exactly 16 columns in this order and NO header row, one row per person, nothing above or below the rows. Quote any field that contains a comma.
+
+Company, Job, Name, Role / team, Location, LinkedIn, How you're connected, Priority, Why, Angle, Message, Status, Last contact, Next step, Due, Notes
+
+- Company: as on my jobs list (e.g. "EliseAI").
+- Job: the posting title exactly as I gave it to you. If the person covers two postings, list both separated by a semicolon. Never "Both".
+- Role / team: their title and team as on LinkedIn. Location: their city (fill it for every row, Priority 3 included).
+- LinkedIn: full profile URL. How you're connected: degree (2nd, 3rd), mutuals, shared school.
+- Priority: 1, 2 or 3 (as above).
+- Why: why this person. Angle: the hook and what I'm asking for.
+- Message: the connection note, 300 characters or fewer. Blank for Priority 3.
+- Status: "Not sent". Last contact: blank. Next step: "Send note" for Priority 1 and 2, "None" for 3. Due: blank. Notes: blank unless there's a sending condition (e.g. "Send only if the Growth Strategy side is quiet.").
+- Name the file "Contacts - <Company>.csv".
 
 ## Rules for everything you write
 
