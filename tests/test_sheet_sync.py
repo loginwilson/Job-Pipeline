@@ -192,7 +192,7 @@ def test_contacts_tab_layout_and_old_tabs_go(criteria, board, evals):
     other = sheet.tabs["Contacts"]["other"]
     lists = [r["setDataValidation"]["rule"]["condition"]["values"] for r in other
              if "rule" in r.get("setDataValidation", {})]
-    assert [{"userEnteredValue": v} for v in ("1", "2", "Hold")] in lists
+    assert [{"userEnteredValue": v} for v in ("1", "2", "3")] in lists
     assert [{"userEnteredValue": v} for v in ("Send note", "Follow up", "Book coffee", "Send thanks", "None")] in lists
     views = [r["addFilterView"]["filter"]["title"] for c in sheet.calls for r in c if "addFilterView" in r]
     assert views == ["Send today", "Follow-ups due", "By company"]
@@ -468,7 +468,7 @@ def test_contact_sheets_shared_with_the_pipeline_are_added_once(criteria, board,
     grid = [["EliseAI", "Growth Strategy Analyst", "Marcus Frankel", "Strategy Manager", "New York", "https://x",
              "2nd", "1", "Why text", "Angle text", "Hi Marcus", "Not sent", "", "Send note", "", ""],
             ["EliseAI", "Growth Strategy Analyst", "Alison Nordell", "Strategy", "New York", "https://y", "3rd",
-             "Hold", "", "", "", "Not sent", "", "None", "", ""]]
+             "3", "", "", "", "Not sent", "", "None", "", ""]]
     sheet.contact_imports = lambda: [("Contacts - EliseAI", grid)]
     run(store, sheet, board, evals, criteria, T1)
     rows = sheet.read(["Contacts"])["Contacts"]

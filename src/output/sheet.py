@@ -697,7 +697,7 @@ def is_program(title: str) -> bool:
 # never deletes or rewrites your rows.
 CONTACT_HEADERS = ["Company", "Job", "Name", "Role / team", "Location", "LinkedIn", "How you're connected",
                    "Priority", "Why", "Angle", "Message", "Status", "Last contact", "Next step", "Due", "Notes"]
-CONTACT_PRIORITY = ["1", "2", "Hold"]
+CONTACT_PRIORITY = ["1", "2", "3"]   # 1 reach out first, 2 backup, 3 on file (don't reach out)
 CONTACT_STATUS = ["Not sent", "Sent", "Accepted", "Replied", "Meeting set", "Met", "No reply"]
 CONTACT_NEXT = ["Send note", "Follow up", "Book coffee", "Send thanks", "None"]
 CONTACT_FOLLOW_UP_DAYS = 7          # Due = Last contact + 7 once Status is Sent (only when Due is empty)
@@ -762,7 +762,7 @@ def _contacts_tab(meta: dict) -> list[dict]:
         _validation(sid, _ccol("Priority"), CONTACT_PRIORITY, rows),
         _validation(sid, _ccol("Status"), CONTACT_STATUS, rows),
         _validation(sid, _ccol("Next step"), CONTACT_NEXT, rows),
-        # default sort: Company, then Priority (1, 2, Hold), then Name
+        # default sort: Company, then Priority (1, 2, 3), then Name
         {"setBasicFilter": {"filter": {"range": {"sheetId": sid, "startRowIndex": 0, "startColumnIndex": 0,
                                                  "endColumnIndex": n},
                                        "sortSpecs": [{"dimensionIndex": _ccol("Company"), "sortOrder": "ASCENDING"},
@@ -774,7 +774,7 @@ def _contacts_tab(meta: dict) -> list[dict]:
         (f'=LEN(${msg}2)>{CONTACT_MESSAGE_MAX}', {"backgroundColor": RED_FILL}, cols("Message")),
         (f'=AND(ISNUMBER(${due}2),${due}2<=TODAY(),OR(${st}2="Sent",${st}2="Accepted"))',
          {"backgroundColor": RED_FILL}, cols("Due")),
-        (f'=TO_TEXT(${pr}2)="Hold"', {"textFormat": {"foregroundColor": GRAY}},
+        (f'=OR(TO_TEXT(${pr}2)="3",TO_TEXT(${pr}2)="Hold")', {"textFormat": {"foregroundColor": GRAY}},
          {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": n}),
     ]
     if m.get("cf_formulas") != [f for f, _, _ in rules]:
@@ -839,7 +839,7 @@ def contact_fills(existing: list[list[str]]) -> list[tuple[int, int, dict]]:
         if not status:
             out.append((i, _ccol("Status"), _cell("Not sent")))
         if not str(r[_ccol("Next step")]).strip() and pr and (not status or status == "Not sent"):
-            out.append((i, _ccol("Next step"), _cell("None" if pr.lower() == "hold" else "Send note")))
+            out.append((i, _ccol("Next step"), _cell("None" if pr.lower() in ("3", "hold") else "Send note")))
         if status == "Sent" and not str(r[_ccol("Due")]).strip():
             last = _parse_day(str(r[_ccol("Last contact")]))
             if last:

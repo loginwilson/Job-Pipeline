@@ -11,7 +11,7 @@ The Contacts tab has these 16 columns, in this order, for every company:
 | E | Location | CSV | e.g. "New York" |
 | F | LinkedIn | CSV | Full profile URL (clickable) |
 | G | How you're connected | CSV | Degree, mutuals, shared school |
-| H | Priority | CSV | 1, 2 or Hold |
+| H | Priority | CSV | 1 = reach out first, 2 = backup, 3 = on file (don't reach out) |
 | I | Why | CSV | |
 | J | Angle | CSV | The hook and the ask |
 | K | Message | CSV | LinkedIn connection note, 300 characters max (red if over) |
@@ -36,12 +36,12 @@ One row per person; no blank rows and nothing above or below the rows.
 - Name; Role / team (title and team as on LinkedIn); Location (city, e.g. "New York").
 - LinkedIn: full profile URL.
 - How you're connected: degree (2nd, 3rd), mutual connections, shared school.
-- Priority: 1, 2 or Hold.
+- Priority: 1 (reach out first), 2 (backup, only if priority 1 is quiet), or 3 (someone in the area, on file, I won't reach out).
 - Why: why this person. Angle: the hook and what I'm asking for.
-- Message: the LinkedIn connection note, 300 characters or fewer. Blank for Hold.
+- Message: the LinkedIn connection note, 300 characters or fewer. Blank for Priority 3.
 - Status: "Not sent".
 - Last contact: blank.
-- Next step: "Send note" for Priority 1 and 2, "None" for Hold.
+- Next step: "Send note" for Priority 1 and 2, "None" for Priority 3.
 - Due: blank. Notes: blank.
 - Dates, when there are any, are YYYY-MM-DD.
 - Quote any field that contains a comma (standard CSV).
