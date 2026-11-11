@@ -92,7 +92,7 @@ coresignal:                 # LinkedIn postings via Coresignal (free credits, ne
   enabled: true
   searches_per_day: 8       # about half a credit each
   collects_per_day: 25      # one credit per full posting, only never-seen ones (Nov 10: 25 to clear the first backlog; ~2 months of credits)
-  pace_through_day: true
+  pace_through_day: false   # Nov 11: fetch the day's 25 as soon as the day starts (backlog first)
   first_fill_days: 14       # a search's first run looks back two weeks (Mogul, VectorShift: posted Nov 3)
   window_days: 3
   close_after_days_unseen: 21
