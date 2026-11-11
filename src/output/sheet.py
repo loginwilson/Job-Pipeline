@@ -703,6 +703,7 @@ CONTACT_NEXT = ["Send note", "Follow up", "Book coffee", "Send thanks", "None"]
 CONTACT_FOLLOW_UP_DAYS = 7          # Due = Last contact + 7 once Status is Sent (only when Due is empty)
 CONTACT_MESSAGE_MAX = 300
 RED_FILL = {"red": 0.96, "green": 0.8, "blue": 0.8}
+BLUE_FILL = {"red": 0.81, "green": 0.89, "blue": 0.97}
 CONTACT_VIEWS = ["Send today", "Follow-ups due", "By company"]
 
 
@@ -776,6 +777,12 @@ def _contacts_tab(meta: dict) -> list[dict]:
          {"backgroundColor": RED_FILL}, cols("Due")),
         (f'=OR(TO_TEXT(${pr}2)="3",TO_TEXT(${pr}2)="Hold")', {"textFormat": {"foregroundColor": GRAY}},
          {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": n}),
+        # Nov 11: priority 1 people stand out (bold row, blue Priority cell); progress shows on Status
+        (f'=TO_TEXT(${pr}2)="1"', {"backgroundColor": BLUE_FILL}, cols("Priority")),
+        (f'=TO_TEXT(${pr}2)="1"', {"textFormat": {"bold": True}},
+         {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": n}),
+        (f'=OR(${st}2="Accepted",${st}2="Replied",${st}2="Meeting set",${st}2="Met")',
+         {"backgroundColor": GREEN_4}, cols("Status")),
     ]
     if m.get("cf_formulas") != [f for f, _, _ in rules]:
         for _ in range(int(m.get("cf_count", 0))):
