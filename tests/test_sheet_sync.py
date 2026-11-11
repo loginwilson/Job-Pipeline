@@ -188,17 +188,19 @@ def test_contacts_link_to_jobs_on_apply_and_old_tabs_go(criteria, board, evals):
     sheet.ensure_tabs(["Home", "Companies", "Grad programs", "Company jobs", "Before reset"])
     run(store, sheet, board, evals, criteria, T1)
     assert not {"Home", "Companies", "Grad programs", "Company jobs", "Before reset"} & set(sheet.tabs)
-    assert sheet.read(["Contacts"])["Contacts"][0] == CONTACT_HEADERS
+    head = sheet.read(["Contacts"])["Contacts"][0]
+    assert head[:11] == CONTACT_HEADERS[:11] and head[12] == "Status"           # Follow up / Job link are formulas
+    assert "Follow up" in str(head[11]) and "Job link" in str(head[13])
     rules = [r["setDataValidation"]["rule"]["condition"] for r in sheet.tabs["Contacts"]["other"]
              if "setDataValidation" in r]
     assert {"type": "ONE_OF_RANGE", "values": [{"userEnteredValue": "='Apply'!H2:H"}]} in rules   # Company
-    assert {"type": "ONE_OF_RANGE", "values": [{"userEnteredValue": "='Apply'!I2:I"}]} in rules   # Job
+    assert any(c.get("values") == [{"userEnteredValue": v} for v in ("1", "2", "Hold")] for c in rules)  # Wave
     pid = tab(sheet, REVIEW)[0][ID_COL]
     put(sheet, REVIEW, pid, "Interest", "4")
-    for col, v in enumerate(["Example Co", "", "Sasha", "Ops", "NYU alum"]):
+    for col, v in enumerate(["Example Co", "Sasha", "Ops", "Both"]):
         sheet.set_cell("Contacts", 1, col, v)
     run(store, sheet, board, evals, criteria, T2)
-    assert sheet.read(["Contacts"])["Contacts"][1][2] == "Sasha"                 # your row untouched
+    assert sheet.read(["Contacts"])["Contacts"][1][1] == "Sasha"                 # your row untouched
     assert "COUNTIF(Contacts!A:A, CHOOSECOLS(g, 6))" in sheet.tabs[PICKS]["grid"][1][0]["formulaValue"]
 
 

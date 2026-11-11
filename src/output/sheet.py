@@ -5,7 +5,8 @@ Four tabs (Nov 9: you type in ONE place; everything else follows instantly):
              Notes). The hourly run only adds new postings here ("Applied on" fills itself).
   Apply      a live formula view: your 1-5s, best first, finished applications last.
   Passed     a live formula view of your passes.
-  Contacts   yours: people at the companies on Apply (Company / Job pick from Apply).
+  Contacts   yours: people at the companies on Apply (Nov 11 layout: Company, Name, Title, Covers,
+             LinkedIn, Connection, Wave, Why, Angle, Write-up, Note sent, Follow up, Status, Job link).
   (+ hidden back office: Dropped, Unparsed alerts, Funnel, Board health)
 
 Your cells are read from To review by Company + Role (+ Location), saved in the database,
@@ -689,12 +690,13 @@ def is_program(title: str) -> bool:
     return bool(PROGRAM_RX.search(title or ""))
 
 
-# --- Contacts tab: yours entirely (the pipeline sets the header and dropdowns, never your rows) ---
-CONTACT_HEADERS = ["Company", "Job", "Name", "Role / team", "How you're connected", "LinkedIn", "Status",
-                   "Last contact", "Next step", "Due", "Notes"]
-CONTACT_STATUS = ["To reach out", "Messaged", "Replied", "Coffee chat scheduled", "Coffee chat done",
-                  "Referred", "Thank-you sent", "Keep in touch", "No reply"]
-CONTACT_NUDGE_DAYS = 7      # Messaged with no reply for this long -> yellow
+# --- Contacts tab: yours entirely (the pipeline sets the header, dropdowns and the two computed
+# columns, never your rows). Nov 11 layout, the same for every company:
+CONTACT_HEADERS = ["Company", "Name", "Title", "Covers", "LinkedIn", "Connection", "Wave", "Why", "Angle",
+                   "Write-up", "Note sent", "Follow up", "Status", "Job link"]
+CONTACT_STATUS = ["Not sent", "Sent", "Accepted", "Replied", "On file"]
+CONTACT_WAVES = ["1", "2", "Hold"]
+CONTACT_FOLLOW_UP_DAYS = 7  # Follow up = Note sent + 7 days (computed)
 
 
 def _range_validation(sid: int, col: int, source: str, rows: int) -> dict:
@@ -706,31 +708,53 @@ def _range_validation(sid: int, col: int, source: str, rows: int) -> dict:
 
 
 def _contacts_tab(meta: dict) -> list[dict]:
-    """Header, dropdowns (Company / Job from Apply) and colours only - your rows are never touched."""
+    """Header, dropdowns and colours. Follow up and Job link are formulas in their header cells, so
+    every row - yours or imported - gets them without the pipeline writing your rows."""
     m = meta[CONTACTS]
     sid = m["id"]
     rows = max(m.get("rows", 1000), 500)
     col = {h: i for i, h in enumerate(CONTACT_HEADERS)}
-    ac = {h: _col_letter(APPLY_HEADERS.index(h)) for h in ("Company", "Role")}     # Apply's view columns
+    L = {h: _col_letter(i) for h, i in col.items()}
+    ac = {h: _col_letter(APPLY_HEADERS.index(h)) for h in ("Company", "Role", "Link")}     # Apply's columns
+    sent, comp, covers = L["Note sent"], L["Company"], L["Covers"]
+    follow = (f'={{"Follow up"; ARRAYFORMULA(IF(LEN({sent}2:{sent})=0, "", '
+              f'IFERROR({sent}2:{sent} + {CONTACT_FOLLOW_UP_DAYS}, DATEVALUE({sent}2:{sent}) + {CONTACT_FOLLOW_UP_DAYS})))}}')
+    # Covers names the posting ("Growth Strategy Analyst"), or "Both" / "All" for every one of the
+    # company's jobs on Apply; the links come from Apply, one per line
+    link = (f'={{"Job link"; MAP({comp}2:{comp}, {covers}2:{covers}, LAMBDA(c, v, IF(LEN(c)=0, "", '
+            f'IFERROR(TEXTJOIN(CHAR(10), TRUE, FILTER(\'{PICKS}\'!{ac["Link"]}2:{ac["Link"]}, '
+            f'\'{PICKS}\'!{ac["Company"]}2:{ac["Company"]}=c, '
+            f'IF(OR(v="Both", v="All", LEN(v)=0), \'{PICKS}\'!{ac["Company"]}2:{ac["Company"]}=c, '
+            f'ISNUMBER(SEARCH(v, \'{PICKS}\'!{ac["Role"]}2:{ac["Role"]}))))), "")))) }}')
+    header = [_cell(h) for h in CONTACT_HEADERS]
+    header[col["Follow up"]] = {"userEnteredValue": {"formulaValue": follow}}
+    header[col["Job link"]] = {"userEnteredValue": {"formulaValue": link}}
     reqs = [
         {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
             "rowCount": rows, "columnCount": max(m.get("cols", 26), len(CONTACT_HEADERS)), "frozenRowCount": 1}},
             "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
         {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
-                         "rows": [{"values": [_cell(h) for h in CONTACT_HEADERS]}], "fields": "userEnteredValue"}},
+                         "rows": [{"values": header}], "fields": "userEnteredValue"}},
         {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
                         "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
                         "fields": "userEnteredFormat.textFormat.bold"}},
+        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": col["Follow up"],
+                                  "endColumnIndex": col["Follow up"] + 1},
+                        "cell": {"userEnteredFormat": {"numberFormat": {"type": "DATE", "pattern": "mmm d"}}},
+                        "fields": "userEnteredFormat.numberFormat"}},
+        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": col["Why"],
+                                  "endColumnIndex": col["Write-up"] + 1},
+                        "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP", "verticalAlignment": "TOP"}},
+                        "fields": "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment"}},
         _range_validation(sid, col["Company"], f"='{PICKS}'!{ac['Company']}2:{ac['Company']}", rows),
-        _range_validation(sid, col["Job"], f"='{PICKS}'!{ac['Role']}2:{ac['Role']}", rows),
+        _validation(sid, col["Wave"], CONTACT_WAVES, rows),
         _validation(sid, col["Status"], CONTACT_STATUS, rows),
     ]
-    status, last, due = (_col_letter(col[h]) for h in ("Status", "Last contact", "Due"))
+    status, follow_c, wave = L["Status"], L["Follow up"], L["Wave"]
     rules = [
-        (_due_formula(due), {"backgroundColor": YELLOW}),
-        (f'=AND(${status}2="Messaged",LEN(${last}2)>0,TODAY()-IFERROR(IF(ISNUMBER(${last}2),${last}2,'
-         f'DATEVALUE(${last}2)),TODAY())>={CONTACT_NUDGE_DAYS})', {"backgroundColor": YELLOW}),
-        (f'=OR(${status}2="Coffee chat done",${status}2="Referred")', {"backgroundColor": GREEN_4}),
+        (f'=AND(${status}2="Sent",ISNUMBER(${follow_c}2),${follow_c}2<=TODAY())', {"backgroundColor": YELLOW}),
+        (f'=OR(${status}2="Accepted",${status}2="Replied")', {"backgroundColor": GREEN_4}),
+        (f'=${wave}2="Hold"', {"textFormat": {"foregroundColor": GRAY}}),
     ]
     if m.get("cf_formulas") != [f for f, _ in rules]:
         full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(CONTACT_HEADERS)}
