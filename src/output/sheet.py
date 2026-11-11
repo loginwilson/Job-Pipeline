@@ -1052,9 +1052,10 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
         edits = eliseai_nov11_edits(contacts)
         if edits:
             per_tab[CONTACTS] = _contact_fill_requests(meta[CONTACTS]["id"], edits) + per_tab[CONTACTS]
-            store.conn.execute("INSERT OR REPLACE INTO sheet_tabs (tab, content_hash, written_at) "
-                               "VALUES ('__contacts_eliseai_v1', '', ?)", (ts,))
             log.info("Contacts: %d EliseAI Due / Notes cells set (one time)", len(edits))
+        # done for good, even when you'd already filled them (a Due you clear later stays clear)
+        store.conn.execute("INSERT OR REPLACE INTO sheet_tabs (tab, content_hash, written_at) "
+                           "VALUES ('__contacts_eliseai_v1', '', ?)", (ts,))
     per_tab[PICKS] = _apply_view(meta)
     per_tab[PASSED] = _view_tab(meta, PASSED, f"'{JOBS}'!A2:A=\"Pass\"")
     # A rewrite makes an open Sheet reload and recalculate (it froze on big tabs), so a tab
