@@ -182,26 +182,40 @@ def test_touched_row_never_deleted(criteria, board, evals):
     assert kept and kept[0][NOTES] == "keep me"
 
 
-def test_contacts_link_to_jobs_on_apply_and_old_tabs_go(criteria, board, evals):
+def test_contacts_tab_layout_and_old_tabs_go(criteria, board, evals):
     from src.output.sheet import CONTACT_HEADERS
     store, sheet = Store(":memory:"), FakeBackend()
     sheet.ensure_tabs(["Home", "Companies", "Grad programs", "Company jobs", "Before reset"])
     run(store, sheet, board, evals, criteria, T1)
     assert not {"Home", "Companies", "Grad programs", "Company jobs", "Before reset"} & set(sheet.tabs)
-    head = sheet.read(["Contacts"])["Contacts"][0]
-    assert head[:11] == CONTACT_HEADERS[:11] and head[12] == "Status"           # Follow up / Job link are formulas
-    assert "Follow up" in str(head[11]) and "Job link" in str(head[13])
-    rules = [r["setDataValidation"]["rule"]["condition"] for r in sheet.tabs["Contacts"]["other"]
+    assert sheet.read(["Contacts"])["Contacts"][0] == CONTACT_HEADERS
+    other = sheet.tabs["Contacts"]["other"]
+    lists = [r["setDataValidation"]["rule"]["condition"]["values"] for r in other
              if "rule" in r.get("setDataValidation", {})]
-    assert {"type": "ONE_OF_RANGE", "values": [{"userEnteredValue": "='Apply'!H2:H"}]} in rules   # Company
-    assert any(c.get("values") == [{"userEnteredValue": v} for v in ("1", "2", "Hold")] for c in rules)  # Wave
-    pid = tab(sheet, REVIEW)[0][ID_COL]
-    put(sheet, REVIEW, pid, "Interest", "4")
-    for col, v in enumerate(["Example Co", "Sasha", "Ops", "Both"]):
+    assert [{"userEnteredValue": v} for v in ("1", "2", "Hold")] in lists
+    assert [{"userEnteredValue": v} for v in ("Send note", "Follow up", "Book coffee", "Send thanks", "None")] in lists
+    views = [r["addFilterView"]["filter"]["title"] for c in sheet.calls for r in c if "addFilterView" in r]
+    assert views == ["Send today", "Follow-ups due", "By company"]
+    for col, v in enumerate(["Example Co", "Growth Analyst", "Sasha", "Ops", "New York", "https://x", "2nd", "1"]):
         sheet.set_cell("Contacts", 1, col, v)
     run(store, sheet, board, evals, criteria, T2)
-    assert sheet.read(["Contacts"])["Contacts"][1][1] == "Sasha"                 # your row untouched
+    row = sheet.read(["Contacts"])["Contacts"][1]
+    assert row[2] == "Sasha"                                                       # your row untouched
+    assert row[CONTACT_HEADERS.index("Status")] == "Not sent" and row[CONTACT_HEADERS.index("Next step")] == "Send note"
     assert "COUNTIF(Contacts!A:A, CHOOSECOLS(g, 6))" in sheet.tabs[PICKS]["grid"][1][0]["formulaValue"]
+
+
+def test_contact_due_is_last_contact_plus_7_when_sent():
+    from src.output.sheet import CONTACT_HEADERS, contact_fills
+    H = CONTACT_HEADERS
+    row = [""] * len(H)
+    row[H.index("Name")], row[H.index("Priority")] = "Sasha", "1"
+    row[H.index("Status")], row[H.index("Last contact")], row[H.index("Next step")] = "Sent", "2026-11-11", "Follow up"
+    fills = contact_fills([H, row])
+    assert [(r, c, cell["userEnteredValue"]["formulaValue"]) for r, c, cell in fills] == [
+        (1, H.index("Due"), "=DATE(2026,11,18)")]
+    row[H.index("Due")] = "2026-11-20"                                            # your own date is kept
+    assert contact_fills([H, row]) == []
 
 
 def test_a_job_you_marked_keeps_its_link_when_rules_change(criteria):
@@ -451,19 +465,30 @@ def test_no_duplicates_on_the_sheet():
 def test_contact_sheets_shared_with_the_pipeline_are_added_once(criteria, board, evals):
     from src.output.sheet import CONTACT_HEADERS
     store, sheet = Store(":memory:"), FakeBackend()
-    grid = [["Company", "Name", "Title", "Covers", "LinkedIn", "Connection", "Wave", "Why", "Angle", "Write-up",
-             "Note sent", "Follow up", "Status"],
-            ["EliseAI", "Marcus Frankel", "Strategy Manager", "Growth Strategy Analyst", "https://x", "2nd", "1",
-             "Why text", "Angle text", "Hi Marcus", "", "", "Not sent"],
-            ["EliseAI", "Alison Nordell", "Strategy", "Growth Strategy Analyst", "https://y", "3rd", "Hold",
-             "", "", "", "", "", "On file"]]
+    grid = [["EliseAI", "Growth Strategy Analyst", "Marcus Frankel", "Strategy Manager", "New York", "https://x",
+             "2nd", "1", "Why text", "Angle text", "Hi Marcus", "Not sent", "", "Send note", "", ""],
+            ["EliseAI", "Growth Strategy Analyst", "Alison Nordell", "Strategy", "New York", "https://y", "3rd",
+             "Hold", "", "", "", "Not sent", "", "None", "", ""]]
     sheet.contact_imports = lambda: [("Contacts - EliseAI", grid)]
     run(store, sheet, board, evals, criteria, T1)
     rows = sheet.read(["Contacts"])["Contacts"]
-    assert [r[1] for r in rows[1:3]] == ["Marcus Frankel", "Alison Nordell"]
-    assert rows[1][CONTACT_HEADERS.index("Why")] == "Why text" and rows[1][CONTACT_HEADERS.index("Status")] == "Not sent"
-    sheet.set_cell("Contacts", 1, CONTACT_HEADERS.index("Status"), "Sent")       # your edit
+    assert sorted(r[2] for r in rows[1:3]) == ["Alison Nordell", "Marcus Frankel"]
     run(store, sheet, board, evals, criteria, T2)
     rows = sheet.read(["Contacts"])["Contacts"]
     assert len([r for r in rows[1:] if any(r)]) == 2                               # not added twice
-    assert rows[1][CONTACT_HEADERS.index("Status")] == "Sent"                    # your edit kept
+
+
+def test_rows_from_the_old_14_column_contacts_layout_are_cleared_once(criteria, board, evals):
+    from src.output.sheet import CONTACT_HEADERS
+    store, sheet = Store(":memory:"), FakeBackend()
+    run(store, sheet, board, evals, criteria, T1)
+    old = ["Company", "Name", "Title", "Covers", "LinkedIn", "Connection", "Wave", "Why", "Angle", "Write-up",
+           "Note sent", "Follow up", "Status", "Job link"]
+    for c, v in enumerate(old):
+        sheet.set_cell("Contacts", 0, c, v)
+    for c, v in enumerate(["EliseAI", "Marcus Frankel", "Strategy Manager", "Both"]):
+        sheet.set_cell("Contacts", 1, c, v)
+    store.conn.execute("DELETE FROM sheet_tabs WHERE tab='Contacts'")
+    run(store, sheet, board, evals, criteria, T2)
+    rows = sheet.read(["Contacts"])["Contacts"]
+    assert rows[0] == CONTACT_HEADERS and len([r for r in rows[1:] if any(r)]) == 0

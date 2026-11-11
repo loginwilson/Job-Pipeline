@@ -5,8 +5,9 @@ Four tabs (Nov 9: you type in ONE place; everything else follows instantly):
              Notes). The hourly run only adds new postings here ("Applied on" fills itself).
   Apply      a live formula view: your 1-5s, best first, finished applications last.
   Passed     a live formula view of your passes.
-  Contacts   yours: people at the companies on Apply (Nov 11 layout: Company, Name, Title, Covers,
-             LinkedIn, Connection, Wave, Why, Angle, Write-up, Note sent, Follow up, Status, Job link).
+  Contacts   yours: people at the companies on Apply (Nov 11, 16 columns: Company, Job, Name, Role / team,
+             Location, LinkedIn, How you're connected, Priority, Why, Angle, Message, Status,
+             Last contact, Next step, Due, Notes).
   (+ hidden back office: Dropped, Unparsed alerts, Funnel, Board health)
 
 Your cells are read from To review by Company + Role (+ Location), saved in the database,
@@ -690,13 +691,19 @@ def is_program(title: str) -> bool:
     return bool(PROGRAM_RX.search(title or ""))
 
 
-# --- Contacts tab: yours entirely (the pipeline sets the header, dropdowns and the two computed
-# columns, never your rows). Nov 11 layout, the same for every company:
-CONTACT_HEADERS = ["Company", "Name", "Title", "Covers", "LinkedIn", "Connection", "Wave", "Why", "Angle",
-                   "Write-up", "Note sent", "Follow up", "Status", "Job link"]
-CONTACT_STATUS = ["Not sent", "Sent", "Accepted", "Replied", "On file"]
-CONTACT_WAVES = ["1", "2", "Hold"]
-CONTACT_FOLLOW_UP_DAYS = 7  # Follow up = Note sent + 7 days (computed)
+# --- Contacts tab (Nov 11 layout, the same for every company) ------------------------------------
+# A-K arrive from a contact-sheet CSV you paste (16 columns, no header); L-P are yours to update.
+# The pipeline sets the header, dropdowns, colours, filter views and two small fills (below); it
+# never deletes or rewrites your rows.
+CONTACT_HEADERS = ["Company", "Job", "Name", "Role / team", "Location", "LinkedIn", "How you're connected",
+                   "Priority", "Why", "Angle", "Message", "Status", "Last contact", "Next step", "Due", "Notes"]
+CONTACT_PRIORITY = ["1", "2", "Hold"]
+CONTACT_STATUS = ["Not sent", "Sent", "Accepted", "Replied", "Meeting set", "Met", "No reply"]
+CONTACT_NEXT = ["Send note", "Follow up", "Book coffee", "Send thanks", "None"]
+CONTACT_FOLLOW_UP_DAYS = 7          # Due = Last contact + 7 once Status is Sent (only when Due is empty)
+CONTACT_MESSAGE_MAX = 300
+RED_FILL = {"red": 0.96, "green": 0.8, "blue": 0.8}
+CONTACT_VIEWS = ["Send today", "Follow-ups due", "By company"]
 
 
 def _range_validation(sid: int, col: int, source: str, rows: int) -> dict:
@@ -707,122 +714,173 @@ def _range_validation(sid: int, col: int, source: str, rows: int) -> dict:
                  "showCustomUi": True, "strict": False}}}
 
 
+def _ccol(h: str) -> int:
+    return CONTACT_HEADERS.index(h)
+
+
 def _contacts_tab(meta: dict) -> list[dict]:
-    """Header, dropdowns and colours. Follow up and Job link are formulas in their header cells, so
-    every row - yours or imported - gets them without the pipeline writing your rows."""
+    """Layout only: header, frozen panes, widths, one-line rows, dropdowns, date formats, colours and
+    the default sort (Company, Priority, Name)."""
     m = meta[CONTACTS]
     sid = m["id"]
     rows = max(m.get("rows", 1000), 500)
-    col = {h: i for i, h in enumerate(CONTACT_HEADERS)}
-    L = {h: _col_letter(i) for h, i in col.items()}
-    ac = {h: _col_letter(APPLY_HEADERS.index(h)) for h in ("Company", "Role", "Link")}     # Apply's columns
-    sent, comp, covers = L["Note sent"], L["Company"], L["Covers"]
-    follow = (f'={{"Follow up"; ARRAYFORMULA(IF(LEN({sent}2:{sent})=0, "", '
-              f'IFERROR({sent}2:{sent} + {CONTACT_FOLLOW_UP_DAYS}, DATEVALUE({sent}2:{sent}) + {CONTACT_FOLLOW_UP_DAYS})))}}')
-    # Covers names the posting ("Growth Strategy Analyst"), or "Both" / "All" for every one of the
-    # company's jobs on Apply; the links come from Apply, one per line
-    link = (f'={{"Job link"; MAP({comp}2:{comp}, {covers}2:{covers}, LAMBDA(c, v, IF(LEN(c)=0, "", '
-            f'IFERROR(TEXTJOIN(CHAR(10), TRUE, FILTER(\'{PICKS}\'!{ac["Link"]}2:{ac["Link"]}, '
-            f'\'{PICKS}\'!{ac["Company"]}2:{ac["Company"]}=c, '
-            f'IF(OR(v="Both", v="All", LEN(v)=0), \'{PICKS}\'!{ac["Company"]}2:{ac["Company"]}=c, '
-            f'ISNUMBER(SEARCH(v, \'{PICKS}\'!{ac["Role"]}2:{ac["Role"]}))))), "")))) }}')
-    header = [_cell(h) for h in CONTACT_HEADERS]
-    header[col["Follow up"]] = {"userEnteredValue": {"formulaValue": follow}}
-    header[col["Job link"]] = {"userEnteredValue": {"formulaValue": link}}
+    n = len(CONTACT_HEADERS)
+    L = {h: _col_letter(_ccol(h)) for h in CONTACT_HEADERS}
+
+    def cols(a: str, b: str | None = None) -> dict:
+        return {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": _ccol(a), "endColumnIndex": _ccol(b or a) + 1}
+
+    def width(h: str, px: int) -> dict:
+        return {"updateDimensionProperties": {"range": {"sheetId": sid, "dimension": "COLUMNS",
+                                                        "startIndex": _ccol(h), "endIndex": _ccol(h) + 1},
+                                              "properties": {"pixelSize": px}, "fields": "pixelSize"}}
     reqs = [
         {"updateSheetProperties": {"properties": {"sheetId": sid, "gridProperties": {
-            "rowCount": rows, "columnCount": max(m.get("cols", 26), len(CONTACT_HEADERS)), "frozenRowCount": 1}},
-            "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount"}},
+            "rowCount": rows, "columnCount": max(m.get("cols", 26), n), "frozenRowCount": 1, "frozenColumnCount": 3}},
+            "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount,"
+                      "gridProperties.frozenColumnCount"}},
         {"updateCells": {"start": {"sheetId": sid, "rowIndex": 0, "columnIndex": 0},
-                         "rows": [{"values": header}], "fields": "userEnteredValue"}},
+                         "rows": [{"values": [_cell(h) for h in CONTACT_HEADERS]}], "fields": "userEnteredValue"}},
         {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1},
                         "cell": {"userEnteredFormat": {"textFormat": {"bold": True}}},
                         "fields": "userEnteredFormat.textFormat.bold"}},
-        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": col["Follow up"],
-                                  "endColumnIndex": col["Follow up"] + 1},
-                        "cell": {"userEnteredFormat": {"numberFormat": {"type": "DATE", "pattern": "mmm d"}}},
-                        "fields": "userEnteredFormat.numberFormat"}},
-        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": col["Why"],
-                                  "endColumnIndex": col["Write-up"] + 1},
-                        "cell": {"userEnteredFormat": {"wrapStrategy": "WRAP", "verticalAlignment": "TOP"}},
+        # every row one line tall: long text is clipped, never wrapped
+        {"repeatCell": {"range": {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": n},
+                        "cell": {"userEnteredFormat": {"wrapStrategy": "CLIP", "verticalAlignment": "MIDDLE"}},
                         "fields": "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment"}},
-        # clears dropdowns left from the old layout (its "Job" / "Status" lists sat on other columns)
+        {"repeatCell": {"range": cols("Last contact"), "cell": {"userEnteredFormat": {
+            "numberFormat": {"type": "DATE", "pattern": "yyyy-mm-dd"}}}, "fields": "userEnteredFormat.numberFormat"}},
+        {"repeatCell": {"range": cols("Due"), "cell": {"userEnteredFormat": {
+            "numberFormat": {"type": "DATE", "pattern": "yyyy-mm-dd"}}}, "fields": "userEnteredFormat.numberFormat"}},
+        width("Company", 110), width("Job", 200), width("Name", 170), width("Role / team", 240),
+        width("Location", 110), width("LinkedIn", 160), width("How you're connected", 200), width("Priority", 75),
+        width("Why", 220), width("Angle", 220), width("Message", 260), width("Status", 105),
+        width("Last contact", 100), width("Next step", 110), width("Due", 95), width("Notes", 220),
+        # clears dropdowns left over from earlier layouts before setting this one's
         {"setDataValidation": {"range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": rows,
-                                         "startColumnIndex": 0, "endColumnIndex": len(CONTACT_HEADERS)}}},
-        _range_validation(sid, col["Company"], f"='{PICKS}'!{ac['Company']}2:{ac['Company']}", rows),
-        _validation(sid, col["Wave"], CONTACT_WAVES, rows),
-        _validation(sid, col["Status"], CONTACT_STATUS, rows),
+                                         "startColumnIndex": 0, "endColumnIndex": max(n, 16)}}},
+        _validation(sid, _ccol("Priority"), CONTACT_PRIORITY, rows),
+        _validation(sid, _ccol("Status"), CONTACT_STATUS, rows),
+        _validation(sid, _ccol("Next step"), CONTACT_NEXT, rows),
+        # default sort: Company, then Priority (1, 2, Hold), then Name
+        {"setBasicFilter": {"filter": {"range": {"sheetId": sid, "startRowIndex": 0, "startColumnIndex": 0,
+                                                 "endColumnIndex": n},
+                                       "sortSpecs": [{"dimensionIndex": _ccol("Company"), "sortOrder": "ASCENDING"},
+                                                     {"dimensionIndex": _ccol("Priority"), "sortOrder": "ASCENDING"},
+                                                     {"dimensionIndex": _ccol("Name"), "sortOrder": "ASCENDING"}]}}},
     ]
-    status, follow_c, wave = L["Status"], L["Follow up"], L["Wave"]
+    msg, due, st, pr = L["Message"], L["Due"], L["Status"], L["Priority"]
     rules = [
-        (f'=AND(${status}2="Sent",ISNUMBER(${follow_c}2),${follow_c}2<=TODAY())', {"backgroundColor": YELLOW}),
-        (f'=OR(${status}2="Accepted",${status}2="Replied")', {"backgroundColor": GREEN_4}),
-        (f'=${wave}2="Hold"', {"textFormat": {"foregroundColor": GRAY}}),
+        (f'=LEN(${msg}2)>{CONTACT_MESSAGE_MAX}', {"backgroundColor": RED_FILL}, cols("Message")),
+        (f'=AND(ISNUMBER(${due}2),${due}2<=TODAY(),OR(${st}2="Sent",${st}2="Accepted"))',
+         {"backgroundColor": RED_FILL}, cols("Due")),
+        (f'=TO_TEXT(${pr}2)="Hold"', {"textFormat": {"foregroundColor": GRAY}},
+         {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": n}),
     ]
-    if m.get("cf_formulas") != [f for f, _ in rules]:
-        full = {"sheetId": sid, "startRowIndex": 1, "startColumnIndex": 0, "endColumnIndex": len(CONTACT_HEADERS)}
+    if m.get("cf_formulas") != [f for f, _, _ in rules]:
         for _ in range(int(m.get("cf_count", 0))):
             reqs.append({"deleteConditionalFormatRule": {"sheetId": sid, "index": 0}})
-        for i, (formula, fmt) in enumerate(rules):
-            reqs.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [full], "booleanRule": {
+        for i, (formula, fmt, rng) in enumerate(rules):
+            reqs.append({"addConditionalFormatRule": {"index": i, "rule": {"ranges": [rng], "booleanRule": {
                 "condition": {"type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": formula}]},
                 "format": fmt}}}})
     return reqs
 
 
-CONTACT_IMPORT_PREFIX = "contacts -"     # a spreadsheet titled "Contacts - <Company>" shared with the pipeline
-_CONTACT_SYNONYMS = {"role / team": "Title", "role": "Title", "position": "Title", "linkedin url": "LinkedIn",
-                     "profile": "LinkedIn", "how you're connected": "Connection", "connected": "Connection",
-                     "job": "Covers", "posting": "Covers", "role covered": "Covers", "note": "Write-up",
-                     "connection note": "Write-up", "message": "Write-up", "sent": "Note sent"}
+def _contact_filter_views(meta: dict) -> list[dict]:
+    """Saved filter views, created once (yours to edit afterwards)."""
+    m = meta[CONTACTS]
+    have = set(m.get("filter_views") or [])
+    sid, n = m["id"], len(CONTACT_HEADERS)
+    L = {h: _col_letter(_ccol(h)) for h in CONTACT_HEADERS}
+    rng = {"sheetId": sid, "startRowIndex": 0, "startColumnIndex": 0, "endColumnIndex": n}
+    sort = [{"dimensionIndex": _ccol("Company"), "sortOrder": "ASCENDING"},
+            {"dimensionIndex": _ccol("Priority"), "sortOrder": "ASCENDING"},
+            {"dimensionIndex": _ccol("Name"), "sortOrder": "ASCENDING"}]
+
+    def formula(col: str, f: str) -> dict:
+        return {"columnIndex": _ccol(col), "filterCriteria": {"condition": {
+            "type": "CUSTOM_FORMULA", "values": [{"userEnteredValue": f}]}}}
+    views = {
+        "Send today": [formula("Priority", f'=TO_TEXT({L["Priority"]}2)="1"'),
+                       formula("Status", f'={L["Status"]}2="Not sent"')],
+        "Follow-ups due": [formula("Due", f'=AND(ISNUMBER({L["Due"]}2),{L["Due"]}2<=TODAY(),'
+                                         f'OR({L["Status"]}2="Sent",{L["Status"]}2="Accepted"))')],
+        "By company": [],
+    }
+    return [{"addFilterView": {"filter": {"title": t, "range": rng, "sortSpecs": sort, "filterSpecs": specs}}}
+            for t, specs in views.items() if t not in have]
 
 
-def contact_import_rows(imports: list[tuple[str, list[list[str]]]], existing: list[list[str]]) -> list[dict]:
-    """Rows from contact sheets ("Contacts - EliseAI") not already on Contacts (same company + name).
-    Columns are matched by header name, so their order doesn't matter; Follow up / Job link are computed."""
-    def key(company, name):
-        return (re.sub(r"\W+", "", (company or "").lower()), re.sub(r"\W+", "", (name or "").lower()))
-    have = set()
-    if existing:
-        h = [str(x).strip() for x in existing[0]]
-        ci, ni = (h.index("Company") if "Company" in h else 0), (h.index("Name") if "Name" in h else 1)
-        have = {key(_pad(r, len(h))[ci], _pad(r, len(h))[ni]) for r in existing[1:] if any(r)}
+def _parse_day(v: str):
+    from datetime import date
+    v = (v or "").strip()
+    for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m/%d/%y", "%b %d, %Y", "%d %b %Y"):
+        try:
+            return datetime.strptime(v, fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def contact_fills(existing: list[list[str]]) -> list[tuple[int, int, dict]]:
+    """(row, col, cell) writes on your rows - only into empty cells:
+    - Due = Last contact + 7 when Status is Sent and Due is empty (you can overwrite it);
+    - a new row's Status = Not sent, and Next step = Send note (Priority 1 / 2) or None (Hold)."""
+    from datetime import timedelta
+    if not existing or [str(x).strip() for x in existing[0][:len(CONTACT_HEADERS)]] != CONTACT_HEADERS:
+        return []
     out = []
-    for _title, grid in imports:
-        if not grid:
+    for i, r in enumerate(existing[1:], start=1):
+        r = _pad(list(r), len(CONTACT_HEADERS))
+        if not str(r[_ccol("Name")]).strip():
             continue
-        cols = {}
-        for i, h in enumerate(grid[0]):
-            hl = str(h).strip().lower()
-            name = next((c for c in CONTACT_HEADERS if c.lower() == hl), None) or _CONTACT_SYNONYMS.get(hl)
-            if name and name not in ("Follow up", "Job link") and name not in cols:
-                cols[name] = i
-        if "Name" not in cols or "Company" not in cols:
-            continue
-        for r in grid[1:]:
-            r = list(r) + [""] * (len(grid[0]) - len(r))
-            row = {c: str(r[i]).strip() for c, i in cols.items()}
-            k = key(row.get("Company"), row.get("Name"))
-            if not k[1] or k in have:
-                continue
-            have.add(k)
-            if row.get("Wave", "").endswith(".0"):
-                row["Wave"] = row["Wave"][:-2]
-            out.append(row)
+        status, pr = str(r[_ccol("Status")]).strip(), str(r[_ccol("Priority")]).strip()
+        if not status:
+            out.append((i, _ccol("Status"), _cell("Not sent")))
+        if not str(r[_ccol("Next step")]).strip() and pr and (not status or status == "Not sent"):
+            out.append((i, _ccol("Next step"), _cell("None" if pr.lower() == "hold" else "Send note")))
+        if status == "Sent" and not str(r[_ccol("Due")]).strip():
+            last = _parse_day(str(r[_ccol("Last contact")]))
+            if last:
+                d = last + timedelta(days=CONTACT_FOLLOW_UP_DAYS)
+                out.append((i, _ccol("Due"), {"userEnteredValue": {"formulaValue": f"=DATE({d.year},{d.month},{d.day})"}}))
     return out
 
 
-def _contact_append_requests(sid: int, start_row: int, rows: list[dict]) -> list[dict]:
-    """Your contact rows below the last one; the computed columns (Follow up, Job link) are left alone."""
+def _contact_fill_requests(sid: int, fills: list[tuple[int, int, dict]]) -> list[dict]:
+    return [{"updateCells": {"start": {"sheetId": sid, "rowIndex": r, "columnIndex": c},
+                             "rows": [{"values": [cell]}], "fields": "userEnteredValue"}} for r, c, cell in fills]
+
+
+CONTACT_IMPORT_PREFIX = "contacts -"     # a spreadsheet titled "Contacts - <Company>" shared with the pipeline
+
+
+def contact_import_rows(imports: list[tuple[str, list[list[str]]]], existing: list[list[str]]) -> list[list[str]]:
+    """Rows from shared contact sheets ("Contacts - EliseAI": the same 16 columns, header row optional)
+    for people not already on Contacts (same company + name)."""
+    def key(company, name):
+        return (re.sub(r"\W+", "", (company or "").lower()), re.sub(r"\W+", "", (name or "").lower()))
+    ci, ni = _ccol("Company"), _ccol("Name")
+    have = {key(_pad(list(r), 16)[ci], _pad(list(r), 16)[ni]) for r in (existing or [])[1:] if any(r)}
+    out = []
+    for _title, grid in imports:
+        rows = grid[1:] if grid and str(_pad(list(grid[0]), 16)[ni]).strip().lower() == "name" else grid
+        for r in rows:
+            r = [str(x).strip() for x in _pad(list(r), len(CONTACT_HEADERS))][:len(CONTACT_HEADERS)]
+            k = key(r[ci], r[ni])
+            if not k[1] or k in have:
+                continue
+            have.add(k)
+            out.append(r)
+    return out
+
+
+def _contact_append_requests(sid: int, start_row: int, rows: list[list[str]]) -> list[dict]:
     if not rows:
         return []
-    fu, jl = CONTACT_HEADERS.index("Follow up"), CONTACT_HEADERS.index("Job link")
-    left = [[_cell(r.get(h, "")) for h in CONTACT_HEADERS[:fu]] for r in rows]
-    mid = [[_cell(r.get(h, "")) for h in CONTACT_HEADERS[fu + 1:jl]] for r in rows]
     return [{"updateCells": {"start": {"sheetId": sid, "rowIndex": start_row, "columnIndex": 0},
-                             "rows": [{"values": v} for v in left], "fields": "userEnteredValue"}},
-            {"updateCells": {"start": {"sheetId": sid, "rowIndex": start_row, "columnIndex": fu + 1},
-                             "rows": [{"values": v} for v in mid], "fields": "userEnteredValue"}}]
+                             "rows": [{"values": [_cell(v) for v in r]} for r in rows], "fields": "userEnteredValue"}}]
 
 
 def _simple_tab(meta: dict, tab: str, header: list[str], rows: list[list], existing_len: int) -> list[dict]:
@@ -933,13 +991,23 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
         per_tab[_tab_of(r, meta)].append(r)
     for tab, (header, rows) in other_tab_rows(store, criteria, ts, unparsed).items():
         per_tab[tab] = _simple_tab(meta, tab, header, rows, len(existing.get(tab, [])))
-    per_tab[CONTACTS] = _contacts_tab(meta)
+    per_tab[CONTACTS] = []
+    contacts = existing.get(CONTACTS) or []
+    if contacts and "Covers" in [str(x).strip() for x in contacts[0]]:
+        # Nov 11: rows from the short-lived 14-column layout are cleared once (you re-paste them in 16)
+        per_tab[CONTACTS].append({"updateCells": {"range": {"sheetId": meta[CONTACTS]["id"], "startRowIndex": 0},
+                                                  "fields": "userEnteredValue"}})
+        contacts = []
+        log.info("Contacts: cleared the rows from the old layout")
+    # fills and additions go in before the layout, whose default sort then reorders the rows
+    per_tab[CONTACTS] += _contact_fill_requests(meta[CONTACTS]["id"], contact_fills(contacts))
     imports = backend.contact_imports() if hasattr(backend, "contact_imports") else []
-    new_contacts = contact_import_rows(imports, existing.get(CONTACTS) or [])
+    new_contacts = contact_import_rows(imports, contacts)
     if new_contacts:
-        start = max(1, len(existing.get(CONTACTS) or []))
-        per_tab[CONTACTS] += _contact_append_requests(meta[CONTACTS]["id"], start, new_contacts)
+        per_tab[CONTACTS] += _contact_append_requests(meta[CONTACTS]["id"], max(1, len(contacts)), new_contacts)
         log.info("Contacts: %d added from %s", len(new_contacts), ", ".join(t for t, _ in imports))
+    per_tab[CONTACTS] += _contacts_tab(meta)
+    views = _contact_filter_views(meta)
     per_tab[PICKS] = _apply_view(meta)
     per_tab[PASSED] = _view_tab(meta, PASSED, f"'{JOBS}'!A2:A=\"Pass\"")
     # A rewrite makes an open Sheet reload and recalculate (it froze on big tabs), so a tab
@@ -966,6 +1034,7 @@ def sync_all(backend: SheetBackend, store: Store, criteria: Criteria, ts: str | 
                                                        "fields": "hidden"}})
         store.conn.execute("INSERT OR REPLACE INTO sheet_tabs (tab, content_hash, written_at) "
                            "VALUES ('__hidden_v1', '', ?)", (ts,))
+    requests += views                            # saved filter views, created once
     if requests:
         backend.batch_update(requests)
     store.commit()
@@ -1019,7 +1088,7 @@ class GspreadBackend:
         self.ss = gc.open_by_key(sheet_id)
 
     def ensure_tabs(self, tabs: list[str]) -> dict[str, dict]:
-        meta = self.ss.fetch_sheet_metadata({"fields": "sheets(properties,conditionalFormats)"})
+        meta = self.ss.fetch_sheet_metadata({"fields": "sheets(properties,conditionalFormats,filterViews(title))"})
         have = {s["properties"]["title"]: s for s in meta["sheets"]}
         missing = [t for t in tabs if t not in have]
         reqs = [{"addSheet": {"properties": {"title": t}}} for t in missing]
@@ -1039,6 +1108,7 @@ class GspreadBackend:
             out[t] = {"id": p["sheetId"], "rows": gp.get("rowCount", 1000), "cols": gp.get("columnCount", 26),
                       "has_cf": bool(have[t].get("conditionalFormats")), "index": p.get("index"),
                       "cf_count": len(have[t].get("conditionalFormats") or []),
+                      "filter_views": [fv.get("title") for fv in have[t].get("filterViews") or []],
                       "cf_formulas": [((((cf.get("booleanRule") or {}).get("condition") or {}).get("values")
                                         or [{}])[0]).get("userEnteredValue")
                                       for cf in have[t].get("conditionalFormats") or []]}
