@@ -21,6 +21,11 @@ def main(path: str = "data/pipeline.db", out: str = "review_dump.json") -> None:
         rows.append({"posting_id": r["posting_id"], "company": r["company"], "title": r["title"], "url": r["url"],
                      "passed": r["passed"], "snapshot": json.loads(r["snapshot"] or "null")})
     json.dump(rows, open(out, "w"), default=str)
+    # every company board the pipeline reads (watchlist + discovered), for offline audits (Nov 12)
+    from .config import load_watchlist
+    boards = [{"company": c.name, "platform": c.platform, "slug": c.slug} for c in load_watchlist()]
+    boards += [{"company": r["company"], "platform": r["platform"], "slug": r["slug"]} for r in store.discovered_boards()]
+    json.dump(boards, open("boards.json", "w"))
     # near misses: open jobs in your cities and role types that a later rule dropped - read these
     # to catch good jobs the rules cut by mistake (Nov 9)
     early = ("field", "not_related_to_degree", "not_a_real_opening", "location", "employment_type",

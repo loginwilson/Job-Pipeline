@@ -75,7 +75,9 @@ jobs:
         if: always()
         with:
           name: review-dump
-          path: review_dump.json
+          path: |
+            review_dump.json
+            boards.json
           retention-days: 3
           if-no-files-found: ignore
 
