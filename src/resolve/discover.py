@@ -43,6 +43,10 @@ def candidate_slugs(name: str, hint: str | None = None) -> list[str]:
         cands += ["".join(words), "-".join(words)]
         if len(words) > 1 and len(words[0]) > 3:
             cands.append(words[0])
+        # Nov 12 (Hebbia's board is 'hebbia-ai'): common board-name patterns, tried after the plain ones
+        j = "".join(words)
+        cands += [f"{j}-ai", f"{j}ai", f"{j}hq", f"{j}-hq", f"{j}-inc", f"{j}inc", f"join{j}", f"get{j}",
+                  f"try{j}", f"{j}-labs", f"{j}labs", f"{j}-app", f"{j}app"]
     return [c for c in dict.fromkeys(cands) if len(c) >= 2]
 
 
@@ -126,7 +130,7 @@ def greenhouse_behind(url: str, company: str, session: requests.Session | None =
     base = candidate_slugs(company, hint)
     words = re.findall(r"[a-z0-9]+", _SUFFIX.sub(" ", company.lower()))
     extra = ["".join(w[0] for w in words) if len(words) > 1 else ""] + [b + suf for b in base[:2] for suf in ("us", "careers")]
-    for slug in [c for c in dict.fromkeys(base + extra) if len(c) >= 2][:10]:
+    for slug in [c for c in dict.fromkeys(base[:3] + extra + base[3:]) if len(c) >= 2][:14]:
         try:
             r = sess.get(GREENHOUSE_JOB.format(slug=slug, job_id=m.group(1)), timeout=15,
                          headers={"User-Agent": "job-pipeline"})
