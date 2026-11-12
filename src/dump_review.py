@@ -26,6 +26,8 @@ def main(path: str = "data/pipeline.db", out: str = "review_dump.json") -> None:
     boards = [{"company": c.name, "platform": c.platform, "slug": c.slug} for c in load_watchlist()]
     boards += [{"company": r["company"], "platform": r["platform"], "slug": r["slug"]} for r in store.discovered_boards()]
     json.dump(boards, open("boards.json", "w"))
+    for b in boards:                       # also in the log (artifacts can't always be fetched)
+        print(f"BOARD | {b['platform']} | {b['slug']} | {b['company']}")
     # near misses: open jobs in your cities and role types that a later rule dropped - read these
     # to catch good jobs the rules cut by mistake (Nov 9)
     early = ("field", "not_related_to_degree", "not_a_real_opening", "location", "employment_type",
