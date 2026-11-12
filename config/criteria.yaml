@@ -106,7 +106,8 @@ experience:
   # January S&O: "Track record of owning operational outcomes end-to-end across strategy, operations, or
   # consulting roles". Not plain "track record of owning": Jerry (1+ yrs) says "track record of owning
   # ambiguous problems and delivering impact" and is an entry role
-  unstated_senior_terms: [track record of owning operational outcomes, track record of owning outcomes,
+  unstated_senior_terms: [several years of,   # Nov 12: "Several years of B2B lead generation experience"
+                          track record of owning operational outcomes, track record of owning outcomes,
                           built and run, built and ran, presented to senior executives, presenting to senior executives,
                           you have led, you've led, led a team, led teams, managed a team,
                           managing a team, people management, experience at an ai, experience at a high-growth,
@@ -289,10 +290,12 @@ tracking:                   # how your Status column is followed up
 field_fit:
   # Nov 9: text that marks developer relations / community marketing whatever the title says
   never_role_text:
-    label: developer relations / community marketing
-    drop_at: 2
+    label: marketing / lead generation (DevRel, community, outbound, ads)
+    drop_at: 3      # Nov 12: 3 distinct terms (2 caught a deployment role that mentions outbound + pipeline generation)
     terms: [devrel, developer relations, developer advocate, developer advocacy, technical evangelism, technical evangelist,
-            developer communities, developer community, developer-facing, community building]
+            developer communities, developer community, developer-facing, community building,
+            lead generation, lead-generation, demand generation, pipeline generation, outbound, paid ads, paid media,
+            landing pages, follow-up sequences, copywriting]   # Nov 12: Ease Health "GTM Engineer" is lead gen
   core_families:          # always kept
     hospitality_travel: [hotel, hotels, hospitality, resort, resorts, travel, tourism, guest experience, guest relations, revenue management, revenue manager, rooms division, front office, food and beverage, F&B, lodging, airline, airlines, cruise, concierge, catering, venue, venues, restaurant group, timeshare, vacation ownership]
     real_estate: [real estate, property, properties, housing, leasing, multifamily, CRE, REIT, acquisitions, real estate development, land development, construction management, asset management analyst, investment sales, proptech]

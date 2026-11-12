@@ -336,3 +336,11 @@ def test_finance_firm_by_exact_name_or_self_description(full_criteria):
     assert "finance firm" not in " ".join(f.matched for f in ev.failures)
     ev = _ev(full_criteria, "Implementation Associate", BODY + [PAY], company="Cogent Security")
     assert "finance firm" not in " ".join(f.matched for f in ev.failures)
+
+
+def test_lead_generation_role_behind_a_gtm_engineer_title_drops(full_criteria):
+    lines = BODY[:3] + ["Run continuous lead-generation experiments across outbound, paid ads, content, and other channels",
+                        "Design and launch full-cycle campaigns: lists, messaging, targeting, landing pages, and follow-up sequences",
+                        "Requirements", "Several years of B2B lead generation experience across outbound, ads, content", PAY]
+    ev = _ev(full_criteria, "GTM Engineer", lines)
+    assert ev.failures and ev.failures[0].gate == "field"
