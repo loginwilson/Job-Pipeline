@@ -226,7 +226,7 @@ credentials:
   strong_degree_fields: [business, hospitality, hotel, tourism, travel, real estate, business administration, hospitality management, marketing, communications, any field, any discipline, liberal arts]
   # "degree in a quantitative field" and the like: drop unless a strong field above is also accepted
   quantitative_field_terms: [quantitative field, quantitative discipline, quantitative degree, quantitative major, technical field, technical discipline, technical degree, STEM, analytical field, engineering field, mathematical field]
-  softeners: [or equivalent, equivalent experience, or related experience, preferred, a plus, nice to have, any field, any discipline, not required, not necessary, not a requirement, isnt required, is not needed, dont need, do not need, no prior, not expected]
+  softeners: [or equivalent, equivalent experience, or related experience, preferred, preferably, a plus, nice to have, any field, any discipline, not required, not necessary, not a requirement, isnt required, is not needed, dont need, do not need, no prior, not expected]
 
 
 # 9 ── START DATE ──────────────────────────────────────────────
@@ -343,7 +343,7 @@ field_fit:
                           rotational, university hire, new grad, graduate program, chief of staff, ai operations]
   # Nov 9: ONLY these role types pass (from the 26 jobs you scored 1-5, which all match). Anything
   # else drops, whatever company or field words it has. Grad / rotational programs also pass.
-  role_allow: [business operations, bizops, biz ops, strategy & operations, strategy and operations, strategy & ops,
+  role_allow: [ai strategist, business operations, bizops, biz ops, strategy & operations, strategy and operations, strategy & ops,
                strategic operations, operations associate, operations analyst, operations generalist, ops associate,
                deployment strategist, deployment, implementation, growth strategy, growth operations, revenue operations,
                revops, revenue strategy, data operations, product operations, founder associate, founders associate,

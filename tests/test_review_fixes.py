@@ -307,3 +307,16 @@ def test_audit_background_ask_is_accounting(full_criteria):
     ev = _ev(full_criteria, "Product Operations Associate, Finance Transformation", BODY[:4] + [
         "1–2 years of experience in audit or assurance at a Big Four or other accounting firms", BODY[5], PAY])
     assert ev.failures and ev.failures[0].gate == "technical"
+
+
+def test_ai_company_serving_finance_firms_with_a_bonus_section(full_criteria):
+    lines = ["Hebbia powers investment decisions for 40% of the world's largest asset managers.",
+             "## About the Role", "You'll drive the strategic deployment of our AI platform.",
+             "## Who You Are",
+             "Bachelor's degree, preferably in Finance, Economics, Computer Engineering, or Pre-Law",
+             "1-5 years of client-facing experience in consulting or professional services; relevant internship "
+             "experience can be considered for recent grads",
+             "Experience and comfort with leading LLM models and tools", "Bonus:",
+             "5-10 years of client-facing experience with an emphasis on relationship-building", PAY]
+    ev = _ev(full_criteria, "AI Strategist", lines, company="Hebbia")
+    assert ev.passed, ev.failures

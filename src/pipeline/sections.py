@@ -60,6 +60,11 @@ def split_sections(lines: list[str], criteria: Criteria) -> SectionSplit:
         if line.startswith("## "):
             heading = line[3:].strip()
             sections.append(Section(heading=heading, kind=classify_heading(heading, criteria)))
+        elif (line.strip().endswith(":") and len(line.strip()) <= 40 and not line.startswith("- ")
+              and classify_heading(line.strip()[:-1], criteria) == "preferred"):
+            # Nov 12 (Hebbia): a "Bonus:" / "Nice to have:" line inside a requirements list starts the
+            # preferred part, even without heading formatting
+            sections.append(Section(heading=line.strip()[:-1], kind="preferred"))
         else:
             sections[-1].lines.append(line)
     return SectionSplit(sections)

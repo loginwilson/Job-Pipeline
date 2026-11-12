@@ -204,8 +204,14 @@ class Gates:
         if not allow or ev.failures:
             return
         ff = self.c.get("field_fit", default={}) or {}
+        # Nov 12 (Hebbia: "powers investment decisions for 40% of the world's largest asset managers"):
+        # a company that SERVES finance firms isn't one - a term only counts when it isn't the customer
+        _served = re.compile(r"\b(?:for|serv\w*|customers?|clients?|trusted by|used by|powers?|platform for|"
+                             r"helps?|partners? with)\b", re.I)
         finance = find_terms(p.company or "", ff.get("finance_firm_names") or [], first_only=True) or \
-            find_terms(p.description_lines[:12], ff.get("finance_firm_terms") or [], first_only=True)
+            [h for h in find_terms(p.description_lines[:12], ff.get("finance_firm_terms") or [])
+             if not _served.search(h.line[:h.line.lower().find(h.matched.lower())]
+                                   if h.matched.lower() in h.line.lower() else h.line)][:1]
         if finance and not (PROGRAM_RX.search(p.title or "") or
                             find_terms(p.title, ff.get("finance_firm_ok_roles") or [], first_only=True)):
             ev.fail("field", f"a finance firm ({finance[0].term}) and not a generalist / operations role: {p.title}")
@@ -358,6 +364,10 @@ class Gates:
     def experience(self, p: Posting, ev: Evaluation) -> None:
         most = self.c.get("experience", "max_years")          # Nov 9: 1 year max - anything over drops
         asks = [a for a in p.experience.asks if most is not None and a.years > most]
+        # Nov 12 (Hebbia AI Strategist: "1-5 years" required, "Bonus: 5-10 years"): when the required ask
+        # already lets you in, a higher PREFERRED ask describes a more senior hire at the same posting
+        if most is not None and any(a.kind == "required" and a.years <= most for a in p.experience.asks):
+            asks = [a for a in asks if a.kind != "preferred"]
         if asks:
             top = max(asks, key=lambda a: a.years)
             ev.fail("experience", f"{top.years:g}+ yrs {top.kind}: {top.line}")

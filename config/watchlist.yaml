@@ -11,6 +11,9 @@
 - name: Palantir
   platform: lever
   slug: palantir
+- name: Hebbia                   # Nov 12: AI for investors and bankers (NYC); board is 'hebbia-ai'
+  platform: ashby
+  slug: hebbia-ai
 - name: Parallel Web Systems     # Nov 9: YC discovery had filed this board under "Parallel Bio"
   platform: ashby
   slug: parallel
