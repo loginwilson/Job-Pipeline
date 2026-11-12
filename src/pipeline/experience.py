@@ -112,7 +112,7 @@ def parse_experience(kind_lines: list[tuple[str, str]], title: str, criteria: Cr
             # Nov 9 audit: a timeline or the company's own history isn't an ask ("over the next 18
             # months", "our 30+ years", "compresses 10 years of learning")
             if re.search(r"\b(?:next|past|last|coming|within|compress\w*|spanning|for)\s+(?:the\s+)?$", before, re.I) or \
-                    (not in_req_section and re.search(r"\b(?:we|we've|our|company|firm|founded|history|decades?)\b[^.;]{0,40}$|^(?!.*\b(?:candidate|you|applicant|person|hire|someone|individual)\b).*\bhas\s+(?:over\s+|more than\s+|nearly\s+)?$",
+                    (not in_req_section and re.search(r"\b(?:we|we've|our|company|companies|firm|founded|history|decades?|celebrat\w*|in business)\b[^.;]{0,40}$|^(?!.*\b(?:candidate|you|applicant|person|hire|someone|individual)\b).*\bhas\s+(?:over\s+|more than\s+|nearly\s+)?$",
                                                       before, re.I)):
                 continue
             # "a bachelor's degree, OR five years of equivalent experience": the degree is enough

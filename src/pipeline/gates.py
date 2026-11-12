@@ -204,17 +204,28 @@ class Gates:
         if not allow or ev.failures:
             return
         ff = self.c.get("field_fit", default={}) or {}
-        # Nov 12 (Hebbia: "powers investment decisions for 40% of the world's largest asset managers"):
-        # a company that SERVES finance firms isn't one - a term only counts when it isn't the customer
-        _served = re.compile(r"\b(?:for|serv\w*|customers?|clients?|trusted by|used by|powers?|platform for|"
-                             r"helps?|partners? with)\b", re.I)
-        finance = find_terms(p.company or "", ff.get("finance_firm_names") or [], first_only=True) or \
-            [h for h in find_terms(p.description_lines[:12], ff.get("finance_firm_terms") or [])
-             if not _served.search(h.line[:h.line.lower().find(h.matched.lower())]
-                                   if h.matched.lower() in h.line.lower() else h.line)][:1]
+        # A finance firm is known by its own name or by how the posting describes the company itself.
+        # Nov 12 coverage audit: names match exactly ("Apollo" is not Apollo.io, "Securities" is not
+        # Cogent Security), and a company that SERVES finance firms isn't one (Hebbia, VTS, 9fin)
+        name = p.company or ""
+        finance = [] if re.search(r"\.(?:io|ai|app|co)\b|\bAI\b|\blabs?\b|\btechnolog", name, re.I) else \
+            [t for t in (ff.get("finance_firm_names") or [])
+             if re.search(rf"(?<![\w.]){re.escape(str(t))}(?![\w.])", name, re.I)][:1]
+        if not finance:
+            for line in p.description_lines[:12]:
+                for t in ff.get("finance_firm_terms") or []:
+                    mm = re.search(rf"\b(?:is|are|we're|we are|as)\s+(?:a|an|the|one of the)\b([^.]{{0,80}})\b{re.escape(str(t))}",
+                                   line, re.I)
+                    # "...is the leading platform FOR owners and asset managers" describes the customers
+                    if mm and not re.search(r"\b(?:for|serv\w*|to|used by|trusted by|powers?|helps?|platform|software)\b",
+                                            mm.group(1), re.I):
+                        finance = [t]
+                        break
+                if finance:
+                    break
         if finance and not (PROGRAM_RX.search(p.title or "") or
                             find_terms(p.title, ff.get("finance_firm_ok_roles") or [], first_only=True)):
-            ev.fail("field", f"a finance firm ({finance[0].term}) and not a generalist / operations role: {p.title}")
+            ev.fail("field", f"a finance firm ({finance[0]}) and not a generalist / operations role: {p.title}")
             return
         # the title is one of your role types but the text describes a function you've ruled out
         # (Clera 'GTM Engineer': DevRel, community building, technical evangelism = marketing)

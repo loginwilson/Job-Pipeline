@@ -65,7 +65,7 @@ salary:
   drop_unknown: true
   # Nov 9 audit: no posted pay, but your core role type on a startup / tech company board (Ashby,
   # Greenhouse, Lever ...) - Stripe, Palantir, Base Power, Middesk chiefs of staff / deployment roles
-  unknown_keep_titles: [deployment strategist, forward deployed, chief of staff, founder's associate, founders associate,
+  unknown_keep_titles: [ai strategist, solutions strategist, platform strategist, client strategist, technical strategist, agent development, strategy and ops, gtm operations, deal operations, strategic associate, deployment strategist, forward deployed, chief of staff, founder's associate, founders associate,
                         founder associate, business operations, bizops, strategy & operations, strategy and operations,
                         strategy & ops, product operations, ai operations, implementation, generalist, special projects]
   unknown_keep_platforms: [ashby, greenhouse, lever, gem, workable, rippling, comeet]
@@ -343,7 +343,11 @@ field_fit:
                           rotational, university hire, new grad, graduate program, chief of staff, ai operations]
   # Nov 9: ONLY these role types pass (from the 26 jobs you scored 1-5, which all match). Anything
   # else drops, whatever company or field words it has. Grad / rotational programs also pass.
-  role_allow: [ai strategist, business operations, bizops, biz ops, strategy & operations, strategy and operations, strategy & ops,
+  role_allow: [ai strategist, solutions strategist, client strategist, platform strategist, technical strategist,
+               agent development, ai development strategist, data strategist, strategy and ops, strategy & ops,
+               strategic associate, strategic growth associate, solutions analyst, gtm operations, go-to-market operations,
+               deal operations, partner strategy, customer operations,   # Nov 12 coverage audit: deployment-type titles
+               business operations, bizops, biz ops, strategy & operations, strategy and operations, strategy & ops,
                strategic operations, operations associate, operations analyst, operations generalist, ops associate,
                deployment strategist, deployment, implementation, growth strategy, growth operations, revenue operations,
                revops, revenue strategy, data operations, product operations, founder associate, founders associate,

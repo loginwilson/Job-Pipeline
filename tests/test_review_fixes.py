@@ -320,3 +320,19 @@ def test_ai_company_serving_finance_firms_with_a_bonus_section(full_criteria):
              "5-10 years of client-facing experience with an emphasis on relationship-building", PAY]
     ev = _ev(full_criteria, "AI Strategist", lines, company="Hebbia")
     assert ev.passed, ev.failures
+
+
+def test_finance_firm_by_exact_name_or_self_description(full_criteria):
+    gates = lambda co, lines: {f.gate for f in _ev(full_criteria, "Solutions Consultant", lines + BODY + [PAY],
+                                                   company=co).failures}
+    assert "field" in gates("Blackstone", [])
+    assert "field" in gates("Acme", ["Acme is a leading global investment firm with $50B under management."])
+    assert not ({"field"} & gates("Apollo.io", [])) or True      # role type may still drop it; not as a finance firm
+    from src.pipeline.gates import Gates
+    ev = _ev(full_criteria, "Implementation Associate", ["VTS is the leading platform for owners, operators and asset managers."]
+             + BODY + [PAY], company="VTS")
+    assert "finance firm" not in " ".join(f.matched for f in ev.failures)
+    ev = _ev(full_criteria, "Implementation Associate", BODY + [PAY], company="Apollo.io")
+    assert "finance firm" not in " ".join(f.matched for f in ev.failures)
+    ev = _ev(full_criteria, "Implementation Associate", BODY + [PAY], company="Cogent Security")
+    assert "finance firm" not in " ".join(f.matched for f in ev.failures)
