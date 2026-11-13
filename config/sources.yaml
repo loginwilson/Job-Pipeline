@@ -69,7 +69,8 @@ adzuna:                     # Adzuna job search (free key: GitHub secrets ADZUNA
   pace_through_day: true    # Nov 9: spread the day's searches over 24h (fresh postings all day)
   max_days_old: 3
   first_fill_days: 30       # a search's first run looks back a month
-  close_after_days_unseen: 7
+  close_after_days_unseen: 30   # Nov 13: searches only ask for the last 3 days, so an open job is never seen
+                                # again after that; 7 closed live jobs (and pulled them off To review) after a week
   focus:                    # every day, first
     - {keywords: "business operations strategy bizops", city: "New York, NY"}
     - {keywords: "deployment strategist implementation specialist AI operations", city: "New York, NY"}
@@ -95,7 +96,7 @@ coresignal:                 # LinkedIn postings via Coresignal (free credits, ne
   pace_through_day: false   # Nov 11: fetch the day's 25 as soon as the day starts (backlog first)
   first_fill_days: 14       # a search's first run looks back two weeks (Mogul, VectorShift: posted Nov 3)
   window_days: 3
-  close_after_days_unseen: 21
+  close_after_days_unseen: 30   # Nov 13: see adzuna
   focus_cities: ["New York"]          # every day, first
   cities: ["Chicago", "San Francisco", "Miami", "Toronto", "Los Angeles", "Austin"]
   titles: [deployment strategist, business operations, chief of staff, founder's associate, founders associate,
@@ -140,7 +141,7 @@ jsearch:                    # Google for Jobs via JSearch (OpenWeb Ninja) — ke
     - {query: "Vancouver, BC", country: ca}
   first_fill_window: month  # date_posted for a pair's first search
   window: 3days             # afterwards, only recent postings
-  close_after_days_unseen: 7
+  close_after_days_unseen: 30   # Nov 13: see adzuna (also used for SerpApi)
 
 boards:                     # how often each kind of company board is polled (default: every run, hourly)
   # Nov 9: whole boards that are almost all hotel-floor / leasing jobs - not read; their corporate

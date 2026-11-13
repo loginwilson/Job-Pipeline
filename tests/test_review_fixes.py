@@ -367,3 +367,21 @@ def test_refounding_strategist_title_counts_as_a_role_type():
                    company="Sequence Holdings", raw={})
     e = Gates(c).evaluate(normalize_posting(r, Company("Sequence Holdings", "ashby", "seqholdings"), c, LocationMatcher(c)))
     assert e.passed, [(f.gate, f.matched) for f in e.failures]
+
+
+def test_search_results_closed_too_early_reopen_once():
+    """Nov 13: job-site results closed 7 days unseen although the searches only look 3 days back."""
+    from src.run import reopen_search_closed_too_early
+    from src.store.db import Store
+    s = Store(":memory:")
+    ts = "2026-11-13T12:00:00"
+    for pid, posted, closed, passed in [("jsearch:x:1", "2026-11-01T00:00:00", ts, 1),
+                                        ("jsearch:x:2", "2026-09-01T00:00:00", ts, 1),
+                                        ("jsearch:x:3", "2026-11-01T00:00:00", ts, 0)]:
+        s.conn.execute("INSERT INTO postings (posting_id, title, posted_at, first_seen, last_seen, closed_at) "
+                       "VALUES (?, 'T', ?, ?, ?, ?)", (pid, posted, posted, posted, closed))
+        s.conn.execute("INSERT INTO scores (posting_id, passed) VALUES (?, ?)", (pid, passed))
+    assert reopen_search_closed_too_early(s, ts) == 1
+    open_ids = [r[0] for r in s.conn.execute("SELECT posting_id FROM postings WHERE closed_at IS NULL")]
+    assert open_ids == ["jsearch:x:1"]
+    assert reopen_search_closed_too_early(s, ts) == 0

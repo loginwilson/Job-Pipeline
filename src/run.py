@@ -23,7 +23,7 @@ import logging
 import re
 import sys
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -662,6 +662,24 @@ def _rescue_midpoint_pay_drops(store: Store, criteria, gates=None, matcher=None,
     return rescued
 
 
+
+def reopen_search_closed_too_early(store: Store, ts: str) -> int:
+    """Once (Nov 13): job-site results were closed after 7 days unseen, but the searches only
+    return the last 3 days, so live jobs were closed and left To review a week after they came in.
+    Reopen passing ones posted in the last 30 days; the 30-day rule closes them from here."""
+    if store.conn.execute("SELECT 1 FROM sheet_tabs WHERE tab='__reopen_search_v1'").fetchone():
+        return 0
+    cutoff = (datetime.fromisoformat(ts) - timedelta(days=30)).isoformat(timespec="seconds")
+    cur = store.conn.execute(
+        "UPDATE postings SET closed_at=NULL WHERE closed_at IS NOT NULL AND merged_into IS NULL "
+        "AND (posting_id LIKE 'jsearch:%' OR posting_id LIKE 'serpapi:%' OR posting_id LIKE 'adzuna:%' "
+        "OR posting_id LIKE 'coresignal:%') AND COALESCE(posted_at, first_seen) >= ? "
+        "AND posting_id IN (SELECT posting_id FROM scores WHERE passed=1)", (cutoff,))
+    store.conn.execute("INSERT OR REPLACE INTO sheet_tabs (tab, content_hash, written_at) VALUES ('__reopen_search_v1', '', ?)", (ts,))
+    store.conn.commit()
+    log.info("Reopened %d job-site results closed too early", cur.rowcount)
+    return cur.rowcount
+
 def recheck_search_postings(store: Store, criteria, gates, matcher, ts: str) -> int:
     """Open JSearch results are only fetched once; re-apply today's rules to them every run
     (from the stored copy) so a rule fix also removes search results that no longer qualify."""
@@ -1268,6 +1286,7 @@ def main(argv: list[str] | None = None) -> int:
         log.info("Coresignal: %d postings stored, %d passed", c["seen"], c["passed"])
     if store is not None and not single:
         js = (load_sources_config().get("jsearch") or {})
+        reopen_search_closed_too_early(store, ts)
         store.close_stale("jsearch:", int(js.get("close_after_days_unseen", 7)), ts)
         store.close_stale("serpapi:", int(js.get("close_after_days_unseen", 7)), ts)
         store.close_stale("adzuna:", int((load_sources_config().get("adzuna") or {}).get("close_after_days_unseen", 7)), ts)
