@@ -296,6 +296,17 @@ field_fit:
             developer communities, developer community, developer-facing, community building,
             lead generation, lead-generation, demand generation, pipeline generation, outbound, paid ads, paid media,
             landing pages, follow-up sequences, copywriting]   # Nov 12: Ease Health "GTM Engineer" is lead gen
+  # Nov 13: Scale AI "Enterprise AI Development Strategist" is outbound sales (reports to sales
+  # leadership, SDR/AE experience, commission) behind a strategist title
+  never_role_sales_text:
+    label: a sales job (prospecting, pipeline, commission)
+    drop_at: 3      # only words that make YOU the seller: RevOps roles that manage quotas, Salesforce
+                    # and commission plans stay (EliseAI / Outset Revenue Operations Associate)
+    terms: [reports to sales leadership, report directly to vertical sales leadership, report to sales leadership,
+            outbound prospecting, generating and qualifying pipeline, generate qualified pipeline, eligible to earn commission,
+            this role is eligible to earn commissions, carry a quota, carry and exceed, quota-carrying, quota carrying,
+            experience as an account executive, SDR, BDR, sales development representative, business development representative,
+            closing roles, closing-capable, enterprise AI sales, outbound sales]
   core_families:          # always kept
     hospitality_travel: [hotel, hotels, hospitality, resort, resorts, travel, tourism, guest experience, guest relations, revenue management, revenue manager, rooms division, front office, food and beverage, F&B, lodging, airline, airlines, cruise, concierge, catering, venue, venues, restaurant group, timeshare, vacation ownership]
     real_estate: [real estate, property, properties, housing, leasing, multifamily, CRE, REIT, acquisitions, real estate development, land development, construction management, asset management analyst, investment sales, proptech]

@@ -439,3 +439,30 @@ def test_family_office_remote_two_years_recruiter_drops():
     raw = _family_office_posting("Family Office")[0]             # in office: the 2 years alone drop it
     e = Gates(c).evaluate(normalize_posting(raw, Company("Family Office", "coresignal", "search"), c, LocationMatcher(c)))
     assert "experience" in {f.gate for f in e.failures}, [(f.gate, f.matched) for f in e.failures]
+
+
+def test_outbound_sales_behind_a_strategist_title_drops():
+    """Nov 13: Scale AI 'Enterprise AI Development Strategist' reports to sales leadership, wants SDR/AE
+    experience and earns commission - a sales job."""
+    from src.config import Company, load_criteria
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.pipeline.normalize import normalize_posting
+    from src.sources.base import RawPosting, CompRange
+    c = load_criteria()
+    lines = ["The AI Development Strategist will report directly to vertical sales leadership and will play a critical "
+             "role in generating and qualifying pipeline across Scale AI's enterprise business.",
+             "In this role, you will:",
+             "Own outbound prospecting and customer engagement through Stage 2 qualification",
+             "Partner closely with Account Executives to transition qualified opportunities into active deal cycles",
+             "Maintain strong CRM hygiene and pipeline visibility using Salesforce and related sales tools",
+             "Ideally, You Will Have:",
+             "1-2 years of experience as an account executive OR 4+ years of experience in outbound sales, business "
+             "development, SDR, BDR, or closing roles",
+             "Sales Commission: This role is eligible to earn commissions."]
+    r = RawPosting(platform="greenhouse", slug="scaleai", native_id="1", title="Enterprise AI Development Strategist",
+                   url="x", locations=["New York, NY"], country="US", employment_type="Full-time",
+                   description_lines=lines, comp_ranges=[CompRange(100800, 126000, "USD", "year")],
+                   posted_at="2026-11-01", company="Scale AI", raw={})
+    e = Gates(c).evaluate(normalize_posting(r, Company("Scale AI", "greenhouse", "scaleai"), c, LocationMatcher(c)))
+    assert any(f.gate == "field" and "sales job" in f.matched for f in e.failures), [(f.gate, f.matched) for f in e.failures]

@@ -231,12 +231,13 @@ class Gates:
             return
         # the title is one of your role types but the text describes a function you've ruled out
         # (Clera 'GTM Engineer': DevRel, community building, technical evangelism = marketing)
-        nt = ff.get("never_role_text") or {}
-        hits = {h.term.lower() for h in find_terms(p.description_lines, nt.get("terms") or [])}
-        if len(hits) >= int(nt.get("drop_at", 2)):
-            ev.fail("field", f"the posting describes {nt.get('label', 'a role you ruled out')} "
-                             f"({', '.join(sorted(hits)[:3])}): {p.title}")
-            return
+        for key in ("never_role_text", "never_role_sales_text"):
+            nt = ff.get(key) or {}
+            hits = {h.term.lower() for h in find_terms(p.description_lines, nt.get("terms") or [])}
+            if nt and len(hits) >= int(nt.get("drop_at", 2)):
+                ev.fail("field", f"the posting describes {nt.get('label', 'a role you ruled out')} "
+                                 f"({', '.join(sorted(hits)[:3])}): {p.title}")
+                return
         if PROGRAM_RX.search(p.title or "") or find_terms(p.title, allow, first_only=True) \
                 or qualifications.is_ai_builder(p.title, self.c):     # AI-builder roles: "as long as I qualify"
             return
