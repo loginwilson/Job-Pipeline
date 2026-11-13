@@ -115,6 +115,8 @@ def now_iso() -> str:
 
 _SEARCH_LIKE = " OR ".join(f"posting_id LIKE '{p}:%'" for p in ("muse", "jsearch", "adzuna", "jobspipe", "serpapi", "coresignal"))
 
+_HOST_PREFIXES = ("ashby:a16z-speedrun:",)   # boards that host many startups (Nov 13)
+
 class Store:
     def __init__(self, path: str | Path = DEFAULT_DB):
         self.path = Path(path)
@@ -165,6 +167,8 @@ class Store:
             "snapshot=COALESCE(snapshot, ?) WHERE posting_id=?",
             (title, url, posted_at, ts, dedupe_key,
              json.dumps(snapshot, default=str) if snapshot is not None else None, posting_id))
+        if posting_id.startswith(_HOST_PREFIXES) and company:   # shared board: the employer named on the job
+            self.conn.execute("UPDATE postings SET company=? WHERE posting_id=?", (company, posting_id))
         return {"first_seen": row["first_seen"], "is_new": False}
 
     def merge_search_copies(self, board_id: str, dedupe_key: str, ts: str) -> str | None:

@@ -24,6 +24,10 @@ _PERIOD = {"1 YEAR": "year", "1 HOUR": "hour", "1 MONTH": "month", "1 WEEK": "we
 _COUNTRY = {"united states": "US", "usa": "US", "us": "US", "canada": "CA"}
 
 
+# Boards that host many startups' jobs (Nov 13): the team field is the employer, e.g.
+# a16z speedrun lists Brief's "Product Builder" under team "Brief".
+HOST_BOARDS = {"a16z-speedrun"}
+
 class AshbySource(Source):
     platform = "ashby"
 
@@ -66,5 +70,6 @@ class AshbySource(Source):
                 description_lines=html_to_lines(j.get("descriptionHtml")),
                 comp_ranges=ranges, comp_extra=sorted(set(extra)),
                 posted_at=j.get("publishedAt"), raw=j,
+                company=(j.get("team") or "").strip() or None if slug.lower() in HOST_BOARDS else None,
             ))
         return out

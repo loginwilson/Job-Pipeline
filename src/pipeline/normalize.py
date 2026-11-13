@@ -157,7 +157,7 @@ def normalize_posting(raw: RawPosting, company: Company, criteria: Criteria,
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     return Posting(
         posting_id=f"{raw.platform}:{raw.slug}:{raw.native_id}",
-        company=company.name, title=raw.title,
+        company=_employer(raw, company), title=raw.title,
         team=raw.team, department=raw.department, locations=raw.locations,
         location=loc, work_arrangement=loc.arrangement,
         employment_type=etype, employment_type_reason=ereason,
@@ -166,3 +166,11 @@ def normalize_posting(raw: RawPosting, company: Company, criteria: Criteria,
         experience=exp, timing=timing, url=raw.url, posted_at=raw.posted_at,
         company_info=company, first_seen=now, last_seen=now, raw=raw,
     )
+
+
+def _employer(raw, company) -> str:
+    """The company name to show: a board that hosts many startups names each employer per job."""
+    from ..sources.ashby import HOST_BOARDS
+    if raw.platform == "ashby" and (raw.slug or "").lower() in HOST_BOARDS and raw.company:
+        return raw.company
+    return company.name

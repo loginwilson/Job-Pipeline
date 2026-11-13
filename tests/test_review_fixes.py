@@ -385,3 +385,23 @@ def test_search_results_closed_too_early_reopen_once():
     open_ids = [r[0] for r in s.conn.execute("SELECT posting_id FROM postings WHERE closed_at IS NULL")]
     assert open_ids == ["jsearch:x:1"]
     assert reopen_search_closed_too_early(s, ts) == 0
+
+
+def test_shared_speedrun_board_names_the_startup():
+    """Nov 13: a16z speedrun's board hosts many startups; the job's team is the employer."""
+    from src.config import Company, load_criteria
+    from src.pipeline.locations import LocationMatcher
+    from src.pipeline.normalize import normalize_posting
+    from src.sources.ashby import AshbySource
+    from src.store.db import Store
+    payload = {"jobs": [{"id": "1", "title": "Product Builder (Forward Deployed)", "team": "Brief",
+                         "department": "SR005", "location": "San Francisco, CA", "isListed": True,
+                         "jobUrl": "u", "descriptionHtml": "<p>Deploy Brief</p>"}]}
+    raw = AshbySource().parse(payload, "a16z-speedrun")[0]
+    c = load_criteria()
+    p = normalize_posting(raw, Company("a16z-speedrun", "ashby", "a16z-speedrun"), c, LocationMatcher(c))
+    assert p.company == "Brief"
+    s = Store(":memory:")
+    s.upsert_posting(p.posting_id, "a16z-speedrun", p.title, "u", None, None, "2026-11-01T00:00:00")
+    s.upsert_posting(p.posting_id, "Brief", p.title, "u", None, None, "2026-11-13T00:00:00")
+    assert s.conn.execute("SELECT company FROM postings").fetchone()[0] == "Brief"
