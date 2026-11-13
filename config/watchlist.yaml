@@ -23,3 +23,6 @@
 - name: Sequence Holdings        # Nov 13: buys service businesses and rebuilds them with AI (NYC); board is 'seqholdings'
   platform: ashby
   slug: seqholdings
+- name: Actively AI              # Nov 13: AI agents for revenue teams (NYC); board was not being read
+  platform: greenhouse
+  slug: activelyai
