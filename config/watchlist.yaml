@@ -20,3 +20,6 @@
 - name: WithCoverage
   platform: greenhouse
   slug: withcoverage
+- name: Sequence Holdings        # Nov 13: buys service businesses and rebuilds them with AI (NYC); board is 'seqholdings'
+  platform: ashby
+  slug: seqholdings

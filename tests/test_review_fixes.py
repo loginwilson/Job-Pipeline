@@ -344,3 +344,26 @@ def test_lead_generation_role_behind_a_gtm_engineer_title_drops(full_criteria):
                         "Requirements", "Several years of B2B lead generation experience across outbound, ads, content", PAY]
     ev = _ev(full_criteria, "GTM Engineer", lines)
     assert ev.failures and ev.failures[0].gate == "field"
+
+
+def test_refounding_strategist_title_counts_as_a_role_type():
+    """Nov 13: Sequence Holdings' 'Refounding Strategist' (AI transformation of acquired
+    service businesses) dropped as 'not one of your role types'."""
+    from src.config import Company, load_criteria
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.pipeline.normalize import normalize_posting
+    from src.sources.base import RawPosting, CompRange
+    c = load_criteria()
+    r = RawPosting(platform="ashby", slug="seqholdings", native_id="1", title="Refounding Strategist",
+                   url="x", locations=["New York City"], country="US", employment_type="FullTime",
+                   description_lines=["Sequence acquires established businesses in the service economy and refounds them with AI.",
+                                      "Strategists on the Refounding team lead the transformation of established businesses with AI.",
+                                      "You'll work directly with the leaders and employees at our operating companies.",
+                                      "You'll partner with engineers to redesign processes, build better workflows and bring new tools into everyday use.",
+                                      "You'll own the work from discovery through implementation and adoption.",
+                                      "Exceptional communicator. Willing to spend meaningful time on-site at operating companies."],
+                   comp_ranges=[CompRange(200000, 300000, "USD", "year")], posted_at="2026-11-01",
+                   company="Sequence Holdings", raw={})
+    e = Gates(c).evaluate(normalize_posting(r, Company("Sequence Holdings", "ashby", "seqholdings"), c, LocationMatcher(c)))
+    assert e.passed, [(f.gate, f.matched) for f in e.failures]
