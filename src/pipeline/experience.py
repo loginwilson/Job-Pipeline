@@ -17,7 +17,7 @@ _WORDNUM = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 
             "seven": 7, "eight": 8, "nine": 9, "ten": 10, "twelve": 12, "fifteen": 15}
 _N = r"(\d{1,2}(?:\.\d)?|a|an|one|two|three|four|five|six|seven|eight|nine|ten|twelve|fifteen)"
 _YEARS_RE = re.compile(
-    rf"\b{_N}\s*\+?\s*(?:(?:-|–|to)\s*{_N}\s*\+?\s*)?(?:\(\d+\)\s*)?(?:\+\s*)?(years?|yrs?|months?|anos|años|ans)\b"
+    rf"\b{_N}\s*\+?\s*(?:or (?:more|greater|above)\s+)?(?:(?:-|–|to)\s*{_N}\s*\+?\s*)?(?:\(\d+\)\s*)?(?:\+\s*)?(years?|yrs?|months?|anos|años|ans)\b"
     r"(?:\s*\+)?(?=(?P<tail>[^.;]{0,90}))",
     re.IGNORECASE,
 )
@@ -101,7 +101,7 @@ def parse_experience(kind_lines: list[tuple[str, str]], title: str, criteria: Cr
             # Nov 9: "2+ years in revenue operations" / "3-6 years in RCM" are asks too, even when the
             # posting's headings weren't recognised - written as a requirement (a +, a range,
             # "at least" / "minimum", or the line opening with the number) and tied to a field
-            as_requirement = bool(re.search(r"\+|\d\s*(?:-|–|to)\s*\d", m.group(0))) or \
+            as_requirement = bool(re.search(r"\+|\d\s*(?:-|–|to)\s*\d|\bor (?:more|greater|above)\b", m.group(0))) or \
                 bool(re.search(r"\b(?:at least|minimum|min\.|over)\s*$", line[:m.start()], re.I)) or \
                 not line[:m.start()].strip(" -•*")
             field_tail = re.match(r"\s*(?:of\s+)?(?:in|at|with|working|as|across|on|doing|leading|building|"

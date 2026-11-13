@@ -405,3 +405,37 @@ def test_shared_speedrun_board_names_the_startup():
     s.upsert_posting(p.posting_id, "a16z-speedrun", p.title, "u", None, None, "2026-11-01T00:00:00")
     s.upsert_posting(p.posting_id, "Brief", p.title, "u", None, None, "2026-11-13T00:00:00")
     assert s.conn.execute("SELECT company FROM postings").fetchone()[0] == "Brief"
+
+
+def _family_office_posting(company="High Road Hiring", body_extra=""):
+    from src.sources.coresignal import CoresignalSource
+    desc = ("<p>Operations Associate, Single-Family Office</p><p>A first-generation single-family office "
+            "based in New York is hiring an Operations Associate for its small, fully remote team.</p>"
+            "<p>What You Will Do</p><li>Coordinate scheduling, reminders, confirmations and travel.</li>"
+            "<li>Keep trackers for signatures current.</li><li>Prepare first drafts of meeting materials.</li>"
+            "<li>Find ways to make the office more efficient, including testing new tools and AI.</li>"
+            "<p>What You Bring</p><li>2 or more years in a fast-paced, multi-hat environment.</li>"
+            "<li>Clear, professional writing.</li>" + body_extra +
+            "<p>Details</p><li>Compensation: $100,000 to $175,000 base salary.</li>")
+    j = {"id": 1, "title": "Operations Associate", "company_name": company,
+         "location": "New York City Metropolitan Area", "country": "United States",
+         "description": desc, "url": "x", "created": "2026-11-12"}
+    return CoresignalSource().parse(j)
+
+
+def test_family_office_remote_two_years_recruiter_drops():
+    """Nov 13 (LinkedIn, High Road Hiring): 'Location: Fully remote', '2 or more years', a recruiter."""
+    from src.config import Company, load_criteria
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.pipeline.normalize import normalize_posting
+    assert _family_office_posting() == []                       # a recruiter, not the employer
+    c = load_criteria()
+    raw = _family_office_posting("Family Office",
+                                 "<li>Location: Fully remote and U.S.-based. A New York area base is a plus.</li>")[0]
+    e = Gates(c).evaluate(normalize_posting(raw, Company("Family Office", "coresignal", "search"), c, LocationMatcher(c)))
+    gates = {f.gate for f in e.failures}
+    assert "location" in gates
+    raw = _family_office_posting("Family Office")[0]             # in office: the 2 years alone drop it
+    e = Gates(c).evaluate(normalize_posting(raw, Company("Family Office", "coresignal", "search"), c, LocationMatcher(c)))
+    assert "experience" in {f.gate for f in e.failures}, [(f.gate, f.matched) for f in e.failures]

@@ -46,6 +46,8 @@ class Evaluation:
             self.flags.append(text)
 
 
+_FULLY_REMOTE_TEXT = re.compile(r"(?<!not )(?<!isn't )\b(?:fully|100%|completely|entirely)[- ]remote\b(?! (?:team|company|workforce|organization|first)\b)[^.\n]{0,60}"
+                                r"|\bremote \(u\.?s\.?\)", re.I)
 _REMOTE_TITLE = re.compile(r"[-–—|,(\[]\s*remote\b|\bremote\s*[)\]]|^\s*remote\s*[-–—|:]", re.I)
 
 
@@ -306,6 +308,13 @@ class Gates:
         if loc.get("drop_fully_remote", True) and _REMOTE_TITLE.search(p.title or "") \
                 and not re.search(r"\bhybrid\b|remote[- ]friendly|or remote|remote or", p.title or "", re.I):
             ev.fail("location", f"the title says remote: {p.title}")
+            return
+        # "Location: Fully remote and U.S.-based ... a New York base is a plus" (Nov 13): the text says
+        # the job is remote even though the listing names New York
+        body = "\n".join(p.description_lines or [])
+        said = _FULLY_REMOTE_TEXT.search(body)
+        if loc.get("drop_fully_remote", True) and said and not re.search(r"\bhybrid\b", body, re.I):
+            ev.fail("location", f"the posting says the job is remote: {said.group(0)}")
             return
         if p.location.fully_remote and loc.get("drop_fully_remote", True):
             ev.fail("location", f"fully remote: {', '.join(p.locations) or p.work_arrangement}")
