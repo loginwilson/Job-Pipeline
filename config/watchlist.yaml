@@ -26,3 +26,6 @@
 - name: Actively AI              # Nov 13: AI agents for revenue teams (NYC); board was not being read
   platform: greenhouse
   slug: activelyai
+- name: Petra Labs               # Nov 14: AI search attribution (NYC); seen via a recruiter, board not read
+  platform: ashby
+  slug: petra-labs
