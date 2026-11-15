@@ -29,3 +29,6 @@
 - name: Petra Labs               # Nov 14: AI search attribution (NYC); seen via a recruiter, board not read
   platform: ashby
   slug: petra-labs
+- name: Edra                     # Nov 15: AI agents that learn and run company processes (NYC); ex-Palantir FDE founders
+  platform: ashby
+  slug: edra

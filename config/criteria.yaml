@@ -307,6 +307,12 @@ field_fit:
             this role is eligible to earn commissions, carry a quota, carry and exceed, quota-carrying, quota carrying,
             experience as an account executive, SDR, BDR, sales development representative, business development representative,
             closing roles, closing-capable, enterprise AI sales, outbound sales]
+  # Nov 15: Edra "Strategy & Operations (People)" is payroll / benefits / HR operations behind an S&O title
+  never_role_hr_text:
+    label: HR / people operations (payroll, benefits)
+    drop_at: 3
+    terms: [payroll, run payroll, benefits administration, administer benefits, open enrollment, pension, 401(k) administration,
+            people compliance, employee lifecycle, leave administration, payroll providers, benefits brokers, HRIS administration]
   core_families:          # always kept
     hospitality_travel: [hotel, hotels, hospitality, resort, resorts, travel, tourism, guest experience, guest relations, revenue management, revenue manager, rooms division, front office, food and beverage, F&B, lodging, airline, airlines, cruise, concierge, catering, venue, venues, restaurant group, timeshare, vacation ownership]
     real_estate: [real estate, property, properties, housing, leasing, multifamily, CRE, REIT, acquisitions, real estate development, land development, construction management, asset management analyst, investment sales, proptech]
