@@ -231,7 +231,7 @@ class Gates:
             return
         # the title is one of your role types but the text describes a function you've ruled out
         # (Clera 'GTM Engineer': DevRel, community building, technical evangelism = marketing)
-        for key in ("never_role_text", "never_role_sales_text", "never_role_hr_text"):
+        for key in ("never_role_text", "never_role_sales_text", "never_role_hr_text", "never_role_support_text"):
             nt = ff.get(key) or {}
             hits = {h.term.lower() for h in find_terms(p.description_lines, nt.get("terms") or [])}
             if nt and len(hits) >= int(nt.get("drop_at", 2)):

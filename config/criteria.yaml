@@ -313,6 +313,13 @@ field_fit:
     drop_at: 3
     terms: [payroll, run payroll, benefits administration, administer benefits, open enrollment, pension, 401(k) administration,
             people compliance, employee lifecycle, leave administration, payroll providers, benefits brokers, HRIS administration]
+  # Nov 16: exacare "Product Operations Analyst" is help-desk shifts answering customer tickets (front line)
+  never_role_support_text:
+    label: front-line customer support (help desk, tickets)
+    drop_at: 3
+    terms: [help desk, helpdesk, support tickets, responding to tickets, ticket volume, ticketing platform,
+            frontline customer product support, frontline product support, front-line support, support coverage,
+            assigned shifts, de-escalate, in-app chat, support queue]
   core_families:          # always kept
     hospitality_travel: [hotel, hotels, hospitality, resort, resorts, travel, tourism, guest experience, guest relations, revenue management, revenue manager, rooms division, front office, food and beverage, F&B, lodging, airline, airlines, cruise, concierge, catering, venue, venues, restaurant group, timeshare, vacation ownership]
     real_estate: [real estate, property, properties, housing, leasing, multifamily, CRE, REIT, acquisitions, real estate development, land development, construction management, asset management analyst, investment sales, proptech]

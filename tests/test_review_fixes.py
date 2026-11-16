@@ -466,3 +466,29 @@ def test_outbound_sales_behind_a_strategist_title_drops():
                    posted_at="2026-11-01", company="Scale AI", raw={})
     e = Gates(c).evaluate(normalize_posting(r, Company("Scale AI", "greenhouse", "scaleai"), c, LocationMatcher(c)))
     assert any(f.gate == "field" and "sales job" in f.matched for f in e.failures), [(f.gate, f.matched) for f in e.failures]
+
+
+def test_rippling_v1_employment_type_reads_as_full_time():
+    from src.sources.rippling import _employment
+    assert _employment({"label": "SALARIED_FT", "id": "Salaried, full-time"}) == "Salaried, full-time"
+    assert _employment("Full time") == "Full time"
+
+
+def test_help_desk_product_ops_drops_as_front_line():
+    """Nov 16: exacare 'Product Operations Analyst' is help-desk shifts answering tickets."""
+    from src.config import Company, load_criteria
+    from src.pipeline.gates import Gates
+    from src.pipeline.locations import LocationMatcher
+    from src.pipeline.normalize import normalize_posting
+    from src.sources.base import RawPosting
+    c = load_criteria()
+    lines = ["We're hiring a Product Operations Analyst.", "What You'll Do",
+             "Own frontline customer product support coverage: Independently manage the help desk during assigned "
+             "shifts, responding to customer requests received through in-app chat and email.",
+             "What You'll Bring", "You can de-escalate difficult situations and make customers feel heard.",
+             "1+ years in Product, Customer Support, or Customer Success."]
+    r = RawPosting(platform="rippling", slug="x", native_id="1", title="Product Operations Analyst", url="x",
+                   locations=["Toronto, Canada"], country="CA", employment_type="Salaried, full-time",
+                   description_lines=lines, comp_ranges=[], posted_at="2026-11-01", company="x", raw={})
+    e = Gates(c).evaluate(normalize_posting(r, Company("x", "rippling", "x"), c, LocationMatcher(c)))
+    assert any("front-line" in f.matched for f in e.failures), [(f.gate, f.matched) for f in e.failures]

@@ -15,6 +15,7 @@ from ..pipeline.html_text import html_to_lines
 from .base import USER_AGENT, RawPosting, Source
 
 API = "https://ats.rippling.com/api/v2/board/{slug}/jobs"
+API_V1 = "https://ats.rippling.com/api/v1/board/{slug}/jobs"
 
 
 class RipplingSource(Source):
@@ -28,13 +29,15 @@ class RipplingSource(Source):
         listing = super().fetch_payload(slug, sess)
         items = listing.get("items") or []
         for it in items:
-            try:
-                r = sess.get(f"{API.format(slug=slug)}/{it['id']}", timeout=20,
-                             headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
-                if r.ok:
-                    it["detail"] = r.json()
-            except (requests.RequestException, ValueError):
-                pass                                   # a posting without its text is still listed
+            # Nov 16: the v2 detail URL started returning 404; v1 still serves the full posting
+            for url in (f"{API_V1.format(slug=slug)}/{it['id']}", f"{API.format(slug=slug)}/{it['id']}"):
+                try:
+                    r = sess.get(url, timeout=20, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+                    if r.ok:
+                        it["detail"] = r.json()
+                        break
+                except (requests.RequestException, ValueError):
+                    pass                               # a posting without its text is still listed
         return {"items": items}
 
     def parse(self, payload: Any, slug: str) -> list[RawPosting]:
@@ -50,9 +53,15 @@ class RipplingSource(Source):
                 title=(j.get("name") or "").strip(),
                 url=j.get("url") or f"https://ats.rippling.com/{slug}/jobs/{j.get('id')}",
                 locations=[l for l in locs if l], workplace_type="remote" if remote else None,
-                employment_type=(d.get("employmentType") or {}).get("label") if isinstance(d.get("employmentType"), dict)
-                else d.get("employmentType"),
+                employment_type=_employment(d.get("employmentType")),
                 department=(j.get("department") or {}).get("name"),
                 description_lines=html_to_lines(html),
                 posted_at=d.get("createdOn")))
         return out
+
+
+def _employment(et) -> str | None:
+    """v1 gives {'label': 'SALARIED_FT', 'id': 'Salaried, full-time'}: the readable text decides."""
+    if isinstance(et, dict):
+        return et.get("id") or et.get("label")
+    return et
