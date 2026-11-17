@@ -15,6 +15,8 @@ EquityCashValue / EquityPercentage / Commission / Bonus, interval ("1 YEAR",
 """
 from __future__ import annotations
 
+import re
+
 from typing import Any
 
 from ..pipeline.html_text import html_to_lines
@@ -54,7 +56,9 @@ class AshbySource(Source):
                         ranges.append(CompRange(
                             comp.get("minValue"), comp.get("maxValue"), comp.get("currencyCode"),
                             _PERIOD.get(comp.get("interval") or ""), label=tier.get("title"),
-                            kind="base" if ctype == "Salary" else "ote"))
+                            # Nov 17: Runway files "OTE $225K - $270K" as type Salary
+                            kind="ote" if ctype != "Salary" or re.match(r"\s*OTE\b", comp.get("summary") or
+                                                                        tier.get("tierSummary") or "") else "base"))
                     elif ctype.startswith("Equity"):
                         quantified = comp.get("minValue") is not None or comp.get("maxValue") is not None
                         extra.append("equity" if quantified else "equity_unquantified")
