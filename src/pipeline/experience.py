@@ -115,6 +115,10 @@ def parse_experience(kind_lines: list[tuple[str, str]], title: str, criteria: Cr
                     (not in_req_section and re.search(r"\b(?:we|we've|our|company|companies|firm|founded|history|decades?|celebrat\w*|in business)\b[^.;]{0,40}$|^(?!.*\b(?:candidate|you|applicant|person|hire|someone|individual)\b).*\bhas\s+(?:over\s+|more than\s+|nearly\s+)?$",
                                                       before, re.I)):
                 continue
+            # "two paths from Chief of Staff... this path suits someone with... often 10+ years" (Nov 17):
+            # describes where the job can lead, not what it asks for
+            if re.search(r"\b(?:this path|paths? from|career paths?|path suits)\b[^.;]*$", before, re.I):
+                continue
             # "a bachelor's degree, OR five years of equivalent experience": the degree is enough
             if re.search(r"\bor\b[^.;]{0,25}$", before, re.I) and re.search(r"\bequivalent\b", tail[:40], re.I) \
                     and re.search(r"\b(?:degree|bachelor)", line, re.I):
